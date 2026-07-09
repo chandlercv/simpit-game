@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "plans_dir=\"$HOME/.claude/plans\"; latest=$(ls -t \"$plans_dir\"/*.md 2>/dev/null | head -1); repo_root=$(git rev-parse --show-toplevel 2>/dev/null); if [ -n \"$latest\" ] && [ -n \"$repo_root\" ]; then mkdir -p \"$repo_root/Docs/Plans/inbox\"; dest=\"$repo_root/Docs/Plans/inbox/$(basename \"$latest\")\"; cp \"$latest\" \"$dest\"; git -C \"$repo_root\" add \"$dest\" 2>/dev/null; echo \"{\\\"systemMessage\\\": \\\"Copied plan $(basename \"$latest\") into Docs/Plans/inbox/ and staged it (uncommitted).\\\"}\"; fi; true",
+            "timeout": 15,
+            "statusMessage": "Copying approved plan into Docs/Plans/inbox..."
+          }
+        ]
+      }
+    ]
+  }
+}
