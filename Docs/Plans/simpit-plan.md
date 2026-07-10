@@ -112,6 +112,7 @@ Systems read/write `GameState` directly, no serialization, plus one refinement t
 - `CargoSystem.gd`: weight/volume-limited inventory (feeds tablet).
 - `MarketSystem.gd`: faction pricing/reputation (feeds Chart market panel).
 - `ThreatSystem.gd`: rival salvagers, patrol timers, collapse events (feeds Tactical contacts/risk).
+- **Convention:** ship stats (thrust, hull, cargo capacity, power budget) and market goods/faction definitions are authored as `Resource` subclasses (`ShipDefinition.gd`, `GoodDefinition.gd`) loaded from `.tres` files, not hardcoded fields on scripts/scenes — even with only one ship type and one faction set today. Keeps a future content-modding surface (or just a second ship type) a data-authoring task instead of a code extraction.
 
 **Done when:** a full salvage run works end-to-end — jump in, scan (revealing the wreck's structural graph on Tactical), approach, extract 3 items by choosing cut points with visibly different risk impact depending on whether they're load-bearing, manage cargo, sell at a station.
 
@@ -152,6 +153,22 @@ The architecture is already built for this rather than hardcoded to four — `Di
 Two practical ceilings, not architectural ones:
 - **Physical monitor count is capped by the GTX 1660's actual output ports** (typically 3 DisplayPort + 1 HDMI on this card, so likely one or two more physical monitors before needing a DisplayPort MST hub or a second GPU output source).
 - **Each additional spacedesk virtual monitor adds more capture/encode overhead on the same GPU** (risk #5 below) — fine for a couple of cheap 2D-UI displays, but this is the real limit on "how many more" before it starts stealing frame time from the main 3D view, not any Godot-side limit on window count.
+
+---
+
+## Modding & simpit-building friendliness — watch for these triggers
+
+This isn't being built as a public modding platform, but several choices here are cheap to keep friendly to other simpit builders and DIY hardware if handled as they come up, and expensive to retrofit if left until someone actually asks:
+
+- **HID device parsing:** keep each raw-HID device's byte-decode logic as an isolated pure function (raw report → named switch states), not inlined into `InputRouter.gd`'s dispatch logic (see Phase 5). Cheap now. The trigger to generalize into a declarative device-profile schema (VID/PID + byte-offset map, loaded from a resource instead of code) is *when a second raw-HID device actually exists* — not before, since a schema designed from one example (the Saitek panel) will likely be the wrong shape for whatever shows up next.
+- **DIY Arduino/HID panels:** default guidance for anyone adding their own panel is to flash it as a standard-HID joystick (Arduino Joystick Library / HID-Project) rather than building custom raw-HID support — that needs zero engine code, same Input Map named-actions path as the X52/X55. Only reach for the `hid-gd`/raw-HID path if a device genuinely can't fit standard joystick HID limits (32 buttons, a handful of axes/hats).
+- **Ship stats & market goods:** author as `Resource` subclasses (`ShipDefinition.gd`, `GoodDefinition.gd`) from day one, per the Phase 4 convention above — cheap now, expensive to extract from hardcoded fields later.
+- **Wreck generation:** `SalvageSystem.gd`'s structural-graph generator mixes rules (how segments connect, what's load-bearing) with data (which piece catalog) in ways that are fine for one generator but harder to split later. Trigger to separate rules from data: *when a second wreck "kit" or a meaningfully different generation behavior is wanted* — don't build a generic data-driven wreck-authoring format speculatively before that.
+- **Display roles:** already handled well — `DisplayConfig.gd`'s role→screen-index mapping and `WindowManager.gd`'s loop-over-configured-roles mean a different pit layout (fewer/more monitors, different roles) is a config change, not a code change. No action needed, just don't regress this by hardcoding a four-window assumption elsewhere.
+- **Multi-PC pits:** genuinely out of scope for now (see Networking, above) — splitting one pit's displays across multiple physical machines isn't solved by the current single-process design. If it ever becomes a real ask, the planned multiplayer RPC layer is the natural bridge (treat each display-hosting machine as a peer subscribed to one player's `ShipState`); don't build a bespoke solution for it in the meantime.
+- **Asset licensing:** keep the `cc0` / `cc-by` / `cc-by-nc` folder segregation current as assets are added (see Phase 2) — if this is ever shared with other builders or a modding community, `cc-by-nc` content constrains what they can redistribute, so the folder boundary needs to stay accurate, not just exist.
+
+**Done when:** none of the above is a phase deliverable — this is an ongoing discipline. Revisit this list whenever a second instance of any of these (second HID device, second wreck kit, second ship type) actually shows up.
 
 ---
 
