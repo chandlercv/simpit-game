@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
-[ext_resource type="PackedScene" path="res://scenes/ui/RolePanel.tscn" id="1_panel"]
+[ext_resource type="Script" path="res://scenes/displays/MainViewWindow.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/world/DebrisField.tscn" id="2_world"]
+[ext_resource type="PackedScene" path="res://scenes/ui/HUDOverlay.tscn" id="3_hud"]
 
 [node name="MainViewWindow" type="Control"]
 layout_mode = 3
@@ -9,8 +11,25 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_main")
 
-[node name="RolePanel" parent="." instance=ExtResource("1_panel")]
+[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
 layout_mode = 1
-role_name = "MAIN"
-accent = Color(0.92, 0.94, 0.96, 1)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
+unique_name_in_owner = true
+own_world_3d = true
+handle_input_locally = false
+
+[node name="DebrisField" parent="SubViewportContainer/SubViewport" instance=ExtResource("2_world")]
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="HUDOverlay" parent="HUD" instance=ExtResource("3_hud")]
+unique_name_in_owner = true

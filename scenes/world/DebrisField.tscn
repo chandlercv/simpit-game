@@ -1,0 +1,104 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scenes/world/DebrisField.gd" id="1_field"]
+[ext_resource type="PackedScene" path="res://scenes/world/Wreck.tscn" id="2_wreck"]
+[ext_resource type="PackedScene" path="res://scenes/world/Ship.tscn" id="3_ship"]
+[ext_resource type="Material" path="res://scenes/world/materials/hull_plating.tres" id="4_plating"]
+[ext_resource type="Material" path="res://scenes/world/materials/hull_panel.tres" id="5_panel"]
+
+[sub_resource type="Environment" id="env_space"]
+background_mode = 1
+background_color = Color(0.005, 0.007, 0.012, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.45, 0.55, 0.7, 1)
+ambient_light_energy = 0.25
+tonemap_mode = 3
+ssr_enabled = true
+ssao_enabled = true
+glow_enabled = true
+glow_intensity = 0.7
+glow_bloom = 0.1
+
+[sub_resource type="BoxMesh" id="mesh_chunk_a"]
+material = ExtResource("4_plating")
+size = Vector3(1.2, 0.8, 1.5)
+
+[sub_resource type="BoxMesh" id="mesh_chunk_b"]
+material = ExtResource("5_panel")
+size = Vector3(1.8, 0.15, 1.1)
+
+[sub_resource type="BoxMesh" id="mesh_chunk_c"]
+material = ExtResource("4_plating")
+size = Vector3(0.5, 0.5, 0.9)
+
+[node name="DebrisField" type="Node3D"]
+script = ExtResource("1_field")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("env_space")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.7, 0.6, 0)
+light_color = Color(1, 0.96, 0.9, 1)
+light_energy = 1.3
+shadow_enabled = true
+
+[node name="Wreck" parent="." instance=ExtResource("2_wreck")]
+position = Vector3(0, 0, -40)
+rotation = Vector3(0.05, 0.4, 0.1)
+
+[node name="Ship" parent="." instance=ExtResource("3_ship")]
+
+[node name="Debris" type="Node3D" parent="."]
+
+[node name="Chunk1" type="MeshInstance3D" parent="Debris"]
+position = Vector3(-8, 2, -18)
+mesh = SubResource("mesh_chunk_a")
+
+[node name="Chunk2" type="MeshInstance3D" parent="Debris"]
+position = Vector3(6, -3, -24)
+rotation = Vector3(0.4, 1.1, 0.2)
+scale = Vector3(1.4, 0.8, 1.1)
+mesh = SubResource("mesh_chunk_a")
+
+[node name="Chunk3" type="MeshInstance3D" parent="Debris"]
+position = Vector3(-3, 1.5, -12)
+rotation = Vector3(0.9, 0.3, 0.5)
+mesh = SubResource("mesh_chunk_c")
+
+[node name="Chunk4" type="MeshInstance3D" parent="Debris"]
+position = Vector3(10, 4, -32)
+rotation = Vector3(0.2, 0.8, 1)
+mesh = SubResource("mesh_chunk_b")
+
+[node name="Chunk5" type="MeshInstance3D" parent="Debris"]
+position = Vector3(-12, -5, -35)
+rotation = Vector3(1.2, 0.1, 0.4)
+scale = Vector3(1.6, 1.6, 1.6)
+mesh = SubResource("mesh_chunk_c")
+
+[node name="Chunk6" type="MeshInstance3D" parent="Debris"]
+position = Vector3(3, 6, -28)
+rotation = Vector3(0.6, 0.5, 0.9)
+mesh = SubResource("mesh_chunk_b")
+
+[node name="Chunk7" type="MeshInstance3D" parent="Debris"]
+position = Vector3(-6, -2, -45)
+rotation = Vector3(0.3, 1.4, 0.1)
+mesh = SubResource("mesh_chunk_a")
+
+[node name="Chunk8" type="MeshInstance3D" parent="Debris"]
+position = Vector3(-20, 3, -5)
+rotation = Vector3(0.7, 0.2, 0.6)
+mesh = SubResource("mesh_chunk_b")
+
+[node name="Chunk9" type="MeshInstance3D" parent="Debris"]
+position = Vector3(18, -2, -3)
+rotation = Vector3(0.1, 0.9, 0.3)
+scale = Vector3(1.3, 1.3, 1.3)
+mesh = SubResource("mesh_chunk_a")
+
+[node name="ChunkThreat" type="MeshInstance3D" parent="Debris"]
+position = Vector3(5, 1, -15)
+rotation = Vector3(0.8, 0.4, 0.7)
+mesh = SubResource("mesh_chunk_c")
