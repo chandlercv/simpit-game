@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
+[ext_resource type="PackedScene" path="res://scenes/ui/RolePanel.tscn" id="2_panel"]
+
+[node name="TacticalWindow" type="Window"]
+title = "Salvager — Tactical"
+size = Vector2i(960, 540)
+script = ExtResource("1_win")
+
+[node name="RolePanel" parent="." instance=ExtResource("2_panel")]
+role_name = "TACTICAL"
+accent = Color(1, 0.72, 0.2, 1)

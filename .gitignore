@@ -1,0 +1,7 @@
+# Godot 4 imported/cache data
+.godot/
+
+# Godot export output
+export/
+*.exe
+*.pck

@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
+[ext_resource type="PackedScene" path="res://scenes/ui/RolePanel.tscn" id="2_panel"]
+
+[node name="StarChartWindow" type="Window"]
+title = "Salvager — Chart"
+size = Vector2i(960, 540)
+script = ExtResource("1_win")
+
+[node name="RolePanel" parent="." instance=ExtResource("2_panel")]
+role_name = "CHART"
+accent = Color(0.45, 0.7, 1, 1)

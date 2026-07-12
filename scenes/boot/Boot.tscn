@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/displays/MainViewWindow.tscn" id="1_main"]
+
+[node name="Boot" type="Node"]
+
+[node name="MainViewWindow" parent="." instance=ExtResource("1_main")]
