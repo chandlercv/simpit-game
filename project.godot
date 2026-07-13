@@ -53,6 +53,15 @@ glance_down={
 ]
 }
 
+[input_devices]
+
+; Both touch emulations off (plan Phase 3): tablet touch must arrive as raw
+; InputEventScreenTouch/Drag scoped to the tablet's window without bleeding
+; into the other windows' mouse handling, and desktop mouse must not fake
+; touches. Tablet widgets handle both event families explicitly.
+pointing/emulate_touch_from_mouse=false
+pointing/emulate_mouse_from_touch=false
+
 [rendering]
 
 renderer/rendering_method="forward_plus"

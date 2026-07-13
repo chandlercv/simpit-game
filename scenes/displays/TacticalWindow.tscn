@@ -1,13 +1,102 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
-[ext_resource type="PackedScene" path="res://scenes/ui/RolePanel.tscn" id="2_panel"]
+[ext_resource type="Script" path="res://scenes/ui/TacticalScope.gd" id="2_scope"]
+[ext_resource type="Script" path="res://scenes/ui/SensorModeBar.gd" id="3_modes"]
+[ext_resource type="Script" path="res://scenes/ui/RiskMeter.gd" id="4_risk"]
+[ext_resource type="Script" path="res://scenes/ui/ContactList.gd" id="5_contacts"]
+[ext_resource type="Shader" path="res://scenes/ui/scanlines.gdshader" id="6_scan"]
+[ext_resource type="PackedScene" path="res://scenes/ui/StatusStrip.tscn" id="7_status"]
+
+[sub_resource type="ShaderMaterial" id="scan_mat"]
+shader = ExtResource("6_scan")
 
 [node name="TacticalWindow" type="Window"]
 title = "Salvager — Tactical"
 size = Vector2i(960, 540)
+content_scale_mode = 1
+content_scale_aspect = 4
+content_scale_size = Vector2i(1280, 720)
 script = ExtResource("1_win")
 
-[node name="RolePanel" parent="." instance=ExtResource("2_panel")]
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.028, 0.008, 1)
+
+[node name="Margin" type="MarginContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 36
+
+[node name="Layout" type="HBoxContainer" parent="Root/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="TacticalScope" type="Control" parent="Root/Margin/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.8
+script = ExtResource("2_scope")
+accent = Color(1, 0.72, 0.2, 1)
+
+[node name="Right" type="VBoxContainer" parent="Root/Margin/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="SensorModeBar" type="HBoxContainer" parent="Root/Margin/Layout/Right"]
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("3_modes")
+accent = Color(1, 0.72, 0.2, 1)
+
+[node name="RiskMeter" type="Control" parent="Root/Margin/Layout/Right"]
+layout_mode = 2
+script = ExtResource("4_risk")
+accent = Color(1, 0.72, 0.2, 1)
+
+[node name="Scroll" type="ScrollContainer" parent="Root/Margin/Layout/Right"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="ContactList" type="VBoxContainer" parent="Root/Margin/Layout/Right/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+script = ExtResource("5_contacts")
+accent = Color(1, 0.72, 0.2, 1)
+
+[node name="Scanlines" type="ColorRect" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("scan_mat")
+
+[node name="StatusStrip" parent="Root" instance=ExtResource("7_status")]
 role_name = "TACTICAL"
 accent = Color(1, 0.72, 0.2, 1)

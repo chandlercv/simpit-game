@@ -1,13 +1,73 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
-[ext_resource type="PackedScene" path="res://scenes/ui/RolePanel.tscn" id="2_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/InventoryGrid.tscn" id="2_inv"]
+[ext_resource type="Script" path="res://scenes/ui/HullHeatmap.gd" id="3_hull"]
+[ext_resource type="PackedScene" path="res://scenes/ui/PowerSliders.tscn" id="4_power"]
+[ext_resource type="PackedScene" path="res://scenes/ui/StatusStrip.tscn" id="5_status"]
 
 [node name="TabletWindow" type="Window"]
 title = "Salvager — Tablet"
 size = Vector2i(960, 540)
+content_scale_mode = 1
+content_scale_aspect = 4
+content_scale_size = Vector2i(1280, 800)
 script = ExtResource("1_win")
 
-[node name="RolePanel" parent="." instance=ExtResource("2_panel")]
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.012, 0.038, 0.038, 1)
+
+[node name="Margin" type="MarginContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 40
+
+[node name="Layout" type="HBoxContainer" parent="Root/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 28
+
+[node name="InventoryGrid" parent="Root/Margin/Layout" instance=ExtResource("2_inv")]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.4
+
+[node name="Right" type="VBoxContainer" parent="Root/Margin/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 20
+
+[node name="HullHeatmap" type="Control" parent="Root/Margin/Layout/Right"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 1.5
+script = ExtResource("3_hull")
+accent = Color(0.3, 0.9, 0.78, 1)
+
+[node name="PowerSliders" parent="Root/Margin/Layout/Right" instance=ExtResource("4_power")]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StatusStrip" parent="Root" instance=ExtResource("5_status")]
 role_name = "TABLET"
 accent = Color(0.3, 0.9, 0.78, 1)

@@ -1,13 +1,73 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
-[ext_resource type="PackedScene" path="res://scenes/ui/RolePanel.tscn" id="2_panel"]
+[ext_resource type="Script" path="res://scenes/ui/StarChart.gd" id="2_chart"]
+[ext_resource type="PackedScene" path="res://scenes/ui/MarketPanel.tscn" id="3_market"]
+[ext_resource type="PackedScene" path="res://scenes/ui/CommsLog.tscn" id="4_comms"]
+[ext_resource type="PackedScene" path="res://scenes/ui/StatusStrip.tscn" id="5_status"]
 
 [node name="StarChartWindow" type="Window"]
 title = "Salvager — Chart"
 size = Vector2i(960, 540)
+content_scale_mode = 1
+content_scale_aspect = 4
+content_scale_size = Vector2i(1600, 900)
 script = ExtResource("1_win")
 
-[node name="RolePanel" parent="." instance=ExtResource("2_panel")]
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.012, 0.022, 0.05, 1)
+
+[node name="Margin" type="MarginContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 36
+
+[node name="Layout" type="HBoxContainer" parent="Root/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="StarChart" type="Control" parent="Root/Margin/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.7
+script = ExtResource("2_chart")
+accent = Color(0.45, 0.7, 1, 1)
+
+[node name="Right" type="VBoxContainer" parent="Root/Margin/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 20
+
+[node name="MarketPanel" parent="Root/Margin/Layout/Right" instance=ExtResource("3_market")]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CommsLog" parent="Root/Margin/Layout/Right" instance=ExtResource("4_comms")]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 1.2
+
+[node name="StatusStrip" parent="Root" instance=ExtResource("5_status")]
 role_name = "CHART"
 accent = Color(0.45, 0.7, 1, 1)
