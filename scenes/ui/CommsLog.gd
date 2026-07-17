@@ -9,6 +9,9 @@ const SOURCE_COLORS := {
 	"SYSTEM": Color(0.6, 0.65, 0.7),
 	"SENSORS": Color(1.0, 0.72, 0.2),
 	"HARBOR": Color(0.45, 0.7, 1.0),
+	"SALVAGE": Color(1.0, 0.55, 0.3),
+	"OPS": Color(0.3, 0.9, 0.78),
+	"MARKET": Color(0.5, 1.0, 0.7),
 }
 
 @onready var _title: Label = %Title

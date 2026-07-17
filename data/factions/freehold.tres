@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="FactionDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/FactionDefinition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+display_name = "FREEHOLD"
+price_bias = {
+"HULL ALLOY": 1.08,
+"RARE ISOTOPES": 0.9,
+"VOLATILES": 1.2
+}
+starting_rep = 0.55
+holds_claim = true

@@ -42,7 +42,10 @@ func _process(delta: float) -> void:
 func _update_readouts() -> void:
 	var ship: Dictionary = GameState.ships[GameState.LOCAL_PEER_ID]
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
-	_vel_label.text = "VEL %5.1f M/S" % velocity.length()
+	var vel_text := "VEL %5.1f M/S" % velocity.length()
+	if GameState.approach_state != "HOLDING":
+		vel_text += "  — %s" % GameState.approach_state
+	_vel_label.text = vel_text
 	if camera == null:
 		return
 	var fwd := -camera.global_transform.basis.z
@@ -59,6 +62,7 @@ func _update_readouts() -> void:
 
 func _draw() -> void:
 	_draw_reticle()
+	_draw_ops_state()
 	if camera == null:
 		return
 	var frame := Rect2(Vector2.ZERO, size)
@@ -88,6 +92,26 @@ func _draw() -> void:
 		if is_threat and dist < PROXIMITY_RANGE:
 			draw_string(font, screen_pos + Vector2(-radius, -radius - 10),
 					"PROXIMITY", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+
+
+## Camera-feed-tied ops readouts: cutter progress while the torch is live,
+## and a phase banner when the feed isn't showing the claim at all.
+func _draw_ops_state() -> void:
+	var font := ThemeDB.fallback_font
+	var c := size / 2.0
+	if GameState.run_phase != "ON_SITE":
+		var banner := "IN TRANSIT" if GameState.run_phase == "TRANSIT" \
+				else "DOCKED — %s" % GameState.market_factions[GameState.docked_faction]
+		draw_string(font, Vector2(0, c.y + 70), banner,
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, HUD_COLOR)
+		return
+	var cutting_id: int = GameState.wreck.get("cutting_id", -1)
+	if cutting_id != -1:
+		var member := GameState.get_member(cutting_id)
+		draw_string(font, Vector2(0, c.y + 70),
+				"CUTTING %s — %d%%" % [member["name"],
+					roundi(GameState.wreck["cut_progress"] * 100.0)],
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, THREAT_COLOR)
 
 
 func _draw_reticle() -> void:

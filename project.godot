@@ -21,6 +21,10 @@ GameState="*res://autoload/GameState.gd"
 DisplayConfig="*res://autoload/DisplayConfig.gd"
 WindowManager="*res://autoload/WindowManager.gd"
 InputRouter="*res://autoload/InputRouter.gd"
+CargoSystem="*res://systems/CargoSystem.gd"
+MarketSystem="*res://systems/MarketSystem.gd"
+SalvageSystem="*res://systems/SalvageSystem.gd"
+ThreatSystem="*res://systems/ThreatSystem.gd"
 
 [display]
 

@@ -4,6 +4,12 @@ extends Control
 ## omnidirectional view the main HUD deliberately does not duplicate (plan
 ## Phase 2 rule of thumb). Mouse-driven — the Surface Go is treated as
 ## non-touch — click a blip to lock it.
+##
+## In STRUCT mode this becomes the wreck's structural map (plan Phase 4):
+## once a scan has resolved the graph, members are plotted with their frame
+## load, cut state, and predicted risk spike — click one to select it as the
+## cut target. Choosing where to cut is a read-the-wreck decision, so the
+## information that drives it lives here, not on a numeric meter.
 
 @export var accent: Color = Color(1.0, 0.72, 0.2)
 
@@ -13,6 +19,9 @@ const SWEEP_HZ_BY_MODE := {"PASSIVE": 0.2, "ACTIVE": 0.5, "STRUCT": 0.35}
 
 const CLICK_RADIUS := 24.0
 const SWEEP_TRAIL_STEPS := 36
+
+const LOAD_HIGH_COLOR := Color(1.0, 0.42, 0.15)
+const CUT_COLOR := Color(0.45, 0.32, 0.1)
 
 var _sweep := 0.0
 var _time := 0.0
@@ -26,13 +35,25 @@ func _process(delta: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_LEFT:
-		for blip in _blips():
-			if blip["pos"].distance_to(event.position) <= CLICK_RADIUS:
-				GameState.set_tracked_contact(blip["contact"]["id"])
+	if not (event is InputEventMouseButton and event.pressed \
+			and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if _struct_overlay_active():
+		for member: Dictionary in GameState.wreck["members"]:
+			if _member_pos(member).distance_to(event.position) <= CLICK_RADIUS:
+				SalvageSystem.select_member(member["id"])
 				accept_event()
 				return
+		return
+	for blip in _blips():
+		if blip["pos"].distance_to(event.position) <= CLICK_RADIUS:
+			GameState.set_tracked_contact(blip["contact"]["id"])
+			accept_event()
+			return
+
+
+func _struct_overlay_active() -> bool:
+	return GameState.sensor_mode == "STRUCT" and GameState.wreck.get("scanned", false)
 
 
 func _scope_center() -> Vector2:
@@ -60,10 +81,21 @@ func _blips() -> Array[Dictionary]:
 	return out
 
 
+## Structural-map screen position for a member (schematic coords, fore = up).
+func _member_pos(member: Dictionary) -> Vector2:
+	return _scope_center() + Vector2(member["sx"], member["sy"]) * _scope_radius() * 0.78
+
+
 func _draw() -> void:
+	if GameState.sensor_mode == "STRUCT":
+		_draw_struct(ThemeDB.fallback_font)
+		return
+	_draw_radar(ThemeDB.fallback_font)
+
+
+func _draw_radar(font: Font) -> void:
 	var c := _scope_center()
 	var r := _scope_radius()
-	var font := ThemeDB.fallback_font
 	var dim := Color(accent, 0.28)
 	var mid := Color(accent, 0.55)
 
@@ -115,8 +147,84 @@ func _draw() -> void:
 			"RNG %d M — %s" % [int(RANGE_BY_MODE[GameState.sensor_mode]), GameState.sensor_mode],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, accent)
 
-	if GameState.sensor_mode == "STRUCT":
-		# Structural graph overlay arrives with Phase 4's SalvageSystem.
-		draw_string(font, Vector2(0, c.y + r * 0.55),
-				"STRUCTURAL SCAN — NO WRECK GRAPH IN SCAN RANGE",
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, mid)
+
+func _draw_struct(font: Font) -> void:
+	var c := _scope_center()
+	var r := _scope_radius()
+	var dim := Color(accent, 0.28)
+	var mid := Color(accent, 0.55)
+	var wreck: Dictionary = GameState.wreck
+
+	draw_arc(c, r, 0.0, TAU, 96, dim, 1.0, true)
+	draw_string(font, Vector2(8, 20),
+			"STRUCTURAL MAP — WRECK RNG %d M" % roundi(SalvageSystem.wreck_distance()),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, accent)
+
+	if not wreck.get("scanned", false):
+		var progress: float = wreck.get("scan_progress", 0.0)
+		var scanning := progress > 0.0
+		draw_string(font, Vector2(0, c.y - 12),
+				"STRUCTURAL SCAN %d%%" % roundi(progress * 100.0) if scanning
+				else "NO STRUCTURAL DATA — HOLD STRUCT MODE TO SCAN",
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 15, mid)
+		if scanning:
+			draw_arc(c, r * 0.5, -PI / 2.0, -PI / 2.0 + TAU * progress, 64, accent, 2.0, true)
+		if GameState.power("SENSORS") < 0.1:
+			draw_string(font, Vector2(0, c.y + 16),
+					"SENSORS UNPOWERED — RAISE ALLOCATION ON TABLET",
+					HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, LOAD_HIGH_COLOR)
+		return
+
+	# Frame links first, so member markers draw over them.
+	for member: Dictionary in wreck["members"]:
+		for other_id: int in member["links"]:
+			if other_id < member["id"]:
+				continue
+			var other := GameState.get_member(other_id)
+			var severed: bool = member["cut"] or member["destroyed"] \
+					or other["cut"] or other["destroyed"]
+			draw_line(_member_pos(member), _member_pos(other),
+					Color(CUT_COLOR, 0.6) if severed else mid, 1.0 if severed else 2.0)
+
+	for member: Dictionary in wreck["members"]:
+		_draw_member(member, font)
+
+	var selected := GameState.get_member(GameState.selected_member_id)
+	var info := "CLICK A MEMBER TO SELECT CUT POINT"
+	if not selected.is_empty():
+		var good: GoodDefinition = MarketSystem.good(selected["good"])
+		info = "%s — LOAD %s — EST RISK +%d%% — YIELD %.1f %s %s" % [
+			selected["name"], SalvageSystem.load_class(selected),
+			roundi(SalvageSystem.predicted_spike(selected) * 100.0),
+			selected["qty"], good.unit, selected["good"]]
+	draw_string(font, Vector2(0, size.y - 8), info,
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, accent)
+
+
+func _draw_member(member: Dictionary, font: Font) -> void:
+	var pos := _member_pos(member)
+	var gone: bool = member["cut"] or member["destroyed"]
+	var load_bearing: float = member["load"]
+	var color := CUT_COLOR if gone \
+			else Color(accent, 0.55).lerp(LOAD_HIGH_COLOR, clampf(load_bearing, 0.0, 1.0))
+	# Marker size scales with frame load: big node = load-bearing spar.
+	var marker_r := 5.0 + 7.0 * load_bearing
+	draw_circle(pos, marker_r, Color(color, 0.35))
+	draw_arc(pos, marker_r, 0.0, TAU, 32, color, 1.5, true)
+	if gone:
+		draw_line(pos - Vector2(marker_r, marker_r), pos + Vector2(marker_r, marker_r), color, 1.5)
+		draw_line(pos + Vector2(-marker_r, marker_r), pos + Vector2(marker_r, -marker_r), color, 1.5)
+	if member["id"] == GameState.selected_member_id:
+		var pulse := 0.6 + 0.4 * sin(_time * TAU * 1.2)
+		draw_arc(pos, marker_r + 6.0, 0.0, TAU, 32, Color(accent, pulse), 2.0, true)
+	if member["id"] == GameState.wreck["cutting_id"]:
+		var progress: float = GameState.wreck["cut_progress"]
+		draw_arc(pos, marker_r + 6.0, -PI / 2.0, -PI / 2.0 + TAU * progress, 32,
+				LOAD_HIGH_COLOR, 2.5, true)
+	var label: String = member["name"]
+	if member["destroyed"]:
+		label += " (LOST)"
+	elif member["cut"]:
+		label += " (CUT)"
+	draw_string(font, pos + Vector2(-60, marker_r + 16), label,
+			HORIZONTAL_ALIGNMENT_CENTER, 120, 11, Color(color, 0.9))

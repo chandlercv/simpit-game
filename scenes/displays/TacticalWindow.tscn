@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
 [ext_resource type="Script" path="res://scenes/ui/TacticalScope.gd" id="2_scope"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scenes/ui/ContactList.gd" id="5_contacts"]
 [ext_resource type="Shader" path="res://scenes/ui/scanlines.gdshader" id="6_scan"]
 [ext_resource type="PackedScene" path="res://scenes/ui/StatusStrip.tscn" id="7_status"]
+[ext_resource type="Script" path="res://scenes/ui/OpsBar.gd" id="8_ops"]
 
 [sub_resource type="ShaderMaterial" id="scan_mat"]
 shader = ExtResource("6_scan")
@@ -68,6 +69,12 @@ theme_override_constants/separation = 16
 layout_mode = 2
 theme_override_constants/separation = 8
 script = ExtResource("3_modes")
+accent = Color(1, 0.72, 0.2, 1)
+
+[node name="OpsBar" type="HBoxContainer" parent="Root/Margin/Layout/Right"]
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("8_ops")
 accent = Color(1, 0.72, 0.2, 1)
 
 [node name="RiskMeter" type="Control" parent="Root/Margin/Layout/Right"]

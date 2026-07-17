@@ -2,10 +2,11 @@ extends Node
 ## Single source of truth for all game state.
 ##
 ## Convention (enforced at code-review level): window/UI scripts only READ this
-## singleton and call intent methods; only systems/*.gd mutate state and emit
-## *_changed signals. Phase 4 systems don't exist yet, so the intent methods
-## below mutate directly for now — when systems/*.gd land, gameplay-driven
-## mutation moves there and these methods stay as the UI's single entry points.
+## singleton and call intent methods — either the thin setters below or the
+## gameplay intents on systems/*.gd (SalvageSystem, CargoSystem, MarketSystem,
+## ThreatSystem). Only intents/systems mutate state; changes fan out through
+## the *_changed signals declared here so every display window reacts to the
+## same shared state.
 
 signal tick_changed(tick: int)
 signal contacts_changed
@@ -13,14 +14,23 @@ signal tracked_contact_changed(id: int)
 signal sensor_mode_changed(mode: String)
 signal power_changed
 signal comms_posted(entry: Dictionary)
-## Emitted by Phase 4 systems (SalvageSystem/ThreatSystem/CargoSystem); the
-## Phase 3 displays already listen so wiring them up later is emit-only.
-@warning_ignore("unused_signal")
+
+## Phase 4 signals, emitted by systems/*.gd (declared here so any display can
+## subscribe without knowing which system drives them).
+@warning_ignore_start("unused_signal")
 signal structural_risk_changed(risk: float)
-@warning_ignore("unused_signal")
 signal hull_sections_changed
-@warning_ignore("unused_signal")
 signal cargo_changed
+signal credits_changed(credits: int)
+signal reputation_changed
+signal market_changed
+signal run_phase_changed(phase: String)
+signal approach_changed(state: String)
+signal selected_member_changed(id: int)
+signal wreck_scanned
+signal wreck_member_cut(id: int)
+signal site_reset
+@warning_ignore_restore("unused_signal")
 
 ## Godot's convention for the local/server peer. GameState.ships is keyed by
 ## peer id from day one so networked multiplayer later is additive, not a
@@ -33,11 +43,21 @@ const TICK_RATE_HZ := 10.0
 const SENSOR_MODES: Array[String] = ["PASSIVE", "ACTIVE", "STRUCT"]
 
 ## Power allocation channels, each 0..1. The reactor can't run everything at
-## full: the UI warns when the summed allocation exceeds POWER_BUDGET.
+## full: the UI warns when the summed allocation exceeds power_budget().
 const POWER_CHANNELS: Array[String] = ["THRUST", "CUTTER", "SENSORS", "LIFE"]
-const POWER_BUDGET := 2.5
 
 const HULL_SECTIONS: Array[String] = ["BOW", "PORT", "STBD", "CORE", "AFT", "DRIVE"]
+
+## Run phases: ON_SITE (at the salvage claim), TRANSIT (abstract burn to/from
+## a station), DOCKED (at a faction station, hold can be sold).
+const RUN_PHASES: Array[String] = ["ON_SITE", "TRANSIT", "DOCKED"]
+
+## Approach states (SalvageSystem): HOLDING (free drift), APPROACHING
+## (closing/matching), MATCHED (inside cutting range, velocity matched).
+const APPROACH_STATES: Array[String] = ["HOLDING", "APPROACHING", "MATCHED"]
+
+## Own-ship stats, authored as a Resource (plan Phase 4 convention).
+var ship_def: ShipDefinition = load("res://data/ships/kestrel.tres")
 
 ## peer_id -> ship state. Replication-friendly types only (Dictionary, Array,
 ## Vector3, float, int, String) so a future MultiplayerSynchronizer can point
@@ -46,8 +66,8 @@ var ships: Dictionary = {}
 
 ## Sensor contacts. Replication-friendly Dictionaries:
 ## { "id": int, "name": String, "position": Vector3, "threat": bool }.
-## Phase 2 populates this at world-scene setup (see register_contact below);
-## gameplay-driven contact churn arrives with systems/ThreatSystem.gd in Phase 4.
+## World nodes register the static ones at scene setup; ThreatSystem spawns,
+## moves, and removes the gameplay-driven ones.
 var contacts: Array[Dictionary] = []
 
 ## Contact currently locked for the HUD/Tactical displays, -1 for none.
@@ -56,23 +76,42 @@ var tracked_contact_id: int = -1
 ## Active sensor mode, one of SENSOR_MODES (drives the Tactical scope).
 var sensor_mode: String = "PASSIVE"
 
-## 0..1. Placeholder value until Phase 4, where SalvageSystem's structural
-## graph drives it from which members have been cut.
-var structural_risk: float = 0.22
+## 0..1, owned by SalvageSystem: eases toward a baseline that ratchets up with
+## each structural cut, and spikes when a load-bearing member is severed.
+var structural_risk: float = 0.15
 
-## Placeholder market table until systems/MarketSystem.gd (Phase 4) owns
-## faction pricing/reputation. prices[] is parallel to market_factions.
-## Faction names are placeholders pending a simpit-world.md naming pass.
-var market_factions: Array[String] = ["LAGRANGE UNION", "MERIDIAN CO.", "FREEHOLD"]
-var market_goods: Array[Dictionary] = [
-	{"name": "HULL ALLOY", "unit": "T", "prices": [412, 388, 445]},
-	{"name": "FUSED OPTICS", "unit": "KG", "prices": [95, 118, 87]},
-	{"name": "VOLATILES", "unit": "T", "prices": [61, 55, 74]},
-	{"name": "RARE ISOTOPES", "unit": "G", "prices": [230, 244, 198]},
-	{"name": "INTACT NAV CORES", "unit": "EA", "prices": [1250, 1600, 1100]},
-]
+## Structural graph of the wreck on site, owned by SalvageSystem:
+## { "scanned": bool, "scan_progress": float 0..1, "position": Vector3,
+##   "members": Array[Dictionary] } — each member:
+## { "id": int, "name": String, "node": String (Wreck.tscn child name),
+##   "sx"/"sy": float (schematic coords -1..1), "load": float 0..1,
+##   "links": Array[int] (member ids), "cut": bool, "destroyed": bool,
+##   "good": String, "qty": float }.
+var wreck: Dictionary = {}
 
-## Comms/traffic log entries: { "tick": int, "source": String, "text": String }.
+## Structural member currently selected as the cut target, -1 for none.
+var selected_member_id: int = -1
+
+## SalvageSystem approach/match-velocity state, one of APPROACH_STATES.
+var approach_state: String = "HOLDING"
+
+## Current run phase, one of RUN_PHASES.
+var run_phase: String = "ON_SITE"
+
+## Faction index docked at (into market_factions), -1 when not docked.
+var docked_faction: int = -1
+
+var credits: int = 500
+
+## Faction display_name -> reputation 0..1 (MarketSystem).
+var reputation: Dictionary = {}
+
+## Market table, owned by MarketSystem (built from data/factions + data/goods
+## .tres, repriced on dock). prices[] is parallel to market_factions.
+var market_factions: Array[String] = []
+var market_goods: Array[Dictionary] = []
+
+## Comms/mission log entries: { "tick": int, "source": String, "text": String }.
 var comms: Array[Dictionary] = []
 
 ## Shared tick counter, displayed on every window (kept from Phase 1 as the
@@ -88,31 +127,27 @@ func _ready() -> void:
 		"transform": Transform3D.IDENTITY,
 		"velocity": Vector3.ZERO,
 		"hull": 1.0,
-		# Placeholder per-section integrity (0..1) so the tablet heatmap has a
-		# varied read; Phase 4 damage events will drive this.
+		# Per-section integrity 0..1; collapse events (ThreatSystem) damage it.
 		"hull_sections": {
-			"BOW": 0.92, "PORT": 0.64, "STBD": 0.88,
-			"CORE": 0.97, "AFT": 0.71, "DRIVE": 0.55,
+			"BOW": 0.96, "PORT": 0.88, "STBD": 0.92,
+			"CORE": 1.0, "AFT": 0.9, "DRIVE": 0.85,
 		},
-		# Placeholder salvage already aboard so the inventory grid has tiles.
-		"cargo": [
-			{"id": 0, "name": "ALLOY SPAR", "mass_t": 3.2, "vol_m3": 4.1},
-			{"id": 1, "name": "FUSED OPTICS", "mass_t": 0.4, "vol_m3": 0.3},
-			{"id": 2, "name": "COOLANT CELL", "mass_t": 1.1, "vol_m3": 0.9},
-			{"id": 3, "name": "NAV CORE (DAMAGED)", "mass_t": 0.8, "vol_m3": 0.6},
-		],
-		"cargo_mass_limit_t": 40.0,
+		"cargo": [],
+		"cargo_mass_limit_t": ship_def.cargo_mass_limit_t,
+		"cargo_vol_limit_m3": ship_def.cargo_vol_limit_m3,
 		"power": {"THRUST": 0.8, "CUTTER": 0.0, "SENSORS": 0.6, "LIFE": 1.0},
 	}
-	post_comms("SYSTEM", "DISPLAY NETWORK ONLINE")
-	post_comms("HARBOR", "TRAFFIC ADVISORY: SALVAGE CLAIM 7741-C ACTIVE IN THIS VOLUME")
-	post_comms("SENSORS", "PASSIVE SWEEP NOMINAL")
+	post_comms("SYSTEM", "DISPLAY NETWORK ONLINE — %s" % ship_def.display_name)
+
+
+func local_ship() -> Dictionary:
+	return ships[LOCAL_PEER_ID]
 
 
 ## World-scene setup, not gameplay mutation: world nodes (wreck, debris) call
 ## this once when they enter the tree so displays have something to read.
-## Once Phase 4 systems exist, contact changes driven by gameplay go through
-## systems/*.gd per the mutation convention above.
+## Gameplay-driven contact churn goes through ThreatSystem per the mutation
+## convention above.
 func register_contact(contact_name: String, position: Vector3, threat := false) -> int:
 	var id := _next_contact_id
 	_next_contact_id += 1
@@ -126,10 +161,29 @@ func register_contact(contact_name: String, position: Vector3, threat := false) 
 	return id
 
 
+## Systems-side contact removal (rival departs, patrol stands down).
+func remove_contact(id: int) -> void:
+	for i in contacts.size():
+		if contacts[i]["id"] == id:
+			contacts.remove_at(i)
+			if tracked_contact_id == id:
+				set_tracked_contact(-1)
+			contacts_changed.emit()
+			return
+
+
 func get_contact(id: int) -> Dictionary:
 	for contact in contacts:
 		if contact["id"] == id:
 			return contact
+	return {}
+
+
+## Member lookup in the wreck structural graph, {} if absent.
+func get_member(id: int) -> Dictionary:
+	for member: Dictionary in wreck.get("members", []):
+		if member["id"] == id:
+			return member
 	return {}
 
 
@@ -147,18 +201,26 @@ func set_sensor_mode(mode: String) -> void:
 
 
 func set_power(channel: String, value: float) -> void:
-	var power: Dictionary = ships[LOCAL_PEER_ID]["power"]
+	var power: Dictionary = local_ship()["power"]
 	if not power.has(channel):
 		return
 	power[channel] = clampf(value, 0.0, 1.0)
 	power_changed.emit()
 
 
+func power(channel: String) -> float:
+	return local_ship()["power"].get(channel, 0.0)
+
+
 func power_total() -> float:
 	var total := 0.0
-	for value: float in ships[LOCAL_PEER_ID]["power"].values():
+	for value: float in local_ship()["power"].values():
 		total += value
 	return total
+
+
+func power_budget() -> float:
+	return ship_def.power_budget
 
 
 func post_comms(source: String, text: String) -> void:

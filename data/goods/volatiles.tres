@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="GoodDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/GoodDefinition.gd" id="1_def"]
+
+[resource]
+script = ExtResource("1_def")
+display_name = "VOLATILES"
+unit = "T"
+base_price = 62
+mass_t_per_unit = 1.0
+vol_m3_per_unit = 1.4

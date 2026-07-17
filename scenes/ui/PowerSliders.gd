@@ -1,8 +1,9 @@
 extends Control
 ## Power allocation panel for the tablet: one touch slider per channel plus a
 ## reactor budget readout that goes red when the summed allocation exceeds
-## GameState.POWER_BUDGET. Sliders call the set_power intent; Phase 4 systems
-## will read the allocations for thrust/cutter/sensor effectiveness.
+## the ship's power budget. Sliders call the set_power intent; Phase 4 systems
+## read the allocations: THRUST gates approach speed, CUTTER gates cutting,
+## SENSORS gates structural-scan speed.
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 
@@ -37,7 +38,7 @@ func _sync() -> void:
 		# Setting .value doesn't re-emit user_changed_value, so no feedback loop.
 		_sliders[channel].value = power[channel]
 	var total := GameState.power_total()
-	var over := total > GameState.POWER_BUDGET
+	var over := total > GameState.power_budget()
 	_header.text = "POWER  %.1f / %.1f%s" % [
-		total, GameState.POWER_BUDGET, "  — REACTOR OVERDRAW" if over else ""]
+		total, GameState.power_budget(), "  — REACTOR OVERDRAW" if over else ""]
 	_header.add_theme_color_override("font_color", OVER_BUDGET if over else accent)
