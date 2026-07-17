@@ -16,7 +16,7 @@ Update the table below **as assets are added**, not reconstructed after the fact
 
 | Asset | Source URL | License | Folder |
 |---|---|---|---|
-| *(none yet — Phase 2 placeholder geometry is engine primitives, no third-party assets)* | | | |
+| Space Kit (39 selected `.glb` models of the 153-model kit: corridors, structures, pipes, platforms, machines, dishes, meteors/rocks, craft, props) | https://kenney.nl/assets/space-kit | CC0 | `assets/cc0/kenney-space-kit/` |
 
 ## Recommended sources
 

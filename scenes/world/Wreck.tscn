@@ -1,39 +1,17 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/Wreck.gd" id="1_wreck"]
-[ext_resource type="Material" path="res://scenes/world/materials/hull_plating.tres" id="2_plating"]
-[ext_resource type="Material" path="res://scenes/world/materials/hull_panel.tres" id="3_panel"]
 [ext_resource type="Material" path="res://scenes/world/materials/beacon_emissive.tres" id="4_beacon"]
-
-[sub_resource type="CylinderMesh" id="mesh_spine"]
-material = ExtResource("2_plating")
-top_radius = 0.5
-bottom_radius = 0.5
-height = 14.0
-
-[sub_resource type="BoxMesh" id="mesh_hull_fore"]
-material = ExtResource("2_plating")
-size = Vector3(4, 2.6, 6)
-
-[sub_resource type="BoxMesh" id="mesh_hull_aft"]
-material = ExtResource("2_plating")
-size = Vector3(3.2, 2.2, 4.5)
-
-[sub_resource type="CylinderMesh" id="mesh_engine"]
-material = ExtResource("2_plating")
-top_radius = 0.7
-bottom_radius = 1.3
-height = 2.2
-
-[sub_resource type="BoxMesh" id="mesh_panel"]
-material = ExtResource("3_panel")
-size = Vector3(2.4, 0.08, 1.8)
-
-[sub_resource type="CylinderMesh" id="mesh_antenna"]
-material = ExtResource("3_panel")
-top_radius = 0.05
-bottom_radius = 0.08
-height = 3.0
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/pipe_straight.glb" id="5_pipe"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/pipe_ringSupport.glb" id="6_ring"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/craft_cargoA.glb" id="7_craft"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/corridor_open.glb" id="8_cor_open"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/corridor_split.glb" id="9_cor_split"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/chimney_detailed.glb" id="12_chimney"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/platform_long.glb" id="13_platform"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/machine_wireless.glb" id="14_antenna"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/satelliteDish.glb" id="15_dish"]
+[ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/machine_barrel.glb" id="16_barrel"]
 
 [sub_resource type="SphereMesh" id="mesh_beacon"]
 material = ExtResource("4_beacon")
@@ -43,38 +21,72 @@ height = 0.32
 [node name="Wreck" type="Node3D"]
 script = ExtResource("1_wreck")
 
-[node name="Spine" type="MeshInstance3D" parent="."]
-rotation = Vector3(1.5708, 0, 0)
-mesh = SubResource("mesh_spine")
+[node name="Spine" type="Node3D" parent="."]
 
-[node name="HullFore" type="MeshInstance3D" parent="."]
+[node name="PipeA" parent="Spine" instance=ExtResource("5_pipe")]
+transform = Transform3D(0, 0, 2, 0, 2, 0, -2, 0, 0, 0, 0, -4)
+
+[node name="PipeB" parent="Spine" instance=ExtResource("5_pipe")]
+transform = Transform3D(0, 0, 2, 0, 2, 0, -2, 0, 0, 0, 0, 0)
+
+[node name="PipeC" parent="Spine" instance=ExtResource("5_pipe")]
+transform = Transform3D(0, 0, 2, 0, 2, 0, -2, 0, 0, 0, 0, 4)
+
+[node name="RingA" parent="Spine" instance=ExtResource("6_ring")]
+transform = Transform3D(0, 0, 1.6, 0, 1.6, 0, -1.6, 0, 0, 0, -0.4, -2)
+
+[node name="RingB" parent="Spine" instance=ExtResource("6_ring")]
+transform = Transform3D(0, 0, 1.6, 0, 1.6, 0, -1.6, 0, 0, 0, -0.4, 2.2)
+
+[node name="HullFore" type="Node3D" parent="."]
 position = Vector3(0, 0.2, -4.5)
-mesh = SubResource("mesh_hull_fore")
 
-[node name="HullAft" type="MeshInstance3D" parent="."]
+[node name="CraftBody" parent="HullFore" instance=ExtResource("7_craft")]
+transform = Transform3D(-2.2, 0, 0, 0, 2.2, 0, 0, 0, -2.2, 0, -0.6, -1.2)
+
+[node name="HullAft" type="Node3D" parent="."]
 position = Vector3(0.4, -0.3, 3.8)
 rotation = Vector3(0.12, 0.2, 0.35)
-mesh = SubResource("mesh_hull_aft")
 
-[node name="EngineBell" type="MeshInstance3D" parent="."]
+[node name="ModuleA" parent="HullAft" instance=ExtResource("8_cor_open")]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, -1, -0.6)
+
+[node name="ModuleB" parent="HullAft" instance=ExtResource("9_cor_split")]
+transform = Transform3D(1.9, 0, -0.6, 0, 2, 0, 0.6, 0, 1.9, 0.2, -1, 1.6)
+
+[node name="EngineBell" type="Node3D" parent="."]
 position = Vector3(0.5, -0.4, 6.8)
-rotation = Vector3(1.5708, 0, 0.3)
-mesh = SubResource("mesh_engine")
+rotation = Vector3(-1.5708, 0, 0.3)
 
-[node name="PanelA" type="MeshInstance3D" parent="."]
+[node name="Chimney" parent="EngineBell" instance=ExtResource("12_chimney")]
+transform = Transform3D(1.8, 0, 0, 0, 1.8, 0, 0, 0, 1.8, 0, -0.9, 0)
+
+[node name="Tank" parent="EngineBell" instance=ExtResource("16_barrel")]
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 1.1, 0.4, -0.4)
+
+[node name="PanelA" type="Node3D" parent="."]
 position = Vector3(3.2, 1.4, -1.5)
 rotation = Vector3(0.5, 0.9, 0.2)
-mesh = SubResource("mesh_panel")
 
-[node name="PanelB" type="MeshInstance3D" parent="."]
+[node name="Plate" parent="PanelA" instance=ExtResource("13_platform")]
+transform = Transform3D(1.6, 0, 0, 0, 0.5, 0, 0, 0, 1.3, 0, 0, 0)
+
+[node name="PanelB" type="Node3D" parent="."]
 position = Vector3(-2.8, -1.2, 1)
 rotation = Vector3(-0.4, 0.3, 0.7)
-mesh = SubResource("mesh_panel")
 
-[node name="Antenna" type="MeshInstance3D" parent="."]
+[node name="Plate" parent="PanelB" instance=ExtResource("13_platform")]
+transform = Transform3D(1.6, 0, 0, 0, 0.5, 0, 0, 0, 1.3, 0, 0, 0)
+
+[node name="Antenna" type="Node3D" parent="."]
 position = Vector3(-1.2, 2.4, -5.5)
 rotation = Vector3(0, 0, 0.35)
-mesh = SubResource("mesh_antenna")
+
+[node name="Mast" parent="Antenna" instance=ExtResource("14_antenna")]
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0, -1, 0)
+
+[node name="Dish" parent="Antenna" instance=ExtResource("15_dish")]
+transform = Transform3D(1.1, 0, 0, 0, 1.1, 0, 0, 0, 1.1, 0.7, 0.2, 0.5)
 
 [node name="Beacon" type="MeshInstance3D" parent="."]
 position = Vector3(1.1, 1.7, -3)
