@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Command godot -ErrorAction SilentlyContinue\\)?.Source; Get-ChildItem \"D:\\\\\" -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)",
+      "PowerShell(godot_console --headless --path d:\\\\simpit-game --import 2>&1)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {
