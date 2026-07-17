@@ -18,6 +18,12 @@ extends Resource
 @export var approach_accel := 3.0
 @export var approach_speed := 8.0
 
+## Manual flight (Phase 5): thruster acceleration at full THRUST allocation,
+## attitude rate at full stick, and a flight-assist speed ceiling.
+@export var manual_accel := 4.0
+@export var rotation_rate_deg := 45.0
+@export var max_speed := 25.0
+
 ## Cutting-head throughput at full CUTTER allocation, fraction of a member
 ## severed per second.
 @export var cut_rate := 0.35

@@ -1,0 +1,109 @@
+extends Node
+## Saitek Pro Flight Switch Panel (VID 0x06a3 / PID 0x0d67) read natively
+## in-engine via the hid-gd GDExtension — no external process (plan Phase 5).
+## The panel never enumerates as a joystick, so Godot's Input singleton can't
+## see it; hid-gd opens the raw HID interface and this node polls reports.
+##
+## The report decode is an isolated pure function (raw bytes -> named switch
+## states), ported from the already-proven flightbridge/devices/flight_panel.py
+## — per the plan's modding guidance, the trigger to generalize this into a
+## declarative device-profile schema is a SECOND raw-HID device, not now.
+## Runs degraded-gracefully: without the extension or the panel connected it
+## just retries in the background.
+
+const VID := 0x06a3
+const PID := 0x0d67
+const RETRY_INTERVAL := 3.0
+
+## Bit order matches the panel's 3-byte report (flight_panel.py unpacks the
+## same order as generic switch indices 0..19).
+const SWITCH_NAMES: Array[String] = [
+	"MASTER_BAT", "MASTER_ALT", "AVIONICS", "FUEL_PUMP",
+	"DE_ICE", "PITOT_HEAT", "COWL", "PANEL_LIGHTS",
+	"BEACON", "NAV", "STROBE", "TAXI",
+	"LANDING", "ENGINE_OFF", "ENGINE_R", "ENGINE_L",
+	"ENGINE_BOTH", "ENGINE_START", "GEAR_UP", "GEAR_DOWN",
+]
+
+var _hid: Object
+var _retry_timer := 0.0
+var _announced_missing := false
+## Power allocations remembered while MASTER_BAT is off.
+var _power_before_bat: Dictionary = {}
+
+
+## Pure decode: raw HID report -> { switch_name: bool }. A leading zero
+## report-ID byte is skipped (flight_panel.py's proven parsing) — but only
+## when the report is longer than the panel's 3 payload bytes, since byte 0
+## of a bare payload is legitimately zero with all bank-1 switches off.
+static func parse_report(report: PackedByteArray) -> Dictionary:
+	var out: Dictionary = {}
+	if report.size() < 3:
+		return out
+	var bytes := report
+	if bytes.size() > 3 and bytes[0] == 0:
+		bytes = bytes.slice(1)
+	for i in SWITCH_NAMES.size():
+		var byte_index := i / 8
+		if byte_index >= bytes.size():
+			break
+		out[SWITCH_NAMES[i]] = bool((bytes[byte_index] >> (i % 8)) & 1)
+	return out
+
+
+func _ready() -> void:
+	if not ClassDB.class_exists("Hid"):
+		push_warning("hid-gd extension missing — switch panel disabled")
+		set_process(false)
+
+
+func _process(delta: float) -> void:
+	if _hid == null:
+		_retry_timer -= delta
+		if _retry_timer <= 0.0:
+			_retry_timer = RETRY_INTERVAL
+			_try_open()
+		return
+	var report: PackedByteArray = _hid.call("read_timeout", 8, 0)
+	if not report.is_empty():
+		_apply(parse_report(report))
+
+
+func _try_open() -> void:
+	var hid: Object = ClassDB.instantiate("Hid")
+	# hid-gd's open() returns a success bool, not an Error code.
+	if hid.call("open", VID, PID):
+		_hid = hid
+		GameState.post_comms("SYSTEM", "SWITCH PANEL ONLINE")
+	elif not _announced_missing:
+		# One quiet note, then silent background retries: an unplugged panel
+		# is a normal desk state, not an error loop.
+		_announced_missing = true
+		print("SwitchPanelBridge: panel not found (vid 0x%04x pid 0x%04x), retrying" % [VID, PID])
+
+
+func _apply(switches: Dictionary) -> void:
+	for switch_name: String in switches:
+		var on: bool = switches[switch_name]
+		if GameState.panel_switches.get(switch_name) == on:
+			continue
+		GameState.panel_switches[switch_name] = on
+		GameState.panel_switch_changed.emit(switch_name, on)
+		GameState.post_comms("PANEL", "%s %s" % [switch_name, "ON" if on else "OFF"])
+		_route_intent(switch_name, on)
+
+
+## Switch -> gameplay intent mapping. Most switches just publish state (views
+## like Ship.gd read panel_switches directly); the ones with systemic effects
+## route through the same intents the touch UI uses.
+func _route_intent(switch_name: String, on: bool) -> void:
+	match switch_name:
+		"MASTER_BAT":
+			if on:
+				for channel: String in _power_before_bat:
+					GameState.set_power(channel, _power_before_bat[channel])
+				_power_before_bat = {}
+			else:
+				_power_before_bat = GameState.local_ship()["power"].duplicate()
+				for channel: String in GameState.POWER_CHANNELS:
+					GameState.set_power(channel, 0.0)

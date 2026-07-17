@@ -1,14 +1,36 @@
 extends Node
-## Raw joypad/keyboard input -> GameState intents.
+## Raw joypad/keyboard input -> GameState intents. GameState never cares
+## where an input came from: HOTAS axes, keyboard fallbacks, and the raw-HID
+## switch panel all land here first.
 ##
-## Phase 1: only a global quit key on the main window (secondary windows have
-## their own event streams and handle Esc in RoleWindow.gd). HOTAS bindings and
-## the raw-HID switch panel arrive in Phase 5 and route through here so
-## GameState never cares where an input came from.
+## Phase 2: the glance camera polls get_glance() each frame. The hat is
+## digital (Windows exposes the primary POV hat as JOY_BUTTON_DPAD_* — plan
+## risk #1), which is exactly what hold-to-glance/release-to-recenter wants.
 ##
-## Phase 2: the glance camera polls get_glance() each frame. The hat is digital
-## (Windows exposes the primary POV hat as JOY_BUTTON_DPAD_* — see plan risk #1),
-## which is exactly what a hold-to-glance/release-to-recenter interaction wants.
+## Phase 5: named flight actions (thrust_*/strafe_*/pitch_*/yaw_*/roll_*)
+## are polled here and fed to SalvageSystem as the manual-flight intent.
+## They carry keyboard fallbacks now; HOTAS InputEventJoypadMotion bindings
+## are added to the same actions once tools/InputEcho.tscn has reported the
+## real X52/X55 axis indices — no code changes, Input Map only. The Saitek
+## switch panel (never a joypad) is read by SwitchPanelBridge, spawned here.
+
+const SwitchPanelBridgeScene := preload("res://systems/hardware/SwitchPanelBridge.gd")
+
+
+func _ready() -> void:
+	add_child(SwitchPanelBridgeScene.new())
+
+
+func _process(_delta: float) -> void:
+	var thrust := Vector3(
+		Input.get_axis("strafe_left", "strafe_right"),
+		Input.get_axis("thrust_down", "thrust_up"),
+		Input.get_axis("thrust_back", "thrust_forward"))
+	var rot := Vector3(
+		Input.get_axis("pitch_down", "pitch_up"),
+		Input.get_axis("yaw_right", "yaw_left"),
+		Input.get_axis("roll_right", "roll_left"))
+	SalvageSystem.set_manual_flight(thrust, rot)
 
 
 ## Digital glance direction from the POV hat (arrow keys as the desk-free dev

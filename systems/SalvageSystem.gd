@@ -53,6 +53,12 @@ var _rng := RandomNumberGenerator.new()
 ## Resting risk level; each structural cut ratchets it up.
 var _risk_base := 0.15
 
+## Manual flight input for this frame, fed by InputRouter (Phase 5).
+## thrust is local (x right, y up, z forward), rot is (pitch, yaw, roll),
+## all components -1..1.
+var _manual_thrust := Vector3.ZERO
+var _manual_rot := Vector3.ZERO
+
 
 func _ready() -> void:
 	_rng.randomize()
@@ -72,6 +78,19 @@ func select_member(id: int) -> void:
 		return
 	GameState.selected_member_id = id
 	GameState.selected_member_changed.emit(id)
+
+
+## InputRouter, every frame: current HOTAS/keyboard flight input. Any real
+## input while the approach autopilot is flying disengages it — the stick
+## always wins.
+func set_manual_flight(thrust: Vector3, rot: Vector3) -> void:
+	_manual_thrust = thrust
+	_manual_rot = rot
+	if GameState.approach_state != "HOLDING" \
+			and (thrust.length() > 0.2 or rot.length() > 0.2):
+		_abort_cut("MANUAL CONTROL")
+		_set_approach("HOLDING")
+		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
 
 
 func toggle_approach() -> void:
@@ -241,7 +260,7 @@ func _update_approach(delta: float) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var transform: Transform3D = ship["transform"]
 	if GameState.approach_state == "HOLDING":
-		ship["velocity"] = Vector3.ZERO
+		_update_manual_flight(delta)
 		return
 	var wreck_pos: Vector3 = GameState.wreck["position"]
 	var offset: Vector3 = transform.origin - wreck_pos
@@ -261,6 +280,31 @@ func _update_approach(delta: float) -> void:
 			and wreck_distance() <= CUT_RANGE and speed < 0.6:
 		_set_approach("MATCHED")
 		GameState.post_comms("OPS", "VELOCITY MATCHED — INSIDE CUTTING RANGE")
+
+
+## Newtonian-lite manual flight (Phase 5): rate-controlled attitude, thruster
+## acceleration gated by THRUST power, mild flight-assist damping and a speed
+## ceiling so the pit stays flyable without a full sim.
+func _update_manual_flight(delta: float) -> void:
+	var ship: Dictionary = GameState.local_ship()
+	var transform: Transform3D = ship["transform"]
+	var velocity: Vector3 = ship["velocity"]
+	if _manual_rot.length_squared() > 0.001:
+		var rate := deg_to_rad(GameState.ship_def.rotation_rate_deg)
+		transform.basis = (transform.basis
+				* Basis.from_euler(_manual_rot * rate * delta)).orthonormalized()
+	if _manual_thrust.length_squared() > 0.001:
+		var accel: float = GameState.ship_def.manual_accel \
+				* maxf(GameState.power("THRUST"), 0.0)
+		var local := Vector3(_manual_thrust.x, _manual_thrust.y, -_manual_thrust.z)
+		velocity += transform.basis * local * accel * delta
+	else:
+		# Flight assist: bleed residual drift so station-keeping is feasible.
+		velocity *= exp(-0.35 * delta)
+	velocity = velocity.limit_length(GameState.ship_def.max_speed)
+	transform.origin += velocity * delta
+	ship["transform"] = transform
+	ship["velocity"] = velocity
 
 
 func _update_cut(delta: float) -> void:

@@ -30,6 +30,7 @@ signal selected_member_changed(id: int)
 signal wreck_scanned
 signal wreck_member_cut(id: int)
 signal site_reset
+signal panel_switch_changed(switch_name: String, on: bool)
 @warning_ignore_restore("unused_signal")
 
 ## Godot's convention for the local/server peer. GameState.ships is keyed by
@@ -110,6 +111,11 @@ var reputation: Dictionary = {}
 ## .tres, repriced on dock). prices[] is parallel to market_factions.
 var market_factions: Array[String] = []
 var market_goods: Array[Dictionary] = []
+
+## Saitek switch panel state, switch name -> bool (SwitchPanelBridge). Views
+## may read cosmetic switches directly (e.g. NAV/LANDING lights on Ship.gd);
+## systemic switches route through intents in the bridge.
+var panel_switches: Dictionary = {}
 
 ## Comms/mission log entries: { "tick": int, "source": String, "text": String }.
 var comms: Array[Dictionary] = []
