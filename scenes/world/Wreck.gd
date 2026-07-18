@@ -19,6 +19,7 @@ func _ready() -> void:
 	GameState.set_tracked_contact(id)
 	SalvageSystem.register_wreck_position(global_position)
 	GameState.wreck_member_cut.connect(_on_member_cut)
+	GameState.wreck_members_lost.connect(_sync_members)
 	GameState.site_reset.connect(_on_site_reset)
 	_sync_members()
 

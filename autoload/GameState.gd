@@ -29,6 +29,9 @@ signal approach_changed(state: String)
 signal selected_member_changed(id: int)
 signal wreck_scanned
 signal wreck_member_cut(id: int)
+## Frame collapse destroyed the remaining uncut members in bulk (no per-member
+## cut signal). The 3D wreck re-syncs its meshes from the graph's destroyed flag.
+signal wreck_members_lost
 signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
 @warning_ignore_restore("unused_signal")
