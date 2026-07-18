@@ -28,16 +28,16 @@ const X55_GUID := "03004934380700001522000000000000"
 
 ## X55 stick: axis 0 = X, 1 = Y (back = +1 = pitch up), 2 = twist rudder.
 const AXIS_ACTIONS := [
-	{"guid": X55_GUID, "axis": 0, "neg": "roll_left", "pos": "roll_right"},
+	{"guid": X55_GUID, "axis": 2, "neg": "roll_left", "pos": "roll_right"},
 	{"guid": X55_GUID, "axis": 1, "neg": "pitch_down", "pos": "pitch_up"},
-	{"guid": X55_GUID, "axis": 2, "neg": "yaw_left", "pos": "yaw_right"},
+	{"guid": X55_GUID, "axis": 0, "neg": "yaw_left", "pos": "yaw_right"},
 ]
 
 ## X52 throttle-side buttons observed as 6/7 (Fire E/D by feel — swap here
 ## if the physical buttons turn out reversed).
 const BUTTON_ACTIONS := [
 	{"guid": X52_GUID, "button": 7, "action": "ops_approach"},
-	{"guid": X52_GUID, "button": 6, "action": "ops_cut"},
+	{"guid": X55_GUID, "button": 0, "action": "ops_cut"},
 ]
 
 ## X52 axis 2: +1 at idle, -1 at full — rescaled to 0..1 forward thrust.
