@@ -97,6 +97,8 @@ func _update_rival(delta: float) -> void:
 			GameState.remove_contact(_rival_contact_id)
 			_rival_contact_id = -1
 			_rival_departing = false
+			# Re-arm the spawn window so a fresh rival doesn't appear next frame.
+			_rival_timer = _rng.randf_range(RIVAL_SPAWN_MIN, RIVAL_SPAWN_MAX)
 		return
 	var to_wreck: Vector3 = wreck_pos - contact["position"]
 	if to_wreck.length() > RIVAL_WORK_RANGE:
