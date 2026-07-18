@@ -31,6 +31,13 @@ func _run() -> void:
 	var s3 := SwitchPanelBridge.parse_report(PackedByteArray([0x00, 0x00, 0x08]))
 	_check(s3.get("GEAR_DOWN") == true and s3.get("GEAR_UP") == false,
 			"parse_report reads byte2/bit3 as GEAR_DOWN")
+	# Real report captured from the user's panel (input_echo.log 2026-07-17):
+	# bank-1 switches BAT..PITOT on, magneto at BOTH, gear down.
+	var s4 := SwitchPanelBridge.parse_report(PackedByteArray([0x3f, 0x00, 0x09]))
+	_check(s4.get("MASTER_BAT") == true and s4.get("PITOT_HEAT") == true \
+			and s4.get("COWL") == false and s4.get("ENGINE_BOTH") == true \
+			and s4.get("GEAR_DOWN") == true and s4.get("BEACON") == false,
+			"parse_report decodes a real captured panel report")
 
 	# Manual flight: thrust forward must build -Z velocity and move the ship.
 	var ship: Dictionary = GameState.local_ship()
