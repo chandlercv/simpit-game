@@ -64,7 +64,15 @@ func _process(delta: float) -> void:
 			_retry_timer = RETRY_INTERVAL
 			_try_open()
 		return
-	var report: PackedByteArray = _hid.call("read_timeout", 8, 0)
+	# read_timeout returns a PackedByteArray on success (possibly empty when no
+	# new report is pending), but hid-gd surfaces a read error / closed handle
+	# as an int error code. Keep the return untyped so that error path doesn't
+	# throw on the typed assignment; on error, drop the handle and let the
+	# retry loop above reopen it — otherwise a mid-session unplug is permanent.
+	var report: Variant = _hid.call("read_timeout", 8, 0)
+	if typeof(report) != TYPE_PACKED_BYTE_ARRAY:
+		_close("SWITCH PANEL OFFLINE")
+		return
 	if not report.is_empty():
 		_apply(parse_report(report))
 
@@ -80,6 +88,18 @@ func _try_open() -> void:
 		# is a normal desk state, not an error loop.
 		_announced_missing = true
 		print("SwitchPanelBridge: panel not found (vid 0x%04x pid 0x%04x), retrying" % [VID, PID])
+
+
+## Release the handle and re-arm the retry loop so the panel can recover from a
+## mid-session unplug or read error. Re-arming _announced_missing keeps the
+## silent-retry contract: the "not found" note only prints on the first miss.
+func _close(reason: String) -> void:
+	if _hid != null and _hid.has_method("close"):
+		_hid.call("close")
+	_hid = null
+	_retry_timer = RETRY_INTERVAL
+	_announced_missing = false
+	GameState.post_comms("SYSTEM", reason)
 
 
 func _apply(switches: Dictionary) -> void:
