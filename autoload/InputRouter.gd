@@ -12,9 +12,16 @@ extends Node
 ## directly, still resolved by GUID.
 ##
 ## The X55 primary POV hat arrives as JOY_BUTTON_DPAD_* (plan risk #1) and
-## already drives the glance actions bound in project.godot. NOTE: the hat
-## was observed resting as DPAD_RIGHT at startup — if the glance camera
-## sticks 60 degrees right, recalibrate the X55 in joy.cpl.
+## already drives the glance actions bound in project.godot.
+##
+## X55 quirk (confirmed on joy.cpl video + InputEcho logs, 2026-07-17): the
+## stick's driver holds raw button 15 (1-based) down PERMANENTLY, and its
+## 0-based index 14 collides with Godot's JOY_BUTTON_DPAD_RIGHT. Godot's
+## per-poll hat processing stomps that raw state back to released, so the
+## held button only leaks through once at launch — which used to leave the
+## glance camera yawed 60 degrees right until the hat was touched. The
+## glance latch below swallows that launch artifact: glance reads zero until
+## the raw vector first CHANGES from whatever it was at startup.
 
 const X52_GUID := "0300ea18a30600005c07000000000000"
 const X55_GUID := "03004934380700001522000000000000"
@@ -43,6 +50,12 @@ const SwitchPanelBridgeScene := preload("res://systems/hardware/SwitchPanelBridg
 var _throttle_device := -1
 ## action name -> events we injected, so rebinding on replug is clean.
 var _bound: Dictionary = {}
+
+## Glance startup latch (see X55 quirk above). While latched, get_glance()
+## returns zero; the latch clears the first time the raw vector changes from
+## its at-launch sample, i.e. on the first real hat (or arrow-key) input.
+var _glance_latched := true
+var _glance_initial := Vector2.INF
 
 
 func _ready() -> void:
@@ -124,7 +137,15 @@ func _process(_delta: float) -> void:
 ## this keeps working no matter which of the four windows has OS focus
 ## (plan risk #6).
 func get_glance() -> Vector2:
-	return Input.get_vector("glance_left", "glance_right", "glance_up", "glance_down")
+	var raw := Input.get_vector("glance_left", "glance_right", "glance_up", "glance_down")
+	if _glance_latched:
+		if _glance_initial == Vector2.INF:
+			_glance_initial = raw
+		elif raw != _glance_initial:
+			_glance_latched = false
+			return raw
+		return Vector2.ZERO
+	return raw
 
 
 func _unhandled_input(event: InputEvent) -> void:
