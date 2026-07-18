@@ -17,6 +17,16 @@ const SCAN_TIME := 5.0
 const MIN_CUTTER_POWER := 0.2
 const MIN_SENSOR_POWER := 0.1
 
+## Throttle interlock band for the approach autopilot. The throttle folds into
+## thrust.z and doesn't self-center, so the lever may rest anywhere up to this
+## much forward travel and still read as "idle" to the autopilot: you can arm
+## within the band, and a throttle parked inside it won't disengage. Easing the
+## lever PAST the band is a real bid for manual control.
+const APPROACH_ARM_THROTTLE_MAX := 0.4
+## Stick/rotation deflection (and forward travel beyond the band above) that
+## counts as the pilot grabbing control from the autopilot.
+const MANUAL_OVERRIDE_DELTA := 0.2
+
 ## Risk relaxes toward the ratcheting baseline at this exponential rate.
 const RISK_EASE := 0.25
 ## Members below this load fraction are cosmetic (panels, masts).
@@ -86,8 +96,13 @@ func select_member(id: int) -> void:
 func set_manual_flight(thrust: Vector3, rot: Vector3) -> void:
 	_manual_thrust = thrust
 	_manual_rot = rot
-	if GameState.approach_state != "HOLDING" \
-			and (thrust.length() > 0.2 or rot.length() > 0.2):
+	# Forward travel within the interlock band is a resting throttle, not a grab
+	# for control; only the excess past the band (plus any lateral/vertical or
+	# rotation input) disengages, so arming with the lever open stays stable.
+	var forward_over := maxf(absf(thrust.z) - APPROACH_ARM_THROTTLE_MAX, 0.0)
+	var moved := Vector3(thrust.x, thrust.y, forward_over).length() > MANUAL_OVERRIDE_DELTA \
+			or rot.length() > MANUAL_OVERRIDE_DELTA
+	if GameState.approach_state != "HOLDING" and moved:
 		_abort_cut("MANUAL CONTROL")
 		_set_approach("HOLDING")
 		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
@@ -97,6 +112,11 @@ func toggle_approach() -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
 	if GameState.approach_state == "HOLDING":
+		if _manual_thrust.z > APPROACH_ARM_THROTTLE_MAX:
+			GameState.post_comms("OPS",
+					"APPROACH INHIBITED — THROTTLE PAST %d%%, EASE BACK TO ARM"
+					% int(APPROACH_ARM_THROTTLE_MAX * 100.0))
+			return
 		_set_approach("APPROACHING")
 		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH WRECK")
 	else:
@@ -181,6 +201,7 @@ func trigger_collapse() -> void:
 			member["destroyed"] = true
 	GameState.selected_member_id = -1
 	GameState.selected_member_changed.emit(-1)
+	GameState.wreck_members_lost.emit()
 	_risk_base = 0.97
 	_set_risk(0.97)
 	GameState.post_comms("SALVAGE", "WRECK FRAME COLLAPSED — REMAINING SALVAGE LOST")

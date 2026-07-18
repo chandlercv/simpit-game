@@ -56,7 +56,6 @@ glance_down={
 , Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194322,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-
 thrust_forward={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":87,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
@@ -130,13 +129,4 @@ ops_cut={
 
 [input_devices]
 
-; Both touch emulations off (plan Phase 3): tablet touch must arrive as raw
-; InputEventScreenTouch/Drag scoped to the tablet's window without bleeding
-; into the other windows' mouse handling, and desktop mouse must not fake
-; touches. Tablet widgets handle both event families explicitly.
-pointing/emulate_touch_from_mouse=false
 pointing/emulate_mouse_from_touch=false
-
-[rendering]
-
-renderer/rendering_method="forward_plus"
