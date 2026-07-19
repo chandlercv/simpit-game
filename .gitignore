@@ -5,3 +5,7 @@
 export/
 *.exe
 *.pck
+
+# Local Claude Code settings (personal, not shared)
+.claude/settings.json
+.claude/settings.local.json
