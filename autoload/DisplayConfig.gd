@@ -21,6 +21,9 @@ const ROLE_CHART := "chart"
 const ALL_ROLES: Array[String] = [ROLE_MAIN, ROLE_TACTICAL, ROLE_TABLET, ROLE_CHART]
 
 var _role_to_screen: Dictionary = {}
+## Roles explicitly assigned (via disk or set_role_screen), as opposed to
+## back-filled by _fill_defaults(). Only these get persisted by save().
+var _user_set: Dictionary = {}
 
 
 func _ready() -> void:
@@ -32,12 +35,14 @@ func _ready() -> void:
 ## sensible defaults across the screens that are present.
 func reload() -> void:
 	_role_to_screen.clear()
+	_user_set.clear()
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
 		for role in ALL_ROLES:
 			var value: int = cfg.get_value(SECTION, role, -1)
 			if value >= 0:
 				_role_to_screen[role] = value
+				_user_set[role] = true
 	_fill_defaults()
 
 
@@ -56,6 +61,7 @@ func get_roles_for_screen(screen: int) -> Array[String]:
 
 func set_role_screen(role: String, screen: int) -> void:
 	_role_to_screen[role] = screen
+	_user_set[role] = true
 	save()
 	mapping_changed.emit()
 
@@ -63,7 +69,8 @@ func set_role_screen(role: String, screen: int) -> void:
 func save() -> void:
 	var cfg := ConfigFile.new()
 	for role in ALL_ROLES:
-		cfg.set_value(SECTION, role, _role_to_screen.get(role, 0))
+		if _user_set.get(role, false):
+			cfg.set_value(SECTION, role, _role_to_screen[role])
 	cfg.save(CONFIG_PATH)
 
 
