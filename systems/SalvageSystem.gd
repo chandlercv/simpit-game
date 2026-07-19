@@ -190,6 +190,9 @@ func rival_strip_member() -> Dictionary:
 	member["cut"] = true
 	_apply_cut_stress(member)
 	GameState.wreck_member_cut.emit(member["id"])
+	if GameState.selected_member_id == member["id"]:
+		GameState.selected_member_id = -1
+		GameState.selected_member_changed.emit(-1)
 	return member
 
 
