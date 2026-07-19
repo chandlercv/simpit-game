@@ -9,3 +9,7 @@ export/
 # Local Claude Code settings (personal, not shared)
 .claude/settings.json
 .claude/settings.local.json
+
+# Windows ReplaceFile leftovers (in-use file swaps, e.g. GDExtension DLLs)
+~*.TMP
+~*.dll
