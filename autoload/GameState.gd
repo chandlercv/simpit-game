@@ -140,7 +140,6 @@ func _ready() -> void:
 	ships[LOCAL_PEER_ID] = {
 		"transform": Transform3D.IDENTITY,
 		"velocity": Vector3.ZERO,
-		"hull": 1.0,
 		# Per-section integrity 0..1; collapse events (ThreatSystem) damage it.
 		"hull_sections": {
 			"BOW": 0.96, "PORT": 0.88, "STBD": 0.92,

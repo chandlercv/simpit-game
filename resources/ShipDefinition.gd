@@ -14,8 +14,7 @@ extends Resource
 ## at once; the tablet warns past this).
 @export var power_budget := 2.5
 
-## Approach/match-velocity performance (SalvageSystem).
-@export var approach_accel := 3.0
+## Approach/match-velocity speed (SalvageSystem).
 @export var approach_speed := 8.0
 
 ## Manual flight (Phase 5): thruster acceleration at full THRUST allocation,

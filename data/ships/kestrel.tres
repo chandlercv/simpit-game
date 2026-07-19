@@ -8,7 +8,6 @@ display_name = "SV KESTREL"
 cargo_mass_limit_t = 40.0
 cargo_vol_limit_m3 = 30.0
 power_budget = 2.5
-approach_accel = 3.0
 approach_speed = 8.0
 manual_accel = 4.0
 rotation_rate_deg = 45.0
