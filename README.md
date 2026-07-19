@@ -138,6 +138,43 @@ yet.
 Any input surface can drive the same intent — e.g. the master-battery power-kill
 is reachable from the switch panel and, via the power sliders, from the tablet.
 
+### Remapping the HOTAS controls
+
+All stick/throttle bindings live in one place: the `PROFILES` constant at the
+top of `autoload/InputRouter.gd`. Gameplay code never sees hardware numbers —
+every device is remapped here at startup and re-bound on each replug, so this is
+the only file you touch to change bindings. Each device is one entry, matched by
+**GUID** (stable across replugs, unlike device index), with four keys:
+
+| Key | What it maps |
+| --- | --- |
+| `axes` | Analog axes → a pair of direction actions, e.g. `{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"}`. Swap `neg`/`pos` to reverse an axis. |
+| `buttons` | Momentary buttons → one action, e.g. `{"button": 0, "action": "ops_cut"}`. |
+| `throttle` | The one axis read directly instead of through the Input Map (the X52's `+1 (idle)..-1 (full)` range needs rescaling actions can't express): `{"axis": 2, "idle_deadzone": 0.95}`. |
+| `reserved_buttons` | Documentation only — selector-position banks where one button is always held. Never bind an action to these. |
+
+The action names (`pitch_up`, `roll_left`, `ops_approach`, …) are the stable
+intent layer consumed in `InputRouter._process()`; they're defined in
+`project.godot` under `[input]`. To **rebind** a control, edit the
+`axis`/`button`/`action` value in place. To **add a device**, append a new
+profile dict with its GUID — no gameplay code changes.
+
+**Finding the right index:** don't guess. Run `tools/InputEcho.tscn` for a live
+dump of axes/buttons and read the device's GUID from `Input.get_joy_guid()`.
+Note that both sticks are read as **raw joysticks** (no SDL controller mapping),
+so raw Godot indices are what you bind — a controller mapping would cap each
+device to ~21 buttons / 6 axes and silently drop the rest.
+
+**Glance is the exception.** The X55 POV hat is *not* in `PROFILES`: Godot
+collapses the hat onto the `DPAD_*` buttons, where `DPAD_RIGHT` collides with
+the stick's always-held selector button. It's decoded straight from the raw HID
+report in `systems/hardware/HidGlanceBridge.gd` instead. To point glance at a
+different hat that *doesn't* collide, bind the `glance_*` actions through
+`PROFILES` like any other control; to keep using raw HID for a colliding hat,
+change the `VID`/`PID`, report offset (`parse_pov()`), and usage filter in
+`HidGlanceBridge.gd`. The switch panel is likewise raw-HID
+(`SwitchPanelBridge.gd`), not part of `PROFILES`.
+
 ---
 
 ## Simpit / multi-display setup
