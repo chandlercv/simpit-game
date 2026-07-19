@@ -210,6 +210,13 @@ func trigger_collapse() -> void:
 	GameState.post_comms("SALVAGE", "WRECK FRAME COLLAPSED — REMAINING SALVAGE LOST")
 
 
+## MarketSystem: called on leaving the site (docking) — approach state has no
+## meaning away from the wreck and shouldn't leak "MATCHED" into the station
+## visit or trip a spurious autopilot-disengage when the stick moves.
+func reset_approach() -> void:
+	_set_approach("HOLDING")
+
+
 ## MarketSystem (on jump back to the claim) and boot: fresh wreck graph.
 func reset_site() -> void:
 	var members: Array[Dictionary] = []

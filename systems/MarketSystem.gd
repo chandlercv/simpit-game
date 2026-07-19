@@ -126,6 +126,8 @@ func request_undock() -> void:
 
 
 func _set_phase(phase: String) -> void:
+	if GameState.run_phase == "ON_SITE" and phase != "ON_SITE":
+		SalvageSystem.reset_approach()
 	GameState.run_phase = phase
 	GameState.run_phase_changed.emit(phase)
 
