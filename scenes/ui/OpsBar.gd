@@ -15,9 +15,17 @@ func _ready() -> void:
 	_approach_button.pressed.connect(SalvageSystem.toggle_approach)
 	_cut_button = _make_button()
 	_cut_button.pressed.connect(SalvageSystem.request_cut)
+	GameState.run_phase_changed.connect(func(_p: String) -> void: _update())
+	GameState.approach_changed.connect(func(_s: String) -> void: _update())
+	GameState.selected_member_changed.connect(func(_id: int) -> void: _update())
+	GameState.site_reset.connect(_update)
+	# Cut progress ticks up continuously with no dedicated signal, so the
+	# shared 10Hz tick is what keeps the "CUTTING NN%" text live.
+	GameState.tick_changed.connect(func(_t: int) -> void: _update())
+	_update()
 
 
-func _process(_delta: float) -> void:
+func _update() -> void:
 	var on_site := GameState.run_phase == "ON_SITE"
 	_approach_button.disabled = not on_site
 	if not on_site:

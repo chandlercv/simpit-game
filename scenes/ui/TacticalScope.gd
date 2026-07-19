@@ -27,7 +27,31 @@ var _sweep := 0.0
 var _time := 0.0
 
 
+func _ready() -> void:
+	GameState.sensor_mode_changed.connect(func(_mode: String) -> void: queue_redraw())
+	GameState.tracked_contact_changed.connect(func(_id: int) -> void: queue_redraw())
+	GameState.wreck_scanned.connect(queue_redraw)
+	GameState.wreck_member_cut.connect(func(_id: int) -> void: queue_redraw())
+	GameState.wreck_members_lost.connect(queue_redraw)
+	GameState.selected_member_changed.connect(func(_id: int) -> void: queue_redraw())
+	GameState.site_reset.connect(queue_redraw)
+	GameState.power_changed.connect(queue_redraw)
+	GameState.tick_changed.connect(_on_tick_changed)
+
+
+## STRUCT mode has no continuous animation of its own (no sweep) — its
+## progress arcs and selection pulse only need the shared 10Hz tick, not a
+## full 60fps redraw + O(links x members) rebuild every physics frame.
+func _on_tick_changed(_tick: int) -> void:
+	if GameState.sensor_mode != "STRUCT":
+		return
+	_time += 1.0 / GameState.TICK_RATE_HZ
+	queue_redraw()
+
+
 func _process(delta: float) -> void:
+	if GameState.sensor_mode == "STRUCT":
+		return
 	_time += delta
 	var hz: float = SWEEP_HZ_BY_MODE[GameState.sensor_mode]
 	_sweep = fposmod(_sweep + TAU * hz * delta, TAU)

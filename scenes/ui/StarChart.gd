@@ -36,8 +36,14 @@ var _dragging := false
 var _time := 0.0
 
 
-func _process(delta: float) -> void:
-	_time += delta
+func _ready() -> void:
+	GameState.tick_changed.connect(_on_tick_changed)
+
+
+## Chart geometry is static; only the pulsing ship marker animates, so redraw
+## is driven by the shared 10Hz tick rather than every physics frame.
+func _on_tick_changed(_tick: int) -> void:
+	_time += 1.0 / GameState.TICK_RATE_HZ
 	queue_redraw()
 
 
@@ -54,6 +60,7 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 	elif event is InputEventMouseMotion and _dragging:
 		_pan += event.relative
+		queue_redraw()
 		accept_event()
 
 
@@ -64,6 +71,7 @@ func _zoom_about(pointer: Vector2, factor: float) -> void:
 	var rel := pointer - size / 2.0
 	_pan = rel - (rel - _pan) * factor
 	_zoom = new_zoom
+	queue_redraw()
 
 
 ## Chart units (sqrt-compressed AU) -> screen pixels.

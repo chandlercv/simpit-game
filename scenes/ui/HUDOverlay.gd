@@ -31,11 +31,19 @@ var _time := 0.0
 func _ready() -> void:
 	for label in [_vel_label, _hdg_label, _tgt_label]:
 		label.add_theme_color_override("font_color", HUD_COLOR)
+	GameState.tick_changed.connect(_on_tick_changed)
+	_update_readouts()
+
+
+## The readout labels only need shared-tick resolution; the brackets drawn in
+## _draw() need every frame since their screen position tracks the camera,
+## which keeps moving between ticks.
+func _on_tick_changed(_tick: int) -> void:
+	_update_readouts()
 
 
 func _process(delta: float) -> void:
 	_time += delta
-	_update_readouts()
 	queue_redraw()
 
 
