@@ -28,8 +28,6 @@ const SWITCH_NAMES: Array[String] = [
 var _hid: Object
 var _retry_timer := 0.0
 var _announced_missing := false
-## Power allocations remembered while MASTER_BAT is off.
-var _power_before_bat: Dictionary = {}
 
 
 ## Pure decode: raw HID report -> { switch_name: bool }. A leading zero
@@ -119,11 +117,4 @@ func _apply(switches: Dictionary) -> void:
 func _route_intent(switch_name: String, on: bool) -> void:
 	match switch_name:
 		"MASTER_BAT":
-			if on:
-				for channel: String in _power_before_bat:
-					GameState.set_power(channel, _power_before_bat[channel])
-				_power_before_bat = {}
-			else:
-				_power_before_bat = GameState.local_ship()["power"].duplicate()
-				for channel: String in GameState.POWER_CHANNELS:
-					GameState.set_power(channel, 0.0)
+			GameState.set_master_battery(on)

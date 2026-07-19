@@ -130,6 +130,11 @@ var tick: int = 0
 var _tick_accum := 0.0
 var _next_contact_id := 0
 
+## Power allocations captured when the master battery is cut, so switching it
+## back restores the prior mix. Owned here (not in a driver node) so every input
+## surface — switch panel, touch UI, future ones — shares one power model.
+var _power_before_bat: Dictionary = {}
+
 
 func _ready() -> void:
 	ships[LOCAL_PEER_ID] = {
@@ -215,6 +220,22 @@ func set_power(channel: String, value: float) -> void:
 		return
 	power[channel] = clampf(value, 0.0, 1.0)
 	power_changed.emit()
+
+
+## Master-battery intent: off snapshots and zeroes every channel; on restores
+## the snapshot. Idempotent on repeated off (a second off won't overwrite the
+## snapshot with all-zeros), which the panel's change-dedup used to guarantee
+## implicitly but a touch toggle would not.
+func set_master_battery(on: bool) -> void:
+	if on:
+		for channel: String in _power_before_bat:
+			set_power(channel, _power_before_bat[channel])
+		_power_before_bat = {}
+	else:
+		if _power_before_bat.is_empty():
+			_power_before_bat = local_ship()["power"].duplicate()
+		for channel: String in POWER_CHANNELS:
+			set_power(channel, 0.0)
 
 
 func power(channel: String) -> float:
