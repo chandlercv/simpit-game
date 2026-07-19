@@ -122,6 +122,9 @@ func _pick_member(load_bearing: bool) -> Dictionary:
 
 
 func _cut(member: Dictionary) -> int:
+	if member.is_empty():
+		_check(false, "member available to cut (none left uncut)")
+		return -1
 	SalvageSystem.select_member(member["id"])
 	SalvageSystem.request_cut()
 	var done := await _wait_until(
