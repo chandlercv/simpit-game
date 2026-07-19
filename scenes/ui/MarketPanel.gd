@@ -3,6 +3,8 @@ extends Control
 ## faction price table with reputation standing, plus the dock → sell hold →
 ## depart flow. Mouse-driven, matching the 13" physical monitor's input.
 
+const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
+
 @export var accent: Color = Color(0.45, 0.7, 1.0)
 
 const SELL_COLOR := Color(0.5, 1.0, 0.7)
@@ -94,24 +96,7 @@ func _add_cell(text: String, color: Color, header := false) -> void:
 
 
 func _make_button(text: String, color: Color) -> Button:
-	var button := Button.new()
+	var button := ButtonTheme.make_button(color, 6)
 	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
 	button.add_theme_font_size_override("font_size", 12)
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(color, 0.08)
-	normal.border_color = Color(color, 0.5)
-	normal.set_border_width_all(1)
-	normal.set_content_margin_all(6)
-	var hover := normal.duplicate()
-	hover.bg_color = Color(color, 0.18)
-	var disabled := normal.duplicate()
-	disabled.border_color = Color(color, 0.2)
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
-	button.add_theme_stylebox_override("disabled", disabled)
-	button.add_theme_color_override("font_color", color)
-	button.add_theme_color_override("font_hover_color", color.lightened(0.2))
-	button.add_theme_color_override("font_disabled_color", Color(color, 0.35))
 	return button

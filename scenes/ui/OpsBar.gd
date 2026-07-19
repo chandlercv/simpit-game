@@ -4,6 +4,8 @@ extends HBoxContainer
 ## intents; button text mirrors GameState each frame so every window stays in
 ## agreement about what the ship is doing.
 
+const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
+
 @export var accent: Color = Color(1.0, 0.72, 0.2)
 
 var _approach_button: Button
@@ -57,24 +59,7 @@ func _update() -> void:
 
 
 func _make_button() -> Button:
-	var button := Button.new()
-	button.focus_mode = Control.FOCUS_NONE
+	var button := ButtonTheme.make_button(accent)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(accent, 0.08)
-	normal.border_color = Color(accent, 0.5)
-	normal.set_border_width_all(1)
-	normal.set_content_margin_all(8)
-	var hover := normal.duplicate()
-	hover.bg_color = Color(accent, 0.16)
-	var disabled := normal.duplicate()
-	disabled.border_color = Color(accent, 0.2)
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
-	button.add_theme_stylebox_override("disabled", disabled)
-	button.add_theme_color_override("font_color", accent)
-	button.add_theme_color_override("font_hover_color", accent.lightened(0.2))
-	button.add_theme_color_override("font_disabled_color", Color(accent, 0.35))
 	add_child(button)
 	return button
