@@ -3,63 +3,75 @@ extends Node
 ## where an input came from: HOTAS axes, keyboard fallbacks, and the raw-HID
 ## switch panel all land here first.
 ##
-## HOTAS bindings (Phase 5, from tools/InputEcho.tscn discovery on the real
-## hardware, log of 2026-07-17): devices are matched by GUID at runtime and
-## their events injected into the named actions below — device *indices*
-## shift across replugs, GUIDs don't, and gameplay code stays free of
-## hardware numbers. The X52 throttle can't go through an action (its
-## +1(idle)..-1(full) range needs rescaling), so it's the one axis read
-## directly, still resolved by GUID.
+## Devices are matched by GUID at runtime and their events injected into the
+## named actions below — device *indices* shift across replugs, GUIDs don't,
+## and gameplay code stays free of hardware numbers. Both sticks are read as
+## RAW joysticks (no SDL controller mapping): a mapping would cap each device
+## to the gamepad vocabulary (~21 buttons / 6 axes) and silently drop the
+## rest, foreclosing controls future contributors may want to bind.
 ##
-## The X55 primary POV hat arrives as JOY_BUTTON_DPAD_* (plan risk #1) and
-## already drives the glance actions bound in project.godot.
-##
-## X55 quirk (confirmed on joy.cpl video + InputEcho logs, 2026-07-17): the
-## stick's driver holds raw button 15 (1-based) down PERMANENTLY, and its
-## 0-based index 14 collides with Godot's JOY_BUTTON_DPAD_RIGHT. Godot's
-## per-poll hat processing stomps that raw state back to released, so the
-## held button only leaks through once at launch — which used to leave the
-## glance camera yawed 60 degrees right until the hat was touched. The
-## glance latch below swallows that launch artifact: glance reads zero until
-## the raw vector first CHANGES from whatever it was at startup.
+## X55 selector-button collision (InputEcho captures, 2026-07-17/19): the
+## stick carries a bank of selector-position buttons 15-17 (1-based) of which
+## exactly one is ALWAYS held — on this rig button 15, permanently, and its
+## 0-based index 14 is JOY_BUTTON_DPAD_RIGHT. Godot also collapses the POV
+## hat onto those same DPAD buttons, making hat-right and the held selector
+## indistinguishable at the action layer (the old launch-glance bug: camera
+## yawed 60 degrees right until the hat was touched). So glance NEVER uses
+## the dpad: the hat is decoded from the stick's raw HID report instead
+## (HidGlanceBridge), where hat and buttons are separate fields, and the
+## glance_* actions keep only their arrow-key events. Indices 11-16 stay
+## free for contributors — just never bind a profile's reserved_buttons.
 
-const X52_GUID := "0300ea18a30600005c07000000000000"
-const X55_GUID := "03004934380700001522000000000000"
-
-## X55 stick: axis 0 = X, 1 = Y (back = +1 = pitch up), 2 = twist rudder.
-const AXIS_ACTIONS := [
-	{"guid": X55_GUID, "axis": 2, "neg": "roll_left", "pos": "roll_right"},
-	{"guid": X55_GUID, "axis": 1, "neg": "pitch_down", "pos": "pitch_up"},
-	{"guid": X55_GUID, "axis": 0, "neg": "yaw_left", "pos": "yaw_right"},
+## Per-device binding profiles — supporting new hardware means adding an
+## entry here, not touching gameplay code. `axes`/`buttons` are raw Godot
+## indices injected into the Input Map by _bind_hotas(). `throttle` is the
+## one direct-read axis (the X52's +1(idle)..-1(full) range needs rescaling,
+## which actions can't express). `reserved_buttons` are selector-position
+## banks where one button is always held — never bind actions to them.
+const PROFILES := [
+	{
+		"name": "Saitek X52 Flight Control System",
+		"guid": "0300ea18a30600005c07000000000000",
+		"axes": [],
+		"buttons": [
+			# Throttle-side buttons observed as 6/7 (Fire E/D by feel — swap
+			# here if the physical buttons turn out reversed).
+			{"button": 7, "action": "ops_approach"},
+		],
+		"throttle": {"axis": 2, "idle_deadzone": 0.95},
+		"reserved_buttons": [23, 24, 25],
+	},
+	{
+		"name": "Madcatz Saitek Pro Flight X-55 Rhino Stick",
+		"guid": "03004934380700001522000000000000",
+		## Axis 0 = X, 1 = Y (back = +1 = pitch up), 2 = twist rudder.
+		"axes": [
+			{"axis": 2, "neg": "roll_left", "pos": "roll_right"},
+			{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"},
+			{"axis": 0, "neg": "yaw_left", "pos": "yaw_right"},
+		],
+		"buttons": [
+			{"button": 0, "action": "ops_cut"},
+		],
+		"reserved_buttons": [14, 15, 16],
+	},
 ]
-
-## X52 throttle-side buttons observed as 6/7 (Fire E/D by feel — swap here
-## if the physical buttons turn out reversed).
-const BUTTON_ACTIONS := [
-	{"guid": X52_GUID, "button": 7, "action": "ops_approach"},
-	{"guid": X55_GUID, "button": 0, "action": "ops_cut"},
-]
-
-## X52 axis 2: +1 at idle, -1 at full — rescaled to 0..1 forward thrust.
-const THROTTLE_GUID := X52_GUID
-const THROTTLE_AXIS := 2
-const THROTTLE_IDLE_DEADZONE := 0.95
 
 const SwitchPanelBridgeScene := preload("res://systems/hardware/SwitchPanelBridge.gd")
+const HidGlanceBridgeScene := preload("res://systems/hardware/HidGlanceBridge.gd")
 
 var _throttle_device := -1
+var _throttle_axis := 0
+var _throttle_deadzone := 1.0
 ## action name -> events we injected, so rebinding on replug is clean.
 var _bound: Dictionary = {}
-
-## Glance startup latch (see X55 quirk above). While latched, get_glance()
-## returns zero; the latch clears the first time the raw vector changes from
-## its at-launch sample, i.e. on the first real hat (or arrow-key) input.
-var _glance_latched := true
-var _glance_initial := Vector2.INF
+var _glance_bridge: HidGlanceBridgeScene
 
 
 func _ready() -> void:
 	add_child(SwitchPanelBridgeScene.new())
+	_glance_bridge = HidGlanceBridgeScene.new()
+	add_child(_glance_bridge)
 	Input.joy_connection_changed.connect(
 			func(_device: int, _connected: bool) -> void: _bind_hotas())
 	_bind_hotas()
@@ -75,20 +87,21 @@ func _bind_hotas() -> void:
 	_throttle_device = -1
 	for device in Input.get_connected_joypads():
 		var guid := Input.get_joy_guid(device)
-		if guid == THROTTLE_GUID:
-			_throttle_device = device
-		for spec: Dictionary in AXIS_ACTIONS:
-			if spec["guid"] != guid:
+		for profile: Dictionary in PROFILES:
+			if profile["guid"] != guid:
 				continue
-			_inject(spec["neg"], _motion(device, spec["axis"], -1.0))
-			_inject(spec["pos"], _motion(device, spec["axis"], 1.0))
-		for spec: Dictionary in BUTTON_ACTIONS:
-			if spec["guid"] != guid:
-				continue
-			var event := InputEventJoypadButton.new()
-			event.device = device
-			event.button_index = spec["button"] as JoyButton
-			_inject(spec["action"], event)
+			if profile.has("throttle"):
+				_throttle_device = device
+				_throttle_axis = profile["throttle"]["axis"]
+				_throttle_deadzone = profile["throttle"]["idle_deadzone"]
+			for spec: Dictionary in profile["axes"]:
+				_inject(spec["neg"], _motion(device, spec["axis"], -1.0))
+				_inject(spec["pos"], _motion(device, spec["axis"], 1.0))
+			for spec: Dictionary in profile["buttons"]:
+				var event := InputEventJoypadButton.new()
+				event.device = device
+				event.button_index = spec["button"] as JoyButton
+				_inject(spec["action"], event)
 
 
 func _motion(device: int, axis: int, direction: float) -> InputEventJoypadMotion:
@@ -106,12 +119,13 @@ func _inject(action: String, event: InputEvent) -> void:
 	_bound[action].append(event)
 
 
-## 0..1 forward thrust from the X52 throttle, 0 when absent or at idle.
+## 0..1 forward thrust from the throttle profile's axis, 0 when absent or at
+## idle.
 func throttle() -> float:
 	if _throttle_device == -1:
 		return 0.0
-	var value := Input.get_joy_axis(_throttle_device, THROTTLE_AXIS as JoyAxis)
-	if value >= THROTTLE_IDLE_DEADZONE:
+	var value := Input.get_joy_axis(_throttle_device, _throttle_axis as JoyAxis)
+	if value >= _throttle_deadzone:
 		return 0.0
 	return clampf((1.0 - value) / 2.0, 0.0, 1.0)
 
@@ -132,20 +146,14 @@ func _process(_delta: float) -> void:
 		SalvageSystem.request_cut()
 
 
-## Digital glance direction from the POV hat (arrow keys as the desk-free dev
-## fallback), +x = right, +y = down. The Input singleton is process-global, so
-## this keeps working no matter which of the four windows has OS focus
+## Digital glance direction, +x = right, +y = down: the X55 POV hat via raw
+## HID (see header) combined with the arrow-key actions (the desk-free dev
+## fallback). The Input singleton and the HID read are both process-global,
+## so this keeps working no matter which of the four windows has OS focus
 ## (plan risk #6).
 func get_glance() -> Vector2:
-	var raw := Input.get_vector("glance_left", "glance_right", "glance_up", "glance_down")
-	if _glance_latched:
-		if _glance_initial == Vector2.INF:
-			_glance_initial = raw
-		elif raw != _glance_initial:
-			_glance_latched = false
-			return raw
-		return Vector2.ZERO
-	return raw
+	var keys := Input.get_vector("glance_left", "glance_right", "glance_up", "glance_down")
+	return (keys + _glance_bridge.glance).limit_length(1.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
