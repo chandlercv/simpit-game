@@ -64,17 +64,18 @@ func _scope_radius() -> float:
 	return minf(size.x, size.y) / 2.0 - 22.0
 
 
-## Contacts within range, mapped to scope pixels. XZ plane, -Z (ship forward)
-## is up, matching the HUD's heading convention.
+## Contacts within range, mapped to scope pixels in ship-relative XZ: own ship
+## stays centered with -Z (forward) up, and the world rotates around it as the
+## ship yaws.
 func _blips() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var scope_range: float = RANGE_BY_MODE[GameState.sensor_mode]
-	var ship_pos: Vector3 = GameState.ships[GameState.LOCAL_PEER_ID]["transform"].origin
+	var ship_xform: Transform3D = GameState.ships[GameState.LOCAL_PEER_ID]["transform"]
 	var c := _scope_center()
 	var r := _scope_radius()
 	for contact in GameState.contacts:
-		var rel: Vector3 = contact["position"] - ship_pos
-		var planar := Vector2(rel.x, rel.z)
+		var local: Vector3 = ship_xform.affine_inverse() * (contact["position"] as Vector3)
+		var planar := Vector2(local.x, local.z)
 		if planar.length() > scope_range:
 			continue
 		out.append({"contact": contact, "pos": c + planar * (r / scope_range)})
