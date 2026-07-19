@@ -32,6 +32,9 @@ func _ready() -> void:
 	for faction: FactionDefinition in _factions:
 		GameState.market_factions.append(faction.display_name)
 		GameState.reputation[faction.display_name] = faction.starting_rep
+	# Prices scale with reputation, so any rep change (a sale here, a patrol
+	# fine in ThreatSystem) must refresh the cached table the Chart reads.
+	GameState.reputation_changed.connect(_reprice)
 	_reroll_jitter()
 	_reprice()
 
@@ -103,8 +106,7 @@ func sell_hold() -> void:
 	GameState.credits_changed.emit(GameState.credits)
 	GameState.reputation[faction_name] = clampf(
 			GameState.reputation[faction_name] + REP_PER_SALE, 0.0, 1.0)
-	GameState.reputation_changed.emit()
-	_reprice()
+	GameState.reputation_changed.emit()  # drives _reprice() via the _ready hook
 	GameState.post_comms("MARKET", "HOLD SOLD TO %s — %d CR (REP RISING)" % [
 		faction_name, total])
 
