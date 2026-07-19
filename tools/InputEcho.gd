@@ -14,8 +14,8 @@ extends Control
 
 const LOG_PATH := "user://input_echo.log"
 const MAX_LINES := 34
-const PANEL_VID := 0x06a3
-const PANEL_PID := 0x0d67
+## Saitek switch panel identity — single source of truth is the runtime bridge.
+const SwitchPanelBridge := preload("res://systems/hardware/SwitchPanelBridge.gd")
 ## X55 Rhino stick — raw joystick collection (usage_page 1, usage 4 picks the
 ## MI_00 interface among the stick's several HID collections). Dumped to find
 ## the POV hat's byte offset/encoding for the planned HID glance bridge.
@@ -70,12 +70,12 @@ func _open_panel() -> void:
 		return
 	_panel = ClassDB.instantiate("Hid")
 	# hid-gd's open() returns a success bool, not an Error code.
-	if _panel.call("open", PANEL_VID, PANEL_PID):
+	if _panel.call("open", SwitchPanelBridge.VID, SwitchPanelBridge.PID):
 		_emit("saitek switch panel open (vid 0x%04x pid 0x%04x) — flip switches" % [
-			PANEL_VID, PANEL_PID])
+			SwitchPanelBridge.VID, SwitchPanelBridge.PID])
 	else:
 		_emit("saitek switch panel not found (vid 0x%04x pid 0x%04x)" % [
-			PANEL_VID, PANEL_PID])
+			SwitchPanelBridge.VID, SwitchPanelBridge.PID])
 		_panel = null
 
 
