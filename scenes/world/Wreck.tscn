@@ -97,6 +97,3 @@ position = Vector3(1.1, 1.9, -3)
 light_color = Color(1, 0.28, 0.16, 1)
 light_energy = 3.0
 omni_range = 14.0
-
-[node name="ReflectionProbe" type="ReflectionProbe" parent="."]
-size = Vector3(22, 10, 22)
