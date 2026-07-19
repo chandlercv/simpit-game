@@ -94,7 +94,7 @@ func _scope_radius() -> float:
 func _blips() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var scope_range: float = RANGE_BY_MODE[GameState.sensor_mode]
-	var ship_xform: Transform3D = GameState.ships[GameState.LOCAL_PEER_ID]["transform"]
+	var ship_xform: Transform3D = GameState.local_ship()["transform"]
 	var c := _scope_center()
 	var r := _scope_radius()
 	for contact in GameState.contacts:

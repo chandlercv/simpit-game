@@ -48,7 +48,7 @@ func _process(delta: float) -> void:
 
 
 func _update_readouts() -> void:
-	var ship: Dictionary = GameState.ships[GameState.LOCAL_PEER_ID]
+	var ship: Dictionary = GameState.local_ship()
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
 	var vel_text := "VEL %5.1f M/S" % velocity.length()
 	if GameState.approach_state != "HOLDING":

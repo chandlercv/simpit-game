@@ -38,7 +38,7 @@ func _rebuild() -> void:
 
 
 func _refresh() -> void:
-	var ship_pos: Vector3 = GameState.ships[GameState.LOCAL_PEER_ID]["transform"].origin
+	var ship_pos: Vector3 = GameState.local_ship()["transform"].origin
 	for contact in GameState.contacts:
 		if not _rows.has(contact["id"]):
 			continue

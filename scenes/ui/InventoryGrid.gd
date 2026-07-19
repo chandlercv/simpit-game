@@ -34,7 +34,7 @@ func _rebuild() -> void:
 	for tile in _tiles:
 		tile.queue_free()
 	_tiles.clear()
-	var ship: Dictionary = GameState.ships[GameState.LOCAL_PEER_ID]
+	var ship: Dictionary = GameState.local_ship()
 	var cargo: Array = ship["cargo"]
 	var total_mass := 0.0
 	var total_vol := 0.0

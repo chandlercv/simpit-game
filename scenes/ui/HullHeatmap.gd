@@ -58,7 +58,7 @@ func _heat(integrity: float) -> Color:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
-	var sections: Dictionary = GameState.ships[GameState.LOCAL_PEER_ID]["hull_sections"]
+	var sections: Dictionary = GameState.local_ship()["hull_sections"]
 	draw_string(font, Vector2(0, 18), "HULL INTEGRITY",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 15, accent)
 	for section: String in SECTION_LAYOUT:

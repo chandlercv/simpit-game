@@ -33,7 +33,7 @@ func _ready() -> void:
 
 
 func _sync() -> void:
-	var power: Dictionary = GameState.ships[GameState.LOCAL_PEER_ID]["power"]
+	var power: Dictionary = GameState.local_ship()["power"]
 	for channel: String in _sliders:
 		# Setting .value doesn't re-emit user_changed_value, so no feedback loop.
 		_sliders[channel].value = power[channel]
