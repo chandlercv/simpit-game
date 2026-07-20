@@ -1,17 +1,21 @@
 extends Node
-## Maps logical display roles to physical screen indices, persisted in
-## user://display_config.cfg.
+## Maps logical display roles to physical screen indices, persisted per monitor
+## setup in user://display_config.cfg.
 ##
-## Screen indices come from tools/ScreenLabeler.tscn — run it whenever spacedesk
-## reconnects, because virtual-display index order is not guaranteed stable
-## across reconnects. Roles are data, not code: WindowManager loops over
-## whatever is configured here, so adding a fifth display is a config entry +
-## a scene, not a code change.
+## Persistence is keyed by a "setup signature" (screen count + each screen's
+## size/position) so the same rig reuses its saved layout while a different
+## monitor arrangement gets its own — virtual-display index order is not
+## guaranteed stable across reconnects, so the count/geometry is what we key on.
+##
+## Roles are data, not code: WindowManager loops over whatever is configured
+## here, so adding a fifth display is a config entry + a scene, not a code change.
+## When fewer screens are present than roles, the game prompts (see
+## needs_setup_prompt) with tools/DisplaySetup so the player assigns roles to
+## screens; two roles sharing a screen become a tabbed host.
 
 signal mapping_changed
 
 const CONFIG_PATH := "user://display_config.cfg"
-const SECTION := "roles"
 
 const ROLE_MAIN := "main"
 const ROLE_TACTICAL := "tactical"
@@ -21,8 +25,9 @@ const ROLE_CHART := "chart"
 const ALL_ROLES: Array[String] = [ROLE_MAIN, ROLE_TACTICAL, ROLE_TABLET, ROLE_CHART]
 
 var _role_to_screen: Dictionary = {}
-## Roles explicitly assigned (via disk or set_role_screen), as opposed to
-## back-filled by _fill_defaults(). Only these get persisted by save().
+## Roles explicitly assigned (loaded from disk or via set_role_screen/commit_all),
+## as opposed to back-filled by _fill_defaults(). Only these get persisted, and a
+## setup counts as "configured" only once every role is user-set.
 var _user_set: Dictionary = {}
 
 
@@ -30,16 +35,34 @@ func _ready() -> void:
 	reload()
 
 
-## Reads the config file, drops entries that point at screens that no longer
-## exist (e.g. spacedesk not connected), and fills any missing roles with
-## sensible defaults across the screens that are present.
+## A stable string identifying the current monitor setup: screen count plus each
+## screen's size and position. Different arrangements hash to different sections.
+func _signature() -> String:
+	var parts: PackedStringArray = []
+	var n := DisplayServer.get_screen_count()
+	parts.append("n%d" % n)
+	for i in n:
+		var s := DisplayServer.screen_get_size(i)
+		var p := DisplayServer.screen_get_position(i)
+		parts.append("%dx%d@%d,%d" % [s.x, s.y, p.x, p.y])
+	return "|".join(parts)
+
+
+func _current_section() -> String:
+	return "layout_%d" % _signature().hash()
+
+
+## Reads the saved layout for the current setup (if any), drops entries that
+## point at screens that no longer exist, and fills any missing roles with a
+## sensible suggestion across the screens that are present.
 func reload() -> void:
 	_role_to_screen.clear()
 	_user_set.clear()
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
+		var section := _current_section()
 		for role in ALL_ROLES:
-			var value: int = cfg.get_value(SECTION, role, -1)
+			var value: int = cfg.get_value(section, role, -1)
 			if value >= 0:
 				_role_to_screen[role] = value
 				_user_set[role] = true
@@ -50,7 +73,8 @@ func get_screen_for_role(role: String) -> int:
 	return _role_to_screen.get(role, 0)
 
 
-## Roles currently assigned to the given screen (used by the ScreenLabeler).
+## Roles currently assigned to the given screen (used by the setup chooser and
+## by WindowManager to decide which screens need a tabbed host).
 func get_roles_for_screen(screen: int) -> Array[String]:
 	var roles: Array[String] = []
 	for role in ALL_ROLES:
@@ -66,14 +90,45 @@ func set_role_screen(role: String, screen: int) -> void:
 	mapping_changed.emit()
 
 
+## Marks the whole current mapping (including back-filled suggestions the player
+## accepted as-is) as user-set and persists it — called when the setup chooser
+## is confirmed so this setup counts as configured and won't prompt again.
+func commit_all() -> void:
+	for role in ALL_ROLES:
+		_user_set[role] = true
+	save()
+	mapping_changed.emit()
+
+
+## True once every role has been explicitly assigned for the current setup.
+func has_layout_for_current_setup() -> bool:
+	return _user_set.size() == ALL_ROLES.size()
+
+
+## True when there aren't enough screens for one-role-per-screen and this setup
+## hasn't been configured yet — WindowManager shows the chooser in that case.
+func needs_setup_prompt() -> bool:
+	var screen_count := maxi(DisplayServer.get_screen_count(), 1)
+	if screen_count >= ALL_ROLES.size():
+		return false
+	return not has_layout_for_current_setup()
+
+
 func save() -> void:
 	var cfg := ConfigFile.new()
+	# Preserve other setups' sections; we only rewrite the current one.
+	cfg.load(CONFIG_PATH)
+	var section := _current_section()
+	cfg.set_value(section, "_sig", _signature())
 	for role in ALL_ROLES:
 		if _user_set.get(role, false):
-			cfg.set_value(SECTION, role, _role_to_screen[role])
+			cfg.set_value(section, role, _role_to_screen[role])
 	cfg.save(CONFIG_PATH)
 
 
+## Suggested placement used both as the chooser's pre-fill and as the no-prompt
+## default: MAIN on the primary screen, each other role on the next free screen,
+## and any overflow packed onto the last screen so the Main view stays clean.
 func _fill_defaults() -> void:
 	var screen_count := maxi(DisplayServer.get_screen_count(), 1)
 	# Drop stale indices from a previous monitor topology.
@@ -92,8 +147,9 @@ func _fill_defaults() -> void:
 				assigned = i
 				break
 		if assigned == -1:
-			# Fewer screens than roles: double up on the main screen.
-			# WindowManager cascades shared-screen windows so nothing is buried.
-			assigned = _role_to_screen[ROLE_MAIN]
+			# Fewer screens than roles: pack overflow onto the last screen
+			# (WindowManager makes a shared screen a tabbed host). On a single
+			# screen this is the main screen, i.e. the dimmed overlay.
+			assigned = screen_count - 1
 		_role_to_screen[role] = assigned
 		used.append(assigned)

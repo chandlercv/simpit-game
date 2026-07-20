@@ -179,26 +179,36 @@ change the `VID`/`PID`, report offset (`parse_pov()`), and usage filter in
 
 ## Simpit / multi-display setup
 
-The game is **one process** that opens **one native OS window per monitor** —
-there is no split-screen or window-embedding. At boot, `WindowManager` puts the
-Main view fullscreen on its screen and spawns the Tactical, Tablet, and Chart
-windows borderless, each full-coverage on its own screen.
+The game is **one process** that adapts to however many monitors you have — from
+the full four-screen rig down to a single laptop panel. With four (or more)
+screens it opens **one native OS window per monitor**; with fewer, displays that
+can't get their own screen share one via a **tabbed host** (`WindowManager`,
+`autoload/DisplayConfig.gd`). There is no split-screen or window-embedding.
 
-- **Assigning screens to roles.** The mapping of role → physical screen index
-  lives in `user://display_config.cfg` (`autoload/DisplayConfig.gd`). Set it by
-  role, not by guessing indices.
-- **Labelling screens.** Virtual-display index order isn't stable across
-  reconnects, so run `tools/ScreenLabeler.tscn` to see which physical screen is
-  which and reassign roles. **Re-run it whenever spacedesk (or any display)
-  reconnects** — indices can shuffle.
-- **Fewer monitors than roles (desk dev).** Any role that lands on an
-  already-claimed screen falls back to a small bordered, cascaded 960×540 window
-  so nothing gets buried — you can develop all four displays on a single
-  monitor.
+- **You choose the layout.** The first time a monitor setup with fewer screens
+  than displays is seen, the game shows an in-game **Display Setup** chooser: each
+  screen shows a card, and you tap a role (MAIN / TACTICAL / TABLET / CHART) to
+  put it there. A sensible layout is pre-filled — press **START** to accept it, or
+  reassign first. The choice is saved **per monitor setup**
+  (`user://display_config.cfg`, keyed by screen count + geometry), so the same rig
+  never asks twice, but a different arrangement asks again. Press **F6** anytime to
+  re-open the chooser; **F5** re-detects monitors and rebuilds the layout (a known
+  setup applies silently, an unknown one re-opens the chooser). No restart needed.
+- **How shared screens look.** Two or more roles on one screen become a tabbed
+  host, switched by an on-screen tab strip **and** by `F1`/`F2`/`F3` (`Tab`
+  cycles). On a **spare** screen the host fills it opaquely. On the **Main**
+  screen the panels appear as a **dimmed overlay** over the live hull-cam view;
+  the `MAIN` tab (or the backtick `` ` `` key) hides the panel for an unobstructed
+  view. Everything works with mouse, touch, **or** keyboard.
+- **No touchscreen needed.** Every secondary display is driven by mouse as well as
+  touch, and the tab strip / chooser are keyboard-reachable — the game is fully
+  playable at a plain desk.
 - **spacedesk.** The secondary displays are designed to run over spacedesk
-  virtual monitors (e.g. tablets as the Tablet/Chart screens). Because each role
-  is full-coverage and borderless, and input is process-global, the four windows
-  stay in sync regardless of which one has OS focus.
+  virtual monitors. Because a dedicated role is full-coverage and borderless, and
+  input is process-global, windows stay in sync regardless of which one has OS
+  focus. spacedesk index order isn't stable across reconnects, but the saved
+  layout is keyed by geometry and `F5` re-detects — reassign with the chooser
+  (or the `tools/ScreenLabeler.tscn` dev tool) if a reconnect shuffles things.
 - **Adding a fifth display** is a role entry in `DisplayConfig` + a scene in
   `WindowManager.SECONDARY_SCENES` — no changes to `GameState` or existing
   windows.
@@ -210,16 +220,20 @@ windows borderless, each full-coverage on its own screen.
 ## Running
 
 Open the project in **Godot 4.7** and run `scenes/boot/Boot.tscn`. The game runs
-degraded-gracefully: with no HOTAS, switch panel, or extra monitors connected it
-falls back to keyboard/mouse on a single window and retries hardware in the
-background. The `hid-gd` GDExtension is required for the switch panel and the
-X55 POV glance; without it those inputs are disabled but the rest still works.
+degraded-gracefully: with no HOTAS or switch panel it falls back to
+keyboard/mouse and retries hardware in the background, and with fewer than four
+monitors it prompts you (once per setup) to assign displays to screens and packs
+the overflow into a tabbed host (see **Simpit / multi-display setup** above; `F6`
+re-opens the chooser, `F5` re-detects monitors). The `hid-gd` GDExtension is
+required for the switch panel and the X55 POV glance; without it those inputs are
+disabled but the rest still works.
 
 ### Handy tool scenes (`tools/`)
 
 | Scene | Purpose |
 | --- | --- |
-| `ScreenLabeler.tscn` | Identify physical screens and assign display roles. |
+| `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
 | `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close]`). |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
+| `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
