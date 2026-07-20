@@ -1,5 +1,7 @@
 # Salvager
 
+A space-sim that treats HOTAS, switches and multi-monitors as first-class components in the simulation experience.
+
 A cyberpunk mercenary **salvage sim** built for a multi-display hardware simpit.
 One process drives one native window per monitor — an external hull-camera view,
 a tactical scope, a systems tablet, and a market chart — fed by a HOTAS,
