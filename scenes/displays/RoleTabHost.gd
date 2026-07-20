@@ -117,23 +117,29 @@ func _select(role: String) -> void:
 	_update_buttons()
 
 
-func _select_index(i: int) -> void:
+func _select_index(i: int) -> bool:
 	if i >= 0 and i < _roles.size():
 		_select(_roles[i])
+		return true
+	return false
 
 
-func _toggle() -> void:
+func _toggle() -> bool:
+	if _roles.is_empty():
+		return false
 	if _active == "":
-		_select(_roles[0] if not _roles.is_empty() else "")
+		_select(_roles[0])
 	else:
 		show_main()
+	return true
 
 
-func _cycle() -> void:
+func _cycle() -> bool:
 	if _roles.is_empty():
-		return
+		return false
 	var idx := _roles.find(_active)
 	_select(_roles[(idx + 1) % _roles.size()])
+	return true
 
 
 func _input(event: InputEvent) -> void:
@@ -141,23 +147,21 @@ func _input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
+	var handled := false
 	match event.keycode:
 		KEY_F1:
-			_select_index(0)
-			accept_event()
+			handled = _select_index(0)
 		KEY_F2:
-			_select_index(1)
-			accept_event()
+			handled = _select_index(1)
 		KEY_F3:
-			_select_index(2)
-			accept_event()
+			handled = _select_index(2)
 		KEY_TAB:
-			_cycle()
-			accept_event()
+			handled = _cycle()
 		KEY_QUOTELEFT:
 			if not _opaque:
-				_toggle()
-				accept_event()
+				handled = _toggle()
+	if handled:
+		accept_event()
 
 
 func _update_buttons() -> void:
