@@ -61,11 +61,15 @@ func reload() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
 		var section := _current_section()
-		for role in ALL_ROLES:
-			var value: int = cfg.get_value(section, role, -1)
-			if value >= 0:
-				_role_to_screen[role] = value
-				_user_set[role] = true
+		# Guard against 32-bit section-hash collisions (or a stale section from a
+		# prior arrangement that hashes the same): only trust the saved layout if
+		# the stored full signature matches the current setup.
+		if cfg.get_value(section, "_sig", "") == _signature():
+			for role in ALL_ROLES:
+				var value: int = cfg.get_value(section, role, -1)
+				if value >= 0:
+					_role_to_screen[role] = value
+					_user_set[role] = true
 	_fill_defaults()
 
 
