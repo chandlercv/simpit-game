@@ -48,8 +48,8 @@ func _signature() -> String:
 	return "|".join(parts)
 
 
-func _current_section() -> String:
-	return "layout_%d" % _signature().hash()
+func _section_for(sig: String) -> String:
+	return "layout_%d" % sig.hash()
 
 
 ## Reads the saved layout for the current setup (if any), drops entries that
@@ -60,11 +60,12 @@ func reload() -> void:
 	_user_set.clear()
 	var cfg := ConfigFile.new()
 	if cfg.load(CONFIG_PATH) == OK:
-		var section := _current_section()
+		var sig := _signature()
+		var section := _section_for(sig)
 		# Guard against 32-bit section-hash collisions (or a stale section from a
 		# prior arrangement that hashes the same): only trust the saved layout if
 		# the stored full signature matches the current setup.
-		if cfg.get_value(section, "_sig", "") == _signature():
+		if cfg.get_value(section, "_sig", "") == sig:
 			for role in ALL_ROLES:
 				var value: int = cfg.get_value(section, role, -1)
 				if value >= 0:
@@ -130,8 +131,9 @@ func save() -> void:
 		if FileAccess.file_exists(CONFIG_PATH + ".bak"):
 			DirAccess.remove_absolute(CONFIG_PATH + ".bak")
 		DirAccess.rename_absolute(CONFIG_PATH, CONFIG_PATH + ".bak")
-	var section := _current_section()
-	cfg.set_value(section, "_sig", _signature())
+	var sig := _signature()
+	var section := _section_for(sig)
+	cfg.set_value(section, "_sig", sig)
 	for role in ALL_ROLES:
 		if _user_set.get(role, false):
 			cfg.set_value(section, role, _role_to_screen[role])
