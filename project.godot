@@ -25,6 +25,7 @@ CargoSystem="*res://systems/CargoSystem.gd"
 MarketSystem="*res://systems/MarketSystem.gd"
 SalvageSystem="*res://systems/SalvageSystem.gd"
 ThreatSystem="*res://systems/ThreatSystem.gd"
+CollisionSystem="*res://systems/CollisionSystem.gd"
 
 [display]
 

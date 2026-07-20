@@ -10,6 +10,8 @@ const RIVAL_SPEED := 6.0
 const RIVAL_SPAWN_RANGE := 180.0
 const RIVAL_WORK_RANGE := 20.0
 const RIVAL_STRIP_INTERVAL := 25.0
+## Collision radius for the rival/patrol ships (they're solid to ram into).
+const SHIP_CONTACT_RADIUS := 4.0
 
 ## Patrol: how long the claim window stays open, enforcement bite.
 const PATROL_WINDOW_MIN := 240.0
@@ -81,7 +83,8 @@ func _update_rival(delta: float) -> void:
 			var bearing := _rng.randf_range(0.0, TAU)
 			var spawn := wreck_pos + Vector3(cos(bearing), _rng.randf_range(-0.2, 0.2),
 					sin(bearing)) * RIVAL_SPAWN_RANGE
-			_rival_contact_id = GameState.register_contact("RIVAL CUTTER", spawn, true)
+			_rival_contact_id = GameState.register_contact(
+					"RIVAL CUTTER", spawn, true, SHIP_CONTACT_RADIUS)
 			GameState.post_comms("SENSORS",
 					"NEW CONTACT — RIVAL CUTTER CLOSING ON THE WRECK")
 		return
@@ -134,7 +137,8 @@ func _update_patrol(delta: float) -> void:
 			var spawn := wreck_pos + Vector3(cos(bearing), 0.1, sin(bearing)) \
 					* PATROL_SPAWN_RANGE
 			_patrol_contact_id = GameState.register_contact(
-					"%s PATROL" % MarketSystem.claim_faction(), spawn, true)
+					"%s PATROL" % MarketSystem.claim_faction(), spawn, true,
+					SHIP_CONTACT_RADIUS)
 			GameState.post_comms("SENSORS", "PATROL CONTACT ON INTERCEPT VECTOR")
 		return
 	var contact := GameState.get_contact(_patrol_contact_id)
