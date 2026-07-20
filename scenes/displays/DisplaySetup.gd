@@ -18,7 +18,7 @@ signal confirmed
 const OVERLAY_FRACTION := 0.62
 
 var _overlays: Array[Window] = []
-var _assigned_labels: Array[Label] = []
+var _assigned_labels: Dictionary = {}  # screen index -> Label
 var _summary: Label
 
 
@@ -31,8 +31,14 @@ func start() -> void:
 		confirmed.emit()
 		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_build_center()
+	# The central panel (with START) lives on the main window; an always_on_top
+	# overlay on that same screen would cover it, so build the main screen's card
+	# into the central panel and give overlays only to the other screens.
+	var main_screen := get_window().current_screen
+	_build_center(main_screen)
 	for i in DisplayServer.get_screen_count():
+		if i == main_screen:
+			continue
 		var overlay := _build_overlay(i)
 		_overlays.append(overlay)
 		add_child(overlay)
@@ -41,7 +47,7 @@ func start() -> void:
 	_refresh()
 
 
-func _build_center() -> void:
+func _build_center(main_screen: int) -> void:
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.color = Color(0.02, 0.03, 0.05, 0.92)
@@ -78,6 +84,33 @@ func _build_center() -> void:
 	_summary.add_theme_font_size_override("font_size", 22)
 	_summary.add_theme_color_override("font_color", Color(0.35, 0.95, 0.55))
 	vbox.add_child(_summary)
+
+	# This screen hosts the central panel instead of an overlay, so assign its
+	# role here (the overlays cover the other screens).
+	var assigned := Label.new()
+	assigned.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	assigned.add_theme_font_size_override("font_size", 24)
+	assigned.add_theme_color_override("font_color", Color(0.35, 0.95, 0.55))
+	vbox.add_child(assigned)
+	_assigned_labels[main_screen] = assigned
+
+	var this_hint := Label.new()
+	this_hint.text = "put a display on this screen (screen %d):" % main_screen
+	this_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	this_hint.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(this_hint)
+
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 12)
+	vbox.add_child(buttons)
+	for role in DisplayConfig.ALL_ROLES:
+		var btn := Button.new()
+		btn.text = role.to_upper()
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.custom_minimum_size = Vector2(130, 52)
+		btn.pressed.connect(DisplayConfig.set_role_screen.bind(role, main_screen))
+		buttons.add_child(btn)
 
 	var start_btn := Button.new()
 	start_btn.text = "START"
@@ -133,7 +166,7 @@ func _build_overlay(screen: int) -> Window:
 	assigned.add_theme_font_size_override("font_size", 30)
 	assigned.add_theme_color_override("font_color", Color(0.35, 0.95, 0.55))
 	vbox.add_child(assigned)
-	_assigned_labels.append(assigned)
+	_assigned_labels[screen] = assigned
 
 	var hint := Label.new()
 	hint.text = "put a display on this screen:"
@@ -166,7 +199,7 @@ func _confirm() -> void:
 
 
 func _refresh() -> void:
-	for screen in _assigned_labels.size():
+	for screen in _assigned_labels:
 		var roles := DisplayConfig.get_roles_for_screen(screen)
 		var text := "assigned: —"
 		if not roles.is_empty():
