@@ -120,8 +120,16 @@ func needs_setup_prompt() -> bool:
 
 func save() -> void:
 	var cfg := ConfigFile.new()
-	# Preserve other setups' sections; we only rewrite the current one.
-	cfg.load(CONFIG_PATH)
+	# Preserve other setups' sections; we only rewrite the current one. A missing
+	# file is fine (first save), but if the file exists and can't be parsed,
+	# rewriting it would silently drop every other setup's saved layout — so move
+	# the unreadable file aside (recoverable) instead of clobbering it in place.
+	var err := cfg.load(CONFIG_PATH)
+	if err != OK and err != ERR_FILE_NOT_FOUND:
+		push_warning("DisplayConfig: %s unreadable (error %d); moving it to %s.bak before rewrite." % [CONFIG_PATH, err, CONFIG_PATH])
+		if FileAccess.file_exists(CONFIG_PATH + ".bak"):
+			DirAccess.remove_absolute(CONFIG_PATH + ".bak")
+		DirAccess.rename_absolute(CONFIG_PATH, CONFIG_PATH + ".bak")
 	var section := _current_section()
 	cfg.set_value(section, "_sig", _signature())
 	for role in ALL_ROLES:
