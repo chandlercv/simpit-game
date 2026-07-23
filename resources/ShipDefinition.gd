@@ -26,3 +26,14 @@ extends Resource
 ## Cutting-head throughput at full CUTTER allocation, fraction of a member
 ## severed per second.
 @export var cut_rate := 0.35
+
+## Collision capsule in ship-local space (CollisionSystem tests against it). The
+## two endpoints define the capsule's spine and A == B degenerates to a sphere.
+## Because the endpoints are local, the capsule follows the hull through the ship
+## basis — and centering them on the model (not the transform origin) fixes the
+## "collision volume sits beside the visible hull" bug. Bake these from the model
+## with tools/ShipColliderBake rather than hand-tuning. collision_radius doubles
+## as the fallback sphere radius if the capsule is left unbaked (A == B == 0).
+@export var collision_a := Vector3.ZERO
+@export var collision_b := Vector3.ZERO
+@export var collision_radius := 2.5
