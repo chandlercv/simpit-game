@@ -10,11 +10,14 @@ a Saitek switch panel, and touch/mouse on the secondary screens.
 > Status: Phases 1–5 complete and hardware-verified. Engine: Godot 4.7
 > (Forward+). Main scene: `scenes/boot/Boot.tscn`.
 
-![Main hull-camera view: a derelict frigate at cutting range with the target
-reticle and velocity/heading HUD.](assets/docs/main_view.png)
+![Main hull-camera view: a derelict frigate at cutting range framed by the thin
+flight HUD — a centre nose reticle, velocity-vector brackets, VEL/HDG/EL readouts,
+a locked-target box on the frigate, and a flagged UNSTABLE DEBRIS hazard.](assets/docs/main_view.png)
 
 *The Main display — an external hull-camera feed of the wreck at cutting range,
-with the thin flight HUD (velocity, heading/elevation, locked target).*
+with the thin flight HUD: nose reticle, velocity-vector brackets,
+velocity/heading/elevation readouts, a locked-target box on the derelict frigate,
+and a flagged UNSTABLE DEBRIS hazard.*
 
 ---
 
@@ -30,6 +33,28 @@ with its own input stream.
 | **Tactical** | `TacticalWindow` | Sensor scope, contact list, structural risk meter, sensor-mode + ops controls. | Mouse/touch: sensor mode, approach, cut, **click a wreck member to select it**. |
 | **Tablet** | `TabletWindow` | Power sliders, cargo inventory grid, hull-damage heatmap. | Touch sliders for the four power channels. |
 | **Chart** | `StarChartWindow` | Market price feed, comms/mission log, star chart. | Mouse/touch: dock, sell hold, depart. |
+
+---
+
+## The Main flight HUD
+
+The Main display overlays a thin HUD on the hull-camera feed (drawn in
+`scenes/ui/HUDOverlay.gd`):
+
+- **Nose reticle** — a small circle with crosshair ticks marking where the
+  ship's **nose** points. Looking straight ahead it sits at screen centre; because
+  a *glance* rotates only the camera and not the hull, the reticle slides
+  off-centre toward the nose as you glance, pinning to the screen edge on a hard
+  glance. It's how you keep track of where "forward" is while looking around.
+- **Velocity vector** — a pair of brackets `[ ]` marking the ship's **direction
+  of travel**. Thrust straight ahead on the main engine and the brackets drift in
+  to frame the reticle (`[ ⊕ ]`); strafe or drift sideways and they split off
+  toward the way you're actually moving. They fade out at rest and when you're
+  travelling backwards, out of view.
+- **Readouts** — bottom-left **VEL** (speed) and **HDG / EL** (heading and
+  elevation of the view); a tracked contact gets corner brackets with its name and
+  range, plus a pulsing threat frame and **PROXIMITY** warning when it's a close
+  hostile.
 
 ---
 
@@ -93,9 +118,11 @@ also has a keyboard/mouse fallback so the game is playable at a desk.
 | Control | Action |
 | --- | --- |
 | **Throttle lever** (axis 2) | Forward thrust. Idle near the top; push forward to accelerate. Folds into the ship's forward thrust and must sit under ~40% travel to arm the approach autopilot. |
+| **POV hat** (buttons 19–22) | **Strafe & vertical thrust** — hat left/right strafes left/right, hat up/down thrusts up/down. Lateral and vertical translation without touching the stick. |
 | **Button 7** (Fire E) | **Toggle approach / match-velocity** (`ops_approach`) |
 
-> Buttons 23–25 are reserved selector-bank buttons.
+> This throttle reports its hat as plain buttons 19–22 (not the DPAD), clear of
+> the reserved selector bank. Buttons 23–25 are reserved selector-bank buttons.
 
 ### Saitek Pro Flight Switch Panel (raw HID)
 
@@ -124,10 +151,10 @@ yet.
 | **Arrow keys** | Glance camera | | **V** | Toggle approach |
 | **C** | Fire cutter | | **Esc** | Quit |
 
-> Strafe (A/D) and vertical thrust (R/F) are keyboard-only — the stick profile
-> binds rotation, throttle-forward, the trigger, and the hat, not lateral
-> translation. Reverse thrust is the **S** key (the throttle only pushes
-> forward).
+> Lateral strafe (A/D) and vertical thrust (R/F) are also on the **X52 throttle
+> POV hat** (see above); at a plain desk the A/D and R/F keys are the fallback.
+> The X55 stick binds rotation, the trigger, and glance — not translation.
+> Reverse thrust is the **S** key (the throttle only pushes forward).
 
 ### Mouse / touch (secondary displays)
 

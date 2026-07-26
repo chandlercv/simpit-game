@@ -5,10 +5,12 @@ extends Control
 ## historical readouts (full radar sweep, complete contact list, risk-over-time)
 ## belong on the Tactical window.
 ##
-## Draws: center reticle, velocity/heading readout, lock brackets + distance on
-## the tracked contact when it's in frame, pulsing threat brackets + proximity
-## warning for threat contacts in frame. Contacts behind the camera or outside
-## the frame draw nothing — that's Tactical's job.
+## Draws: nose reticle (marks where the hull points, slides off-centre while
+## glancing), velocity-vector brackets (direction of travel), velocity/heading
+## readout, lock brackets + distance on the tracked contact when it's in frame,
+## pulsing threat brackets + proximity warning for threat contacts in frame.
+## Contacts behind the camera or outside the frame draw nothing — that's
+## Tactical's job.
 
 ## Set by MainViewWindow.gd at runtime (a .tscn NodePath can't reach inside the
 ## instanced world scene). Unprojected coordinates match this Control 1:1
@@ -20,6 +22,12 @@ const THREAT_COLOR := Color(1.0, 0.35, 0.25, 0.9)
 
 ## Threat contacts closer than this (meters) get the proximity warning.
 const PROXIMITY_RANGE := 25.0
+
+## Keeps the nose reticle / velocity marker off the very edge when clamped.
+const EDGE_MARGIN := 24.0
+
+## Below this speed the velocity direction is unstable, so hide the marker.
+const VEL_EPSILON := 0.05
 
 var _time := 0.0
 
@@ -70,6 +78,7 @@ func _update_readouts() -> void:
 
 func _draw() -> void:
 	_draw_reticle()
+	_draw_velocity_vector()
 	_draw_ops_state()
 	if camera == null:
 		return
@@ -122,11 +131,58 @@ func _draw_ops_state() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, THREAT_COLOR)
 
 
+## Screen point for a world-space direction from the camera eyepoint, clamped
+## into the frame (minus a margin) so out-of-fov directions pin to the nearest
+## edge. Returns null when the direction is behind the camera.
+func _project_direction(dir: Vector3) -> Variant:
+	var world_point := camera.global_position + dir.normalized() * 1000.0
+	if camera.is_position_behind(world_point):
+		return null
+	var p := camera.unproject_position(world_point)
+	return p.clamp(Vector2(EDGE_MARGIN, EDGE_MARGIN), size - Vector2(EDGE_MARGIN, EDGE_MARGIN))
+
+
+## The reticle marks the ship's *nose*, not the view centre: glance rotates only
+## the camera gimbal, so the nose slides off-centre as you look around. At rest
+## (no glance) the nose projects to screen centre, matching the old fixed glyph.
 func _draw_reticle() -> void:
 	var c := size / 2.0
+	if camera != null:
+		var xform: Transform3D = GameState.local_ship()["transform"]
+		var nose := -xform.basis.z
+		var p = _project_direction(nose)
+		if p != null:
+			c = p
 	draw_arc(c, 14.0, 0.0, TAU, 48, HUD_COLOR, 1.5, true)
 	for dir: Vector2 in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]:
 		draw_line(c + dir * 22.0, c + dir * 34.0, HUD_COLOR, 1.5)
+
+
+## Flight-path marker: a pair of vertical brackets [ ] at the ship's direction
+## of travel. Pure main-engine thrust drives velocity toward the nose, so the
+## brackets converge to frame the reticle; side thrust / drift splits them off.
+## Hidden at rest (unstable normalize) and when travel is behind the view.
+func _draw_velocity_vector() -> void:
+	if camera == null:
+		return
+	var vel: Vector3 = GameState.local_ship().get("velocity", Vector3.ZERO)
+	if vel.length() < VEL_EPSILON:
+		return
+	var p = _project_direction(vel)
+	if p == null:
+		return
+	_draw_flanking_brackets(p, 18.0, HUD_COLOR, 1.5)
+
+
+func _draw_flanking_brackets(center: Vector2, r: float, color: Color, width: float) -> void:
+	var arm := r * 0.5
+	for s: float in [-1.0, 1.0]:
+		var x := center.x + s * r
+		var top := Vector2(x, center.y - r)
+		var bot := Vector2(x, center.y + r)
+		draw_line(top, bot, color, width)  # spine
+		draw_line(top, top + Vector2(-s * arm, 0), color, width)  # top serif (toward center)
+		draw_line(bot, bot + Vector2(-s * arm, 0), color, width)  # bottom serif
 
 
 func _draw_corner_brackets(center: Vector2, r: float, color: Color, width: float) -> void:
