@@ -233,6 +233,16 @@ func get_contact(id: int) -> Dictionary:
 	return {}
 
 
+## The returned dict is the live entry (Dictionaries are references), so a
+## caller tracking a moving body can update its "position" in place — that's how
+## DebrisField keeps a tumbling chunk's collision sphere on the mesh.
+func get_obstacle(id: int) -> Dictionary:
+	for obstacle in obstacles:
+		if obstacle["id"] == id:
+			return obstacle
+	return {}
+
+
 ## Member lookup in the wreck structural graph, {} if absent.
 func get_member(id: int) -> Dictionary:
 	for member: Dictionary in wreck.get("members", []):
