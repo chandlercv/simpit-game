@@ -10,12 +10,14 @@ a Saitek switch panel, and touch/mouse on the secondary screens.
 > Status: Phases 1–5 complete and hardware-verified. Engine: Godot 4.7
 > (Forward+). Main scene: `scenes/boot/Boot.tscn`.
 
-![Main hull-camera view: a derelict frigate at cutting range with the flight HUD
-— nose reticle, velocity vector, and velocity/heading readouts.](assets/docs/main_view.png)
+![Main hull-camera view: a derelict frigate at cutting range framed by the thin
+flight HUD — a centre nose reticle, velocity-vector brackets, VEL/HDG/EL readouts,
+a locked-target box on the frigate, and a flagged UNSTABLE DEBRIS hazard.](assets/docs/main_view.png)
 
 *The Main display — an external hull-camera feed of the wreck at cutting range,
-with the thin flight HUD (nose reticle, velocity vector, velocity/heading/elevation,
-locked target).*
+with the thin flight HUD: nose reticle, velocity-vector brackets,
+velocity/heading/elevation readouts, a locked-target box on the derelict frigate,
+and a flagged UNSTABLE DEBRIS hazard.*
 
 ---
 
