@@ -207,7 +207,15 @@ func remove_contact(id: int) -> void:
 
 ## World-scene setup: register a static solid body (debris chunk) the ship can
 ## collide with. Shares the contact id counter so ids never clash across lists.
-func register_obstacle(obstacle_name: String, position: Vector3, radius: float) -> int:
+## `hull` is an optional world-space convex point cloud: when non-empty the ship
+## is tested against the tight hull (CollisionSystem GJK) and position/radius
+## serve only as the broadphase bounding sphere; empty leaves the body a plain
+## sphere/capsule. A tumbling chunk rewrites position + hull each frame via the
+## live dict from get_obstacle(). `is_wreck` tags the derelict's own members so
+## the approach autopilot can measure distance to the wreck surface
+## (CollisionSystem.wreck_surface_distance) apart from stray debris.
+func register_obstacle(obstacle_name: String, position: Vector3, radius: float,
+		hull := PackedVector3Array(), is_wreck := false) -> int:
 	var id := _next_contact_id
 	_next_contact_id += 1
 	obstacles.append({
@@ -215,6 +223,8 @@ func register_obstacle(obstacle_name: String, position: Vector3, radius: float) 
 		"name": obstacle_name,
 		"position": position,
 		"radius": radius,
+		"hull": hull,
+		"wreck": is_wreck,
 	})
 	return id
 

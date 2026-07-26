@@ -28,12 +28,11 @@ extends Node
 
 ## Fallback ship radius when a ship def has no baked capsule (A == B == 0).
 const DEFAULT_SHIP_RADIUS := 2.5
-## Derelict frame collision sphere. Kept small enough that the ship's forward
-## reach + WRECK_RADIUS stays inside the matched-approach standoff
-## (CUT_RANGE - 4 = 10, see SalvageSystem), so normal cutting never trips a
-## collision — only a manual ram. The offset capsule reaches farther from the
-## origin than the old origin-centred sphere did, so this is 4.0 (was 5.0);
-## ShipColliderBake prints ship_reach() + WRECK_RADIUS against the standoff.
+## Legacy derelict-frame collision radius. The wreck is no longer a single
+## sphere — it collides through its per-member hulls (Wreck.gd, tagged `wreck`
+## obstacles) and the approach parks off the surface (wreck_surface_distance).
+## Kept only as the reference figure ShipColliderBake still prints against the
+## standoff when validating the ship capsule.
 const WRECK_RADIUS := 4.0
 ## Below this closing speed (m/s) contact only separates the ship; no damage, so
 ## slow station-keeping drift against a body isn't punished.
@@ -73,20 +72,12 @@ func _process(delta: float) -> void:
 		# one frame push the ship consistently (basis is fixed for the frame).
 		var ship_a: Vector3 = origin + xform.basis * GameState.ship_def.collision_a
 		var ship_b: Vector3 = origin + xform.basis * GameState.ship_def.collision_b
-		var closest := _closest_points_between_segments(
-				ship_a, ship_b, body["a"], body["b"])
-		var on_ship: Vector3 = closest[0]
-		var on_body: Vector3 = closest[1]
-		var min_sep: float = ship_radius + body["radius"]
-		var separation: Vector3 = on_ship - on_body
-		var dist := separation.length()
-		if dist >= min_sep:
+		var contact := _test_body(ship_a, ship_b, ship_radius, body, xform.basis.z)
+		if contact.is_empty():
 			continue
-		# Points from the body out toward the ship; a degenerate exact-overlap
-		# falls back to the ship's forward axis so we still separate somewhere.
-		var normal := separation.normalized() if dist > 0.001 else xform.basis.z
+		var normal: Vector3 = contact["normal"]
 		var closing := -velocity.dot(normal)  # +ve = driving into the body
-		origin += normal * (min_sep - dist)  # push out of penetration
+		origin += normal * float(contact["depth"])  # push out of penetration
 		if closing > 0.0:
 			velocity += normal * closing * (1.0 + RESTITUTION)  # reflect inward part
 		moved = true
@@ -102,24 +93,22 @@ func _process(delta: float) -> void:
 			SalvageSystem.abort_approach_on_collision()
 
 
-## Union of solid bodies this frame. The wreck is explicit (always on site); the
-## cosmetic chunks come from GameState.obstacles; moving ships come from any
-## contact registered with a radius. The wreck/debris sensor blips carry no
-## radius, so they aren't double-counted here. Each body is a segment + radius;
-## spheres set a == b (a point), leaving room for oriented capsules later.
+## Union of solid bodies this frame. Everything solid — the wreck's per-member
+## hulls, the cosmetic debris chunks, and any moving ship — lives in
+## GameState.obstacles / .contacts; the wreck's members are just obstacles tagged
+## `wreck` (registered by Wreck.gd, tight hulls). The wreck/debris sensor blips
+## carry no radius, so they aren't double-counted here. Each body is a segment +
+## radius (spheres set a == b), or a `hull` point cloud tested tight by GJK.
 func _collidables() -> Array[Dictionary]:
 	var bodies: Array[Dictionary] = []
-	if not GameState.wreck.is_empty():
-		var wreck_pos: Vector3 = GameState.wreck["position"]
-		bodies.append({
-			"key": "wreck", "name": "WRECK FRAME",
-			"a": wreck_pos, "b": wreck_pos, "radius": WRECK_RADIUS,
-		})
 	for obstacle: Dictionary in GameState.obstacles:
 		var pos: Vector3 = obstacle["position"]
+		# `a`/`b`/`radius` double as the broadphase bounding sphere; `hull`, when
+		# present, is the tight convex point cloud the GJK test uses.
 		bodies.append({
 			"key": "o%d" % obstacle["id"], "name": obstacle["name"],
 			"a": pos, "b": pos, "radius": obstacle["radius"],
+			"hull": obstacle.get("hull", PackedVector3Array()),
 		})
 	for contact: Dictionary in GameState.contacts:
 		if contact.get("radius", 0.0) > 0.0:
@@ -129,6 +118,39 @@ func _collidables() -> Array[Dictionary]:
 				"a": pos, "b": pos, "radius": contact["radius"],
 			})
 	return bodies
+
+
+## One body's overlap test. Returns {} for no contact, else {normal, depth} with
+## `normal` pointing from the body out toward the ship and `depth` the push-out
+## distance. A body carrying a non-empty `hull` point cloud is tested tight
+## (GJK, ship segment vs convex hull) behind a bounding-sphere broadphase; every
+## other body is the segment+radius capsule test that covers spheres and the
+## wreck. `fallback` is the separation direction for an exact overlap where the
+## real contact normal is undefined.
+func _test_body(ship_a: Vector3, ship_b: Vector3, ship_radius: float,
+		body: Dictionary, fallback: Vector3) -> Dictionary:
+	var hull: PackedVector3Array = body.get("hull", PackedVector3Array())
+	if not hull.is_empty():
+		# Broadphase: reject on the bounding sphere before the per-vertex GJK.
+		var near: Vector3 = _closest_points_between_segments(
+				ship_a, ship_b, body["a"], body["b"])[0]
+		if near.distance_to(body["a"]) >= ship_radius + float(body["radius"]):
+			return {}
+		var gjk := _gjk_segment_hull(ship_a, ship_b, hull)
+		var dist: float = gjk["dist"]
+		if dist >= ship_radius:
+			return {}
+		var normal: Vector3 = gjk["normal"] if not gjk["inside"] and dist > 0.0001 \
+				else fallback
+		return {"normal": normal, "depth": ship_radius - dist}
+	var closest := _closest_points_between_segments(ship_a, ship_b, body["a"], body["b"])
+	var min_sep: float = ship_radius + float(body["radius"])
+	var separation: Vector3 = closest[0] - closest[1]
+	var dist := separation.length()
+	if dist >= min_sep:
+		return {}
+	var normal := separation.normalized() if dist > 0.001 else fallback
+	return {"normal": normal, "depth": min_sep - dist}
 
 
 ## Consequence hook. TODAY: recoverable, speed-scaled hull wear. FUTURE seam:
@@ -221,3 +243,207 @@ func _closest_points_between_segments(p1: Vector3, q1: Vector3,
 				t = 1.0
 				s = clampf((b - c) / a, 0.0, 1.0)
 	return [p1 + d1 * s, p2 + d2 * t]
+
+
+## --- Segment vs convex hull (GJK) -----------------------------------------
+## Tight collision for the flat/awkward debris chunks a bounding sphere or
+## capsule can't hug (plate, L-bent pipe). Each such body carries a world-space
+## convex point cloud (baked from the mesh, retumbled each frame by DebrisField)
+## and the ship's capsule spine is tested against it here. GJK needs only the
+## support point — the hull vertex farthest along a direction — so a raw vertex
+## cloud is enough; no face/edge structure is required.
+
+
+## Test seam + gameplay entry: closest distance from the ship-style segment
+## [sa,sb] to the convex hull of `points`. 0.0 when the segment core is inside.
+func hull_distance(sa: Vector3, sb: Vector3, points: PackedVector3Array) -> float:
+	return _gjk_segment_hull(sa, sb, points)["dist"]
+
+
+## Closest distance from the ship capsule spine [sa,sb] to any intact wreck
+## member's hull, or INF when no wreck hulls are registered (e.g. a headless run
+## with no 3D scene — the approach autopilot then falls back to a centre-based
+## standoff). SalvageSystem uses this to park a fixed gap off the frame surface
+## regardless of approach angle, instead of a single radius around its centre.
+func wreck_surface_distance(sa: Vector3, sb: Vector3) -> float:
+	var best := INF
+	for obstacle: Dictionary in GameState.obstacles:
+		if not obstacle.get("wreck", false):
+			continue
+		var hull: PackedVector3Array = obstacle.get("hull", PackedVector3Array())
+		if not hull.is_empty():
+			best = minf(best, _gjk_segment_hull(sa, sb, hull)["dist"])
+	return best
+
+
+## GJK distance between segment [sa,sb] and the convex hull of `points`. Returns
+## {dist, normal, inside}: `normal` is the unit (segment − hull) direction, i.e.
+## it points from the hull out toward the ship, and is what the caller pushes
+## along. On penetration `dist` is 0, `inside` true, and `normal` zero (the
+## caller substitutes its fallback axis).
+func _gjk_segment_hull(sa: Vector3, sb: Vector3, points: PackedVector3Array) -> Dictionary:
+	if points.is_empty():
+		return {"dist": INF, "normal": Vector3.ZERO, "inside": false}
+	const EPS := 0.0000001
+	var simplex: Array[Vector3] = [_mink_support(sa, sb, points, Vector3(1, 0, 0))]
+	var v: Vector3 = simplex[0]
+	for _iter in 32:
+		var vv := v.length_squared()
+		if vv < EPS:
+			return {"dist": 0.0, "normal": Vector3.ZERO, "inside": true}
+		var w := _mink_support(sa, sb, points, -v)
+		# Converged: the support toward the origin can't get past the current
+		# closest point, so |v| is the true distance.
+		if vv - v.dot(w) <= EPS * vv:
+			break
+		var dup := false
+		for sp: Vector3 in simplex:
+			if sp.distance_squared_to(w) < EPS:
+				dup = true
+				break
+		if dup:
+			break
+		simplex.append(w)
+		var sub := _closest_sub(simplex)
+		v = sub["point"]
+		var kept: Array[Vector3] = []
+		for k: int in sub["ids"]:
+			kept.append(simplex[k])
+		simplex = kept
+		if simplex.size() == 4:  # origin enclosed by the simplex: penetration
+			return {"dist": 0.0, "normal": Vector3.ZERO, "inside": true}
+	var dist := v.length()
+	return {
+		"dist": dist,
+		"normal": v / dist if dist > EPS else Vector3.ZERO,
+		"inside": false,
+	}
+
+
+## Support of the Minkowski difference (segment ⊖ hull) along `d`: the segment
+## point farthest along +d minus the hull point farthest along −d.
+func _mink_support(sa: Vector3, sb: Vector3, points: PackedVector3Array,
+		d: Vector3) -> Vector3:
+	var seg := sa if sa.dot(d) >= sb.dot(d) else sb
+	var hull := points[0]
+	var best := hull.dot(-d)
+	for i in range(1, points.size()):
+		var dp := points[i].dot(-d)
+		if dp > best:
+			best = dp
+			hull = points[i]
+	return seg - hull
+
+
+## Closest point on the current simplex (1–4 Minkowski points) to the origin,
+## plus the indices of the vertices that feature keeps — GJK reduces to those.
+func _closest_sub(s: Array) -> Dictionary:
+	match s.size():
+		1:
+			return {"point": s[0], "ids": [0]}
+		2:
+			return _sub_seg(s[0], s[1])
+		3:
+			return _sub_tri(s[0], s[1], s[2])
+		_:
+			return _sub_tetra(s[0], s[1], s[2], s[3])
+
+
+func _sub_seg(a: Vector3, b: Vector3) -> Dictionary:
+	var ab := b - a
+	var denom := ab.dot(ab)
+	if denom < 1e-12:
+		return {"point": a, "ids": [0]}
+	var t := -a.dot(ab) / denom
+	if t <= 0.0:
+		return {"point": a, "ids": [0]}
+	if t >= 1.0:
+		return {"point": b, "ids": [1]}
+	return {"point": a + ab * t, "ids": [0, 1]}
+
+
+## Closest point on triangle abc to the origin (Ericson RTCD §5.1.5, query point
+## = origin), with the retained vertex indices.
+func _sub_tri(a: Vector3, b: Vector3, c: Vector3) -> Dictionary:
+	var ab := b - a
+	var ac := c - a
+	var d1 := ab.dot(-a)
+	var d2 := ac.dot(-a)
+	if d1 <= 0.0 and d2 <= 0.0:
+		return {"point": a, "ids": [0]}
+	var d3 := ab.dot(-b)
+	var d4 := ac.dot(-b)
+	if d3 >= 0.0 and d4 <= d3:
+		return {"point": b, "ids": [1]}
+	var vc := d1 * d4 - d3 * d2
+	if vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
+		return {"point": a + ab * (d1 / (d1 - d3)), "ids": [0, 1]}
+	var d5 := ab.dot(-c)
+	var d6 := ac.dot(-c)
+	if d6 >= 0.0 and d5 <= d6:
+		return {"point": c, "ids": [2]}
+	var vb := d5 * d2 - d1 * d6
+	if vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
+		return {"point": a + ac * (d2 / (d2 - d6)), "ids": [0, 2]}
+	var va := d3 * d6 - d5 * d4
+	if va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
+		return {"point": b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6))), "ids": [1, 2]}
+	var sum := va + vb + vc
+	if absf(sum) < 1e-12:  # degenerate (collinear) triangle: fall back to edges
+		return _best_edge(a, b, c)
+	var denom := 1.0 / sum
+	return {"point": a + ab * (vb * denom) + ac * (vc * denom), "ids": [0, 1, 2]}
+
+
+## Closest of a triangle's three edges to the origin, with global ids — the
+## degenerate-triangle escape hatch for _sub_tri.
+func _best_edge(a: Vector3, b: Vector3, c: Vector3) -> Dictionary:
+	var edges := [[0, 1, a, b], [1, 2, b, c], [0, 2, a, c]]
+	var best := {"point": Vector3.ZERO, "ids": []}
+	var best_sq := INF
+	for e: Array in edges:
+		var sub := _sub_seg(e[2], e[3])
+		var sq: float = (sub["point"] as Vector3).length_squared()
+		if sq < best_sq:
+			best_sq = sq
+			var ids: Array = []
+			for li: int in sub["ids"]:
+				ids.append(e[li])
+			best = {"point": sub["point"], "ids": ids}
+	return best
+
+
+## Closest point on tetrahedron abcd to the origin, with retained ids. Tests the
+## faces the origin lies outside of and keeps the nearest; if the origin is
+## outside none, it's enclosed — penetration (ids for all four vertices).
+func _sub_tetra(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> Dictionary:
+	var verts := [a, b, c, d]
+	# [v0, v1, v2, opposite] index sets for the four faces.
+	var faces := [[0, 1, 2, 3], [0, 2, 3, 1], [0, 3, 1, 2], [1, 3, 2, 0]]
+	var best := {"point": Vector3.ZERO, "ids": [0, 1, 2, 3]}
+	var best_sq := INF
+	var any_outside := false
+	for f: Array in faces:
+		var p0: Vector3 = verts[f[0]]
+		var p1: Vector3 = verts[f[1]]
+		var p2: Vector3 = verts[f[2]]
+		if not _origin_outside_face(p0, p1, p2, verts[f[3]]):
+			continue
+		any_outside = true
+		var sub := _sub_tri(p0, p1, p2)
+		var sq: float = (sub["point"] as Vector3).length_squared()
+		if sq < best_sq:
+			best_sq = sq
+			var ids: Array = []
+			for li: int in sub["ids"]:
+				ids.append(f[li])
+			best = {"point": sub["point"], "ids": ids}
+	if not any_outside:  # origin inside the tetra
+		return {"point": Vector3.ZERO, "ids": [0, 1, 2, 3]}
+	return best
+
+
+## Is the origin on the far side of plane (a,b,c) from vertex `opp`?
+func _origin_outside_face(a: Vector3, b: Vector3, c: Vector3, opp: Vector3) -> bool:
+	var n := (b - a).cross(c - a)
+	return n.dot(-a) * n.dot(opp - a) < 0.0

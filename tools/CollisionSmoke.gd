@@ -4,15 +4,15 @@ extends Node
 ##    (a body over the offset capsule collides; one at the origin does not);
 ##  - ramming a solid body damages the hull, logs a COLLISION, and stops the
 ##    ship at the surface (no tunnelling);
-##  - a gentle sub-threshold nudge separates the ship without any damage.
+##  - a gentle sub-threshold nudge separates the ship without any damage;
+##  - the segment-vs-convex-hull GJK distance is correct, a flat hull is hugged
+##    tightly, and wreck_surface_distance measures only wreck-tagged hulls.
 ##
 ## The capsule is set deterministically here so the math is tested independently
 ## of the baked kestrel.tres values (those are validated by ShipColliderBake and
 ## in-editor playtest, not this smoke).
 ##
 ##   godot --headless res://tools/CollisionSmoke.tscn
-
-const CollisionScript := preload("res://systems/CollisionSystem.gd")
 
 var _failures: Array[String] = []
 
@@ -73,10 +73,14 @@ func _run() -> void:
 			"gentle contact still separates the ship")
 	GameState.remove_obstacle(buoy_id)
 
-	# --- Hard ram into the wreck: damage + stop at the surface -----------------
+	# --- Hard ram into a wreck-core hull: damage + stop at the surface ---------
+	# The wreck now collides through per-member hulls (Wreck.gd), so stand one in
+	# here as a solid box the ship can ram head-on (−Z).
 	_reset_ship()
 	ship = GameState.local_ship()
-	var ram_min_sep := ship_radius + CollisionScript.WRECK_RADIUS
+	var core_he := Vector3(4, 4, 4)
+	var core_id := GameState.register_obstacle(
+			"WRECK CORE", wreck_pos, 7.0, _box_hull(wreck_pos, core_he), true)
 	var bow_before: float = ship["hull_sections"]["BOW"]
 	var comms_before := GameState.comms.size()
 
@@ -84,18 +88,68 @@ func _run() -> void:
 	var rammed := await _wait_until(
 			func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 12.0)
 	Input.action_release("thrust_forward")
-	_check(rammed, "ramming the wreck logs a COLLISION event")
+	_check(rammed, "ramming a wreck hull logs a COLLISION event")
 
 	_check(ship["hull_sections"]["BOW"] < bow_before,
 			"impact damages the facing (BOW) hull section (%.2f -> %.2f)" % [
 				bow_before, ship["hull_sections"]["BOW"]])
 
-	# Let a few frames settle, then confirm the ship sits at the surface rather
-	# than punching through to the far side of the wreck.
+	# Let a few frames settle, then confirm the ship sits in front of the hull
+	# rather than punching through to the far side of the wreck centre.
 	await _wait(0.3)
-	_check(ship["transform"].origin.z > wreck_pos.z + ram_min_sep - 1.0,
-			"ship stopped near the surface, no tunnelling (z %.1f, wreck z %.1f)" % [
+	_check(ship["transform"].origin.z > wreck_pos.z,
+			"ship stopped in front of the wreck hull, no tunnelling (z %.1f, wreck z %.1f)" % [
 				ship["transform"].origin.z, wreck_pos.z])
+	GameState.remove_obstacle(core_id)
+
+	# --- GJK distance unit checks (segment vs convex hull) --------------------
+	# A unit cube hull centred at the origin; distances are known analytically.
+	var cube := _box_hull(Vector3.ZERO, Vector3(1, 1, 1))
+	_check(_approx(CollisionSystem.hull_distance(Vector3(3, 0, 0), Vector3(3, 0, 0), cube), 2.0),
+			"gjk: point off a face")
+	_check(_approx(CollisionSystem.hull_distance(Vector3(2, 2, 0), Vector3(2, 2, 0), cube), sqrt(2.0)),
+			"gjk: point off an edge")
+	_check(_approx(CollisionSystem.hull_distance(Vector3(2, 2, 2), Vector3(2, 2, 2), cube), sqrt(3.0)),
+			"gjk: point off a corner")
+	_check(CollisionSystem.hull_distance(Vector3.ZERO, Vector3.ZERO, cube) == 0.0,
+			"gjk: point inside the hull -> distance 0")
+	_check(_approx(CollisionSystem.hull_distance(Vector3(-3, 2, 0), Vector3(3, 2, 0), cube), 1.0),
+			"gjk: segment spanning the hull, parallel over the top face")
+
+	# --- wreck_surface_distance measures only wreck-tagged hulls --------------
+	# A wreck box (face at x 101) and a nearer debris box (face x 104): the query
+	# must report the wreck's 4.0, ignoring the closer non-wreck body.
+	var w_id := GameState.register_obstacle(
+			"W", Vector3(100, 0, 0), 2.0, _box_hull(Vector3(100, 0, 0), Vector3(1, 1, 1)), true)
+	var d_id := GameState.register_obstacle(
+			"D", Vector3(103, 0, 0), 2.0, _box_hull(Vector3(103, 0, 0), Vector3(1, 1, 1)), false)
+	var wsd := CollisionSystem.wreck_surface_distance(Vector3(105, 0, 0), Vector3(105, 0, 0))
+	_check(_approx(wsd, 4.0),
+			"wreck_surface_distance uses the wreck hull, ignores debris (%.2f, want 4.0)" % wsd)
+	GameState.remove_obstacle(w_id)
+	GameState.remove_obstacle(d_id)
+
+	# --- Tight hull fit: a flat plate stops the ship at its face, not its
+	# bounding sphere. Thin in X (half 0.3), broad 2x2 in YZ; the sphere that
+	# would enclose it has radius ~2.9, so a sphere body would hold the ship far
+	# further out than the hull does.
+	_set_capsule(Vector3.ZERO, Vector3.ZERO, 0.5)
+	var plate_c := Vector3(60, 0, 0)
+	var plate := _box_hull(plate_c, Vector3(0.3, 2.0, 2.0))
+	var plate_id := GameState.register_obstacle("TEST PLATE", plate_c, 2.9, plate)
+	_reset_ship()
+	ship = GameState.local_ship()
+	# Start just past the broad +X face so the ship is penetrating by 0.3.
+	ship["transform"] = Transform3D(Basis.IDENTITY, plate_c + Vector3(0.5, 0, 0))
+	ship["velocity"] = Vector3.ZERO
+	await _wait(0.3)
+	var plate_x: float = GameState.local_ship()["transform"].origin.x
+	var want_x := plate_c.x + 0.3 + 0.5  # face + ship radius
+	_check(absf(plate_x - want_x) < 0.1,
+			"hull push-out hugs the flat face (x %.2f, want %.2f)" % [plate_x, want_x])
+	_check(plate_x < plate_c.x + 2.0,
+			"hull fit settles the ship far short of the bounding-sphere standoff")
+	GameState.remove_obstacle(plate_id)
 
 	if _failures.is_empty():
 		print("COLLISION SMOKE: ALL CHECKS PASSED")
@@ -105,6 +159,21 @@ func _run() -> void:
 			printerr("FAIL: " + failure)
 		printerr("COLLISION SMOKE: %d CHECK(S) FAILED" % _failures.size())
 		get_tree().quit(1)
+
+
+## Eight corners of an axis-aligned box — a convex hull point cloud for the GJK
+## tests, standing in for a baked debris chunk.
+func _box_hull(center: Vector3, he: Vector3) -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				pts.append(center + Vector3(he.x * sx, he.y * sy, he.z * sz))
+	return pts
+
+
+func _approx(a: float, b: float) -> bool:
+	return absf(a - b) < 0.02
 
 
 func _set_capsule(a: Vector3, b: Vector3, radius: float) -> void:
