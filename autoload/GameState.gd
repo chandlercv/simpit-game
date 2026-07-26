@@ -32,6 +32,10 @@ signal wreck_member_cut(id: int)
 ## Frame collapse destroyed the remaining uncut members in bulk (no per-member
 ## cut signal). The 3D wreck re-syncs its meshes from the graph's destroyed flag.
 signal wreck_members_lost
+## A collision damaged a hull section (CollisionSystem). Carries the section and
+## the integrity lost. Extension seam: future crippling/destruction consequences
+## and view juice (camera shake, alarms) subscribe here.
+signal hull_impact(section: String, amount: float)
 signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
 @warning_ignore_restore("unused_signal")
@@ -69,10 +73,21 @@ var ship_def: ShipDefinition = load("res://data/ships/kestrel.tres")
 var ships: Dictionary = {}
 
 ## Sensor contacts. Replication-friendly Dictionaries:
-## { "id": int, "name": String, "position": Vector3, "threat": bool }.
+## { "id": int, "name": String, "position": Vector3, "threat": bool,
+##   "radius": float }.
 ## World nodes register the static ones at scene setup; ThreatSystem spawns,
-## moves, and removes the gameplay-driven ones.
+## moves, and removes the gameplay-driven ones. "radius" > 0 marks a contact as
+## a solid body CollisionSystem tests the ship against (moving ships like the
+## rival/patrol); 0 means sensor-only (the wreck and debris blips, whose solid
+## bodies live in `obstacles` / the wreck graph instead — see register_contact).
 var contacts: Array[Dictionary] = []
+
+## Static solid bodies the ship can run into that are NOT sensor contacts: the
+## cosmetic debris chunks. Replication-friendly Dictionaries:
+## { "id": int, "name": String, "position": Vector3, "radius": float }.
+## World nodes (DebrisField) register these at scene setup; CollisionSystem reads
+## them. Kept separate from `contacts` so solid clutter doesn't fill the scope.
+var obstacles: Array[Dictionary] = []
 
 ## Contact currently locked for the HUD/Tactical displays, -1 for none.
 var tracked_contact_id: int = -1
@@ -161,7 +176,11 @@ func local_ship() -> Dictionary:
 ## this once when they enter the tree so displays have something to read.
 ## Gameplay-driven contact churn goes through ThreatSystem per the mutation
 ## convention above.
-func register_contact(contact_name: String, position: Vector3, threat := false) -> int:
+## radius > 0 also makes the contact a solid body for CollisionSystem (moving
+## ships). Leave it 0 for sensor-only blips whose collidable form lives
+## elsewhere (the wreck via the wreck graph, debris via `obstacles`).
+func register_contact(contact_name: String, position: Vector3, threat := false,
+		radius := 0.0) -> int:
 	var id := _next_contact_id
 	_next_contact_id += 1
 	contacts.append({
@@ -169,6 +188,7 @@ func register_contact(contact_name: String, position: Vector3, threat := false) 
 		"name": contact_name,
 		"position": position,
 		"threat": threat,
+		"radius": radius,
 	})
 	contacts_changed.emit()
 	return id
@@ -185,10 +205,51 @@ func remove_contact(id: int) -> void:
 			return
 
 
+## World-scene setup: register a static solid body (debris chunk) the ship can
+## collide with. Shares the contact id counter so ids never clash across lists.
+## `hull` is an optional world-space convex point cloud: when non-empty the ship
+## is tested against the tight hull (CollisionSystem GJK) and position/radius
+## serve only as the broadphase bounding sphere; empty leaves the body a plain
+## sphere/capsule. A tumbling chunk rewrites position + hull each frame via the
+## live dict from get_obstacle(). `is_wreck` tags the derelict's own members so
+## the approach autopilot can measure distance to the wreck surface
+## (CollisionSystem.wreck_surface_distance) apart from stray debris.
+func register_obstacle(obstacle_name: String, position: Vector3, radius: float,
+		hull := PackedVector3Array(), is_wreck := false) -> int:
+	var id := _next_contact_id
+	_next_contact_id += 1
+	obstacles.append({
+		"id": id,
+		"name": obstacle_name,
+		"position": position,
+		"radius": radius,
+		"hull": hull,
+		"wreck": is_wreck,
+	})
+	return id
+
+
+func remove_obstacle(id: int) -> void:
+	for i in obstacles.size():
+		if obstacles[i]["id"] == id:
+			obstacles.remove_at(i)
+			return
+
+
 func get_contact(id: int) -> Dictionary:
 	for contact in contacts:
 		if contact["id"] == id:
 			return contact
+	return {}
+
+
+## The returned dict is the live entry (Dictionaries are references), so a
+## caller tracking a moving body can update its "position" in place — that's how
+## DebrisField keeps a tumbling chunk's collision sphere on the mesh.
+func get_obstacle(id: int) -> Dictionary:
+	for obstacle in obstacles:
+		if obstacle["id"] == id:
+			return obstacle
 	return {}
 
 

@@ -37,6 +37,14 @@ const PROFILES := [
 			# Throttle-side buttons observed as 6/7 (Fire E/D by feel — swap
 			# here if the physical buttons turn out reversed).
 			{"button": 7, "action": "ops_approach"},
+			# POV hat -> lateral/vertical strafe. This throttle reports the hat as
+			# plain buttons 19-22 (NOT the DPAD): 19 up / 20 right / 21 down /
+			# 22 left, captured with InputEcho. Clear of the reserved selector bank
+			# (23-25) below.
+			{"button": 22, "action": "strafe_left"},
+			{"button": 20, "action": "strafe_right"},
+			{"button": 19, "action": "thrust_up"},
+			{"button": 21, "action": "thrust_down"},
 		],
 		"throttle": {"axis": 2, "idle_deadzone": 0.95},
 		"reserved_buttons": [23, 24, 25],

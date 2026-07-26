@@ -30,6 +30,10 @@ var _x55: Object
 var _axis_shown: Dictionary = {}
 var _last_panel_report := PackedByteArray()
 var _last_x55_report := PackedByteArray()
+## Raw-HID hex dumps (panel + X55) flood the log while an analog stick jitters,
+## burying the joypad button/axis lines. H mutes them so a single device can be
+## isolated (e.g. reading the X52 hat's button indices).
+var _hid_muted := false
 
 @onready var _label: RichTextLabel = %Log
 
@@ -38,7 +42,7 @@ func _ready() -> void:
 	get_window().title = "Salvager — Input Echo"
 	get_window().size = Vector2i(1100, 720)
 	_log_file = FileAccess.open(LOG_PATH, FileAccess.WRITE)
-	_emit("INPUT ECHO — work every axis/button/hat/switch once, Esc quits")
+	_emit("INPUT ECHO — work every axis/button/hat/switch once. H mutes raw HID, Esc quits")
 	_emit("log file: %s" % ProjectSettings.globalize_path(LOG_PATH))
 	Input.joy_connection_changed.connect(_on_joy_changed)
 	_list_joypads()
@@ -112,6 +116,9 @@ func _on_joy_changed(device: int, connected: bool) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		get_tree().quit()
+	elif event is InputEventKey and event.pressed and event.keycode == KEY_H:
+		_hid_muted = not _hid_muted
+		_emit("raw HID dumps %s (H toggles)" % ("MUTED" if _hid_muted else "shown"))
 	elif event is InputEventJoypadButton:
 		_emit("device %d  BUTTON %2d  %s" % [
 			event.device, event.button_index,
@@ -126,6 +133,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
+	if _hid_muted:
+		return
 	if _panel != null:
 		var report: PackedByteArray = _panel.call("read_timeout", 8, 0)
 		if not report.is_empty() and report != _last_panel_report:

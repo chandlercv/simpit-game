@@ -13,3 +13,6 @@ manual_accel = 4.0
 rotation_rate_deg = 45.0
 max_speed = 25.0
 cut_rate = 0.35
+collision_a = Vector3(0, -0.7, -0.95)
+collision_b = Vector3(0, -0.7, 0.95)
+collision_radius = 0.35

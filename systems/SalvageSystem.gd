@@ -8,8 +8,15 @@ extends Node
 ## barely moves it. Which member to cut is a read-the-wreck decision made on
 ## the Tactical display's structural overlay, not a countdown timer.
 
-## Cutting head reach; approach must be MATCHED inside this to cut.
+## Cutting head reach; approach must be MATCHED inside this to cut. Also the
+## centre-based standoff used when no wreck surface is available (headless).
 const CUT_RANGE := 14.0
+## Gap held between the ship hull and the wreck's surface when the approach
+## autopilot parks (surface-relative; see _update_approach). Small enough that
+## the cutting head reaches, large enough to clear the frame from any angle.
+const STANDOFF_GAP := 2.0
+## Remaining travel (m) to the park point that still counts as matched.
+const MATCH_SLACK := 1.0
 ## Structural scan only resolves the graph inside this range.
 const SCAN_RANGE := 300.0
 ## Seconds for a full structural scan at 100% SENSORS allocation.
@@ -167,6 +174,13 @@ func wreck_distance() -> float:
 	return ship_pos.distance_to(GameState.wreck["position"])
 
 
+## Ship collision radius, or a fallback for an unbaked capsule — mirrors
+## CollisionSystem so the surface standoff and the actual collision agree.
+func _ship_radius() -> float:
+	var r: float = GameState.ship_def.collision_radius
+	return r if r > 0.0 else 2.5
+
+
 ## --- System-to-system entry points ----------------------------------------
 
 
@@ -208,6 +222,19 @@ func trigger_collapse() -> void:
 	_risk_base = 0.97
 	_set_risk(0.97)
 	GameState.post_comms("SALVAGE", "WRECK FRAME COLLAPSED — REMAINING SALVAGE LOST")
+
+
+## CollisionSystem: the approach autopilot drove the ship into a solid body on
+## the path. The kinematic controller recomputes velocity toward the standoff
+## every frame, discarding the collision bounce, so it would grind indefinitely.
+## Break to manual — _update_manual_flight integrates velocity, so the bounce
+## carries the ship clear and damps out.
+func abort_approach_on_collision() -> void:
+	if GameState.approach_state == "HOLDING":
+		return
+	_abort_cut("PATH OBSTRUCTED")
+	_set_approach("HOLDING")
+	GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
 
 
 ## MarketSystem: called on leaving the site (docking) — approach state has no
@@ -294,23 +321,34 @@ func _update_approach(delta: float) -> void:
 		_update_manual_flight(delta)
 		return
 	var wreck_pos: Vector3 = GameState.wreck["position"]
-	var offset: Vector3 = transform.origin - wreck_pos
-	# Station-keeping point just inside cutting range, on our approach axis.
-	var standoff: Vector3 = wreck_pos + offset.normalized() * (CUT_RANGE - 4.0)
-	var to_target: Vector3 = standoff - transform.origin
-	var dist := to_target.length()
+	var origin: Vector3 = transform.origin
+	var to_center: Vector3 = wreck_pos - origin
+	var center_dist := to_center.length()
+	var approach_dir := to_center / center_dist if center_dist > 0.001 else -transform.basis.z
+	# Distance we may still close before parking. Prefer the true gap to the
+	# wreck's surface (its tight per-member hulls) so we park a fixed clearance
+	# off the facing structure from any angle; fall back to a centre-based
+	# standoff when no wreck hull is registered (headless with no 3D scene).
+	var ship_a: Vector3 = origin + transform.basis * GameState.ship_def.collision_a
+	var ship_b: Vector3 = origin + transform.basis * GameState.ship_def.collision_b
+	var surface: float = CollisionSystem.wreck_surface_distance(ship_a, ship_b)
+	var remaining: float
+	if surface < INF:
+		remaining = (surface - _ship_radius()) - STANDOFF_GAP
+	else:
+		remaining = center_dist - (CUT_RANGE - 4.0)
 	# Closing speed profile: proportional braking, capped by ship performance
 	# scaled by THRUST allocation (starve the channel and the burn crawls).
-	var speed: float = clampf(dist * 0.4, 0.0,
+	var speed: float = clampf(remaining * 0.4, 0.0,
 			GameState.ship_def.approach_speed * maxf(GameState.power("THRUST"), 0.05))
-	var velocity: Vector3 = to_target.normalized() * speed if dist > 0.01 else Vector3.ZERO
+	var velocity: Vector3 = approach_dir * speed if remaining > 0.01 else Vector3.ZERO
 	transform.origin += velocity * delta
 	ship["transform"] = transform
 	ship["velocity"] = velocity
 	if GameState.approach_state == "APPROACHING" \
-			and wreck_distance() <= CUT_RANGE and speed < 0.6:
+			and remaining <= MATCH_SLACK and speed < 0.6:
 		_set_approach("MATCHED")
-		GameState.post_comms("OPS", "VELOCITY MATCHED — INSIDE CUTTING RANGE")
+		GameState.post_comms("OPS", "VELOCITY MATCHED — HOLDING AT CUTTING STANDOFF")
 
 
 ## Newtonian-lite manual flight (Phase 5): rate-controlled attitude, thruster
