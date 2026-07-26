@@ -15,6 +15,9 @@ const CHUNK_RADIUS_BASE := 2.0
 @onready var _debris: Node3D = $Debris
 
 var _spins: Array[Vector3] = []
+## Obstacle ids we registered in GameState, so a re-instantiated field removes
+## its own solid bodies instead of leaving stale/duplicate ones behind.
+var _obstacle_ids: Array[int] = []
 
 
 func _ready() -> void:
@@ -32,9 +35,18 @@ func _ready() -> void:
 		var chunk3d: Node3D = chunk
 		var radius := CHUNK_RADIUS_BASE * maxf(chunk3d.scale.x,
 				maxf(chunk3d.scale.y, chunk3d.scale.z))
-		GameState.register_obstacle(chunk3d.name, chunk3d.global_position, radius)
+		_obstacle_ids.append(
+				GameState.register_obstacle(chunk3d.name, chunk3d.global_position, radius))
 	GameState.register_contact(
 		"UNSTABLE DEBRIS", _debris.get_node(THREAT_CHUNK).global_position, true)
+
+
+## Drop our solid bodies when the field leaves the tree so a re-instantiated
+## world doesn't accumulate duplicate or stale obstacles in GameState.
+func _exit_tree() -> void:
+	for id in _obstacle_ids:
+		GameState.remove_obstacle(id)
+	_obstacle_ids.clear()
 
 
 func _process(delta: float) -> void:

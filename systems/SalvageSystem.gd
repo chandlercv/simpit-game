@@ -210,6 +210,19 @@ func trigger_collapse() -> void:
 	GameState.post_comms("SALVAGE", "WRECK FRAME COLLAPSED — REMAINING SALVAGE LOST")
 
 
+## CollisionSystem: the approach autopilot drove the ship into a solid body on
+## the path. The kinematic controller recomputes velocity toward the standoff
+## every frame, discarding the collision bounce, so it would grind indefinitely.
+## Break to manual — _update_manual_flight integrates velocity, so the bounce
+## carries the ship clear and damps out.
+func abort_approach_on_collision() -> void:
+	if GameState.approach_state == "HOLDING":
+		return
+	_abort_cut("PATH OBSTRUCTED")
+	_set_approach("HOLDING")
+	GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
+
+
 ## MarketSystem: called on leaving the site (docking) — approach state has no
 ## meaning away from the wreck and shouldn't leak "MATCHED" into the station
 ## visit or trip a spurious autopilot-disengage when the stick moves.

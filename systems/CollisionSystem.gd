@@ -95,6 +95,11 @@ func _process(delta: float) -> void:
 		xform.origin = origin
 		ship["transform"] = xform
 		ship["velocity"] = velocity
+		# A bounce during an active approach means something is on the path (rival/
+		# debris) — the kinematic autopilot can't model the contact and would drive
+		# straight back in and grind, so hand control back to the pilot.
+		if GameState.approach_state != "HOLDING":
+			SalvageSystem.abort_approach_on_collision()
 
 
 ## Union of solid bodies this frame. The wreck is explicit (always on site); the
@@ -149,6 +154,11 @@ func _apply_impact(body: Dictionary, xform: Transform3D, normal: Vector3,
 
 ## Which hull section faced the impact: transform the toward-body direction into
 ## ship-local axes (-Z fore, +X starboard, +Y up) and pick the dominant one.
+## Returns BOW/DRIVE/PORT/STBD/CORE only — never AFT. AFT shares DRIVE's rear
+## bearing from the centroid, and a direction-only test can't separate two
+## sections on the same axis, so rear impacts intentionally tag DRIVE (the
+## exposed rearmost block). AFT is an interior section that degrades only via
+## collapse/debris (see ThreatSystem._update_collapse).
 func _impact_section(xform: Transform3D, normal: Vector3) -> String:
 	var local := xform.basis.inverse() * (-normal)
 	var ax := absf(local.x)
