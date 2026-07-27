@@ -22,19 +22,22 @@ var disabled := false:
 		disabled = v
 		if v:
 			_mouse_dragging = false
+			_touch_dragging = false
 		queue_redraw()
 
 var _mouse_dragging := false
+var _touch_dragging := false
 
 
 func _gui_input(event: InputEvent) -> void:
 	if disabled:
 		return
 	if event is InputEventScreenTouch:
+		_touch_dragging = event.pressed
 		if event.pressed:
 			_apply(event.position)
 		accept_event()
-	elif event is InputEventScreenDrag:
+	elif event is InputEventScreenDrag and _touch_dragging:
 		_apply(event.position)
 		accept_event()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
