@@ -20,6 +20,8 @@ var value: float = 0.0:
 var disabled := false:
 	set(v):
 		disabled = v
+		if v:
+			_mouse_dragging = false
 		queue_redraw()
 
 var _mouse_dragging := false
