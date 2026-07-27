@@ -118,3 +118,7 @@ func _route_intent(switch_name: String, on: bool) -> void:
 	match switch_name:
 		"MASTER_BAT":
 			GameState.set_master_battery(on)
+		"MASTER_ALT":
+			GameState.set_master_alt(on)
+		"AVIONICS", "FUEL_PUMP", "DE_ICE", "PITOT_HEAT":
+			GameState.set_power_switch(switch_name, on)

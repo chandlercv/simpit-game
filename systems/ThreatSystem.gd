@@ -147,7 +147,10 @@ func _update_patrol(delta: float) -> void:
 		return
 	var ship_pos: Vector3 = GameState.local_ship()["transform"].origin
 	var to_ship: Vector3 = ship_pos - contact["position"]
-	if to_ship.length() > PATROL_ENFORCE_RANGE:
+	# Running dark (a master electrical switch off) shrinks the range at which the
+	# patrol can pick the ship out and enforce the claim.
+	var enforce_range := PATROL_ENFORCE_RANGE * GameState.passive_signature()
+	if to_ship.length() > enforce_range:
 		contact["position"] += to_ship.normalized() * PATROL_SPEED * delta
 	elif not _patrol_enforced:
 		# Caught working the claim: fine + reputation hit with the holder.

@@ -15,10 +15,19 @@ var value: float = 0.0:
 		value = clampf(v, 0.0, 1.0)
 		queue_redraw()
 
+## When true the slider ignores input and dims — the master electrical switches
+## lock the power mix, so touch edits mustn't fight the override (PowerSliders).
+var disabled := false:
+	set(v):
+		disabled = v
+		queue_redraw()
+
 var _mouse_dragging := false
 
 
 func _gui_input(event: InputEvent) -> void:
+	if disabled:
+		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_apply(event.position)
@@ -49,16 +58,18 @@ func _track_rect() -> Rect2:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
+	# Dim everything to read as inert while a master switch locks the mix.
+	var tint := accent.darkened(0.5) if disabled else accent
 	var track := _track_rect()
-	draw_rect(track, Color(accent, 0.4), false, 1.0)
+	draw_rect(track, Color(tint, 0.4), false, 1.0)
 	for i in range(1, 4):
 		var y := track.position.y + track.size.y * float(i) / 4.0
 		draw_line(Vector2(track.position.x - 5, y),
-				Vector2(track.position.x, y), Color(accent, 0.4), 1.0)
+				Vector2(track.position.x, y), Color(tint, 0.4), 1.0)
 	var fill_h := (track.size.y - 4.0) * value
 	draw_rect(Rect2(track.position.x + 2.0, track.end.y - 2.0 - fill_h,
-			track.size.x - 4.0, fill_h), Color(accent, 0.75))
+			track.size.x - 4.0, fill_h), Color(tint, 0.75))
 	draw_string(font, Vector2(0, 18), "%d%%" % roundi(value * 100.0),
-			HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, accent)
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, tint)
 	draw_string(font, Vector2(0, size.y - 10), label,
-			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, Color(accent, 0.8))
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, Color(tint, 0.8))

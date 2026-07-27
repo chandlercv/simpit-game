@@ -34,11 +34,20 @@ func _ready() -> void:
 
 func _sync() -> void:
 	var power: Dictionary = GameState.local_ship()["power"]
+	var locked := GameState.power_locked()
 	for channel: String in _sliders:
 		# Setting .value doesn't re-emit user_changed_value, so no feedback loop.
 		_sliders[channel].value = power[channel]
+		_sliders[channel].disabled = locked
 	var total := GameState.power_total()
 	var over := total > GameState.power_budget()
-	_header.text = "POWER  %.1f / %.1f%s" % [
-		total, GameState.power_budget(), "  — REACTOR OVERDRAW" if over else ""]
+	# A master switch off owns the mix — flag that over the overdraw warning.
+	var note := ""
+	if not GameState.master_bat:
+		note = "  — OFFLINE (BAT)"
+	elif not GameState.master_alt:
+		note = "  — THRUST LOCK (ALT)"
+	elif over:
+		note = "  — REACTOR OVERDRAW"
+	_header.text = "POWER  %.1f / %.1f%s" % [total, GameState.power_budget(), note]
 	_header.add_theme_color_override("font_color", OVER_BUDGET if over else accent)
