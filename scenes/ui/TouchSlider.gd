@@ -22,22 +22,27 @@ var disabled := false:
 		disabled = v
 		if v:
 			_mouse_dragging = false
-			_touch_dragging = false
+			_touch_index = -1
 		queue_redraw()
 
 var _mouse_dragging := false
-var _touch_dragging := false
+## Index of the finger currently driving the slider, or -1 when none. Tracking
+## the specific touch means a second finger lifting off doesn't cancel the drag
+## the still-held finger owns.
+var _touch_index := -1
 
 
 func _gui_input(event: InputEvent) -> void:
 	if disabled:
 		return
 	if event is InputEventScreenTouch:
-		_touch_dragging = event.pressed
 		if event.pressed:
+			_touch_index = event.index
 			_apply(event.position)
+		elif event.index == _touch_index:
+			_touch_index = -1
 		accept_event()
-	elif event is InputEventScreenDrag and _touch_dragging:
+	elif event is InputEventScreenDrag and event.index == _touch_index:
 		_apply(event.position)
 		accept_event()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
