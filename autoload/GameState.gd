@@ -13,6 +13,8 @@ signal contacts_changed
 signal tracked_contact_changed(id: int)
 signal sensor_mode_changed(mode: String)
 signal power_changed
+## Passive-scanner visibility multiplier changed (master electrical switches).
+signal signature_changed(value: float)
 signal comms_posted(entry: Dictionary)
 
 ## Phase 4 signals, emitted by systems/*.gd (declared here so any display can
@@ -53,6 +55,20 @@ const SENSOR_MODES: Array[String] = ["PASSIVE", "ACTIVE", "STRUCT"]
 ## Power allocation channels, each 0..1. The reactor can't run everything at
 ## full: the UI warns when the summed allocation exceeds power_budget().
 const POWER_CHANNELS: Array[String] = ["THRUST", "CUTTER", "SENSORS", "LIFE"]
+
+## Switch-panel toggle -> power channel it drives (thematic pairing). ON sets the
+## channel to power_high, OFF to power_low. SwitchPanelBridge reads this to route
+## the four channel switches; gameplay semantics live here, not in the bridge.
+const CHANNEL_SWITCHES: Dictionary = {
+	"FUEL_PUMP": "THRUST",
+	"AVIONICS": "SENSORS",
+	"DE_ICE": "CUTTER",
+	"PITOT_HEAT": "LIFE",
+}
+
+## Channels whose switch "high" isn't the shared power_high: LIFE runs full when
+## its switch is on (life support isn't something you run at part power).
+const CHANNEL_HIGH_OVERRIDE: Dictionary = {"LIFE": 1.0}
 
 const HULL_SECTIONS: Array[String] = ["BOW", "PORT", "STBD", "CORE", "AFT", "DRIVE"]
 
@@ -145,10 +161,22 @@ var tick: int = 0
 var _tick_accum := 0.0
 var _next_contact_id := 0
 
-## Power allocations captured when the master battery is cut, so switching it
-## back restores the prior mix. Owned here (not in a driver node) so every input
-## surface — switch panel, touch UI, future ones — shares one power model.
-var _power_before_bat: Dictionary = {}
+## High/low settings the channel switches toggle between (0..1). Plain vars, not
+## const, so a future settings surface can rewrite them per player.
+var power_high := 0.8
+var power_low := 0.2
+
+## Master electrical switches. Off states override the channel mix (see
+## _apply_electrical) and lock power against edits (power_locked).
+var master_bat := true
+var master_alt := true
+
+## Desired per-channel allocation the switches and touch sliders write. The
+## master overrides are computed on top of this each _apply_electrical, so the
+## prior mix is restored automatically when a master comes back on — no snapshot.
+## Owned here (not in a driver node) so every input surface — switch panel, touch
+## UI, future ones — shares one power model.
+var _power_target: Dictionary = {}
 
 
 func _ready() -> void:
@@ -165,6 +193,7 @@ func _ready() -> void:
 		"cargo_vol_limit_m3": ship_def.cargo_vol_limit_m3,
 		"power": {"THRUST": 0.8, "CUTTER": 0.0, "SENSORS": 0.6, "LIFE": 1.0},
 	}
+	_power_target = ships[LOCAL_PEER_ID]["power"].duplicate()
 	post_comms("SYSTEM", "DISPLAY NETWORK ONLINE — %s" % ship_def.display_name)
 
 
@@ -274,28 +303,84 @@ func set_sensor_mode(mode: String) -> void:
 	post_comms("SENSORS", "SWEEP MODE %s" % mode)
 
 
+## Touch-slider intent: set a channel's desired allocation. No-op while power is
+## locked (a master off) — the master override owns the live mix then.
 func set_power(channel: String, value: float) -> void:
-	var power: Dictionary = local_ship()["power"]
-	if not power.has(channel):
+	if power_locked() or not _power_target.has(channel):
 		return
-	power[channel] = clampf(value, 0.0, 1.0)
+	_power_target[channel] = clampf(value, 0.0, 1.0)
+	_apply_electrical()
+
+
+## Channel-switch intent (SwitchPanelBridge): ON = high setting, OFF = low.
+## Unlike set_power, this always records the switch's target even while power is
+## locked — a physical toggle's position is authoritative and must survive the
+## lockout so the mix is correct when a master comes back on. Only the live
+## re-apply is gated on the lock; the master override owns the live mix meanwhile.
+func set_power_switch(switch_name: String, on: bool) -> void:
+	if not CHANNEL_SWITCHES.has(switch_name):
+		return
+	var channel: String = CHANNEL_SWITCHES[switch_name]
+	var hi: float = CHANNEL_HIGH_OVERRIDE.get(channel, power_high)
+	_power_target[channel] = hi if on else power_low
+	# A physical toggle's position is authoritative even while a master is off —
+	# record it so the mix is correct when power returns. The master override
+	# still owns the live mix until then, so only push to live power when unlocked.
+	if not power_locked():
+		_apply_electrical()
+
+
+## Master-alternator intent: off rigs all power to thrusters (THRUST full, rest
+## zero), overriding the channel mix; on restores the desired mix. See
+## _apply_electrical for the override precedence with the battery.
+func set_master_alt(on: bool) -> void:
+	master_alt = on
+	_apply_electrical()
+	signature_changed.emit(passive_signature())
+
+
+## Master-battery intent: off kills all reactor power; on restores the desired
+## mix. Restore is automatic — the desired mix in _power_target is never
+## clobbered by the off override — so this is idempotent on repeated off.
+func set_master_battery(on: bool) -> void:
+	master_bat = on
+	_apply_electrical()
+	signature_changed.emit(passive_signature())
+
+
+## True while a master electrical switch is off: the master override owns the
+## live power mix, so switches and sliders can't edit it.
+func power_locked() -> bool:
+	return not master_bat or not master_alt
+
+
+## Recompute the live per-channel power from the desired mix plus the master
+## overrides, then emit power_changed once. Battery off wins over alternator off
+## (a dead bus can't feed the thrusters either).
+func _apply_electrical() -> void:
+	var power: Dictionary = local_ship()["power"]
+	for channel: String in POWER_CHANNELS:
+		var value: float
+		if not master_bat:
+			value = 0.0
+		elif not master_alt:
+			# Rig for escape: everything to thrust, but keep life support alive.
+			value = 1.0 if channel == "THRUST" or channel == "LIFE" else 0.0
+		else:
+			value = _power_target.get(channel, 0.0)
+		power[channel] = clampf(value, 0.0, 1.0)
 	power_changed.emit()
 
 
-## Master-battery intent: off snapshots and zeroes every channel; on restores
-## the snapshot. Idempotent on repeated off (a second off won't overwrite the
-## snapshot with all-zeros), which the panel's change-dedup used to guarantee
-## implicitly but a touch toggle would not.
-func set_master_battery(on: bool) -> void:
-	if on:
-		for channel: String in _power_before_bat:
-			set_power(channel, _power_before_bat[channel])
-		_power_before_bat = {}
-	else:
-		if _power_before_bat.is_empty():
-			_power_before_bat = local_ship()["power"].duplicate()
-		for channel: String in POWER_CHANNELS:
-			set_power(channel, 0.0)
+## Visibility to passive scanners, 0..1. Running dark on a master halves it;
+## both off multiply to 0.25. Consumed by ThreatSystem (patrol enforce range).
+func passive_signature() -> float:
+	var s := 1.0
+	if not master_alt:
+		s *= 0.5
+	if not master_bat:
+		s *= 0.5
+	return s
 
 
 func power(channel: String) -> float:
