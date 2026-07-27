@@ -37,8 +37,9 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
-			_touch_index = event.index
-			_apply(event.position)
+			if _touch_index == -1:
+				_touch_index = event.index
+				_apply(event.position)
 		elif event.index == _touch_index:
 			_touch_index = -1
 		accept_event()
