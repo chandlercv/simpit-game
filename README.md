@@ -97,9 +97,11 @@ three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
 full (100%) on / low off. Any channel can also be set to any value on the tablet
 sliders. The two master electrical switches override the whole mix: **MASTER ALT
 off** rigs for escape (THRUST 100% and LIFE 100%, cutter and sensors to 0);
-**MASTER BAT off** kills everything. While either master is off the mix is locked
-(switches and sliders do nothing) and comes back exactly as it was when the
-master returns. Running dark this way also halves the ship's visibility to
+**MASTER BAT off** kills everything. While either master is off the live mix is
+locked and the master override owns it, but the physical channel switches still
+register — the mix comes back matching the panel's current switch positions when
+the master returns (touch-slider edits made while locked are ignored). Running
+dark this way also halves the ship's visibility to
 passive scanners — the claim-holder's patrol has to close to half its usual range
 before it can fine you (a quarter if both masters are off).
 
@@ -144,8 +146,8 @@ the comms log, but only these are wired to gameplay today:
 
 | Switch | Effect |
 | --- | --- |
-| **MASTER BAT** | Off = cut all reactor power (zeros every channel); On = restore the mix from before. While off, power can't be changed and the ship's visibility to passive scanners drops 50%. |
-| **MASTER ALT** | Off = rig for escape — THRUST 100% and LIFE 100%, CUTTER/SENSORS 0 — overriding the switch settings; On = restore the mix from before. While off, power can't be changed and passive-scanner visibility drops 50% (stacks with BAT → 25% if both off). |
+| **MASTER BAT** | Off = cut all reactor power (zeros every channel); On = restore the mix matching the current channel-switch positions. While off, the live mix can't be changed and the ship's visibility to passive scanners drops 50%. |
+| **MASTER ALT** | Off = rig for escape — THRUST 100% and LIFE 100%, CUTTER/SENSORS 0 — overriding the switch settings; On = restore the mix matching the current channel-switch positions. While off, the live mix can't be changed and passive-scanner visibility drops 50% (stacks with BAT → 25% if both off). |
 | **FUEL PUMP** | THRUST power: On = high (80%), Off = low (20%). |
 | **AVIONICS** | SENSORS power: On = high, Off = low. |
 | **DE-ICE** | CUTTER power: On = high, Off = low. |
@@ -155,7 +157,8 @@ the comms log, but only these are wired to gameplay today:
 
 The four channel switches toggle between shared **high (80%)** and **low (20%)**
 settings; the tablet's touch sliders can still set any value in between (until
-the next switch flip). MASTER ALT / MASTER BAT off lock both surfaces.
+the next switch flip). MASTER ALT / MASTER BAT off lock the live mix on both
+surfaces, though physical switch positions still register for when power returns.
 
 The remaining switches — COWL, PANEL, BEACON, STROBE, TAXI, the 5-position
 magneto (OFF/R/L/BOTH/START), and the GEAR UP/DOWN lever — are decoded and logged
@@ -184,8 +187,9 @@ but have no gameplay effect yet.
 | **Tablet** | Touch sliders for THRUST / CUTTER / SENSORS / LIFE power. |
 | **Chart** | Per-faction **DOCK**, then **SELL HOLD** / **DEPART FOR CLAIM**. |
 
-Any input surface can drive the same intent — e.g. the master-battery power-kill
-is reachable from the switch panel and, via the power sliders, from the tablet.
+Any input surface can drive the same intent — e.g. the four power channels are
+set from the tablet's touch sliders and, equivalently, from the switch panel's
+channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT HEAT).
 
 ### Remapping the HOTAS controls
 

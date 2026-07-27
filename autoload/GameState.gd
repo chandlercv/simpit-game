@@ -313,14 +313,21 @@ func set_power(channel: String, value: float) -> void:
 
 
 ## Channel-switch intent (SwitchPanelBridge): ON = high setting, OFF = low.
-## No-op while power is locked, mirroring set_power.
+## Unlike set_power, this always records the switch's target even while power is
+## locked — a physical toggle's position is authoritative and must survive the
+## lockout so the mix is correct when a master comes back on. Only the live
+## re-apply is gated on the lock; the master override owns the live mix meanwhile.
 func set_power_switch(switch_name: String, on: bool) -> void:
-	if power_locked() or not CHANNEL_SWITCHES.has(switch_name):
+	if not CHANNEL_SWITCHES.has(switch_name):
 		return
 	var channel: String = CHANNEL_SWITCHES[switch_name]
 	var hi: float = CHANNEL_HIGH_OVERRIDE.get(channel, power_high)
 	_power_target[channel] = hi if on else power_low
-	_apply_electrical()
+	# A physical toggle's position is authoritative even while a master is off —
+	# record it so the mix is correct when power returns. The master override
+	# still owns the live mix until then, so only push to live power when unlocked.
+	if not power_locked():
+		_apply_electrical()
 
 
 ## Master-alternator intent: off rigs all power to thrusters (THRUST full, rest

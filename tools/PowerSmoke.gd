@@ -42,11 +42,16 @@ func _run() -> void:
 	GameState.set_power("SENSORS", 0.5)
 	GameState.set_power_switch("DE_ICE", false)
 	_check(GameState.power("SENSORS") == 0.0 and GameState.power("CUTTER") == 0.0,
-			"edits are no-ops while locked")
+			"edits don't touch the live mix while locked")
 	GameState.set_master_alt(true)
+	# Touch-slider edits while locked are ignored (SENSORS restores to its pre-lock
+	# high), but a physical channel switch flipped while locked is honored on
+	# restore (DE_ICE off -> CUTTER low) so the mix matches the panel, not the old
+	# state. Regression guard: intents used to be discarded, resurfacing stale.
 	_check(GameState.power("THRUST") == hi and GameState.power("SENSORS") == hi \
-			and GameState.power("CUTTER") == hi and GameState.power("LIFE") == 1.0,
-			"ALT on -> prior mix restored")
+			and GameState.power("CUTTER") == lo and GameState.power("LIFE") == 1.0,
+			"ALT on -> mix restored to current switch positions")
+	GameState.set_power_switch("DE_ICE", true)
 
 	# 3. MASTER BAT off zeros everything and locks; on restores.
 	GameState.set_master_battery(false)
