@@ -1,5 +1,9 @@
 # Asset Credits
 
+For engine and other software attribution (Godot Engine, MIT), see
+[THIRDPARTY.md](THIRDPARTY.md) — that file is the authoritative notice that must
+ship with distributed builds.
+
 Third-party assets are organized **by license at the folder level** so a future
 "what needs replacing before this could be sold" audit is a grep for one folder
 path, not a per-asset license lookup (see Docs/Plans/simpit-plan.md, Phase 2):
@@ -16,7 +20,7 @@ Update the table below **as assets are added**, not reconstructed after the fact
 
 | Asset | Source URL | License | Folder |
 |---|---|---|---|
-| Space Kit (39 selected `.glb` models of the 153-model kit: corridors, structures, pipes, platforms, machines, dishes, meteors/rocks, craft, props) | https://kenney.nl/assets/space-kit | CC0 | `assets/cc0/kenney-space-kit/` |
+| Space Kit (39 selected `.glb` models of the 153-model kit: corridors, structures, pipes, platforms, machines, dishes, meteors/rocks, craft, props) | https://kenney.nl/assets/space-kit | CC0 (see [LICENSE.txt](assets/cc0/kenney-space-kit/LICENSE.txt)) | `assets/cc0/kenney-space-kit/` |
 
 ## Recommended sources
 
