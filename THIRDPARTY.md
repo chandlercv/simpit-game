@@ -60,5 +60,5 @@ SOFTWARE.
 
 CC0 legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
 
-The full license text also lives alongside the assets in
+An abbreviated license summary also lives alongside the assets in
 [assets/cc0/kenney-space-kit/LICENSE.txt](assets/cc0/kenney-space-kit/LICENSE.txt).
