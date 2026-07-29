@@ -1,22 +1,27 @@
 extends Control
 class_name ControlsSetup
 ## In-game HOTAS remapper, opened with the configure_controls hotkey (see
-## InputRouter._toggle_controls_setup). It writes a user profile JSON via
+## InputRouter._toggle_controls_setup). It writes user profile JSON via
 ## InputConfig — the same files the file-based loader reads — so binding an
 ## arbitrary stick needs no code edit and no log-reading.
 ##
-## Flow: pick a connected joystick, then for each control press BIND and either
-## wiggle the axis / press the button, or (for an axis) pick an X52 mouse source.
-## SAVE writes user://input_profiles/<guid>.json and InputRouter rebinds live.
+## Flow: press BIND on a control, then move the axis / press the button on ANY
+## connected device — capture auto-detects which physical device+axis+button it
+## was, so a HOTAS split across a stick and a throttle just works (each device
+## saves its own profile). For an axis you can instead pick an X52 nub source.
 ##
-## Reuses tools/InputEcho's capture idea (next JoypadButton/Motion event). Held
-## selector buttons (the X55/X52 mode banks, always down) are sampled at BIND
-## start and refused, so they can't be captured by accident.
+## Capture POLLS the global Input singleton each frame rather than using _input:
+## in the multi-window simpit _input/_unhandled_input only fire for the focused
+## window's viewport, so joypad events were silently dropped (the "nothing
+## happens" bug). Input polling is process-global and focus-independent — the
+## same reason InputRouter/WindowManager poll their hotkeys. Held selector
+## buttons (X55/X52 mode banks, always down) are sampled at BIND start and
+## refused so they can't be captured by accident.
 
 signal closed
 
-## Axis-pair controls: BIND captures a joypad axis (or an X52 mouse source) that
-## drives `neg`..`pos`. `group` only organises the list.
+## Axis-pair controls: BIND captures a joypad axis (or an X52 nub source) driving
+## `neg`..`pos`. `group` only organises the list.
 const AXIS_TARGETS := [
 	{"label": "Pitch", "neg": "pitch_down", "pos": "pitch_up", "group": "ROTATION"},
 	{"label": "Yaw", "neg": "yaw_left", "pos": "yaw_right", "group": "ROTATION"},
@@ -33,54 +38,70 @@ const BUTTON_TARGETS := [
 ]
 ## X52 nub virtual axes offered as explicit picks for an axis row (matches
 ## InputRouter.HID_SOURCES). The X52 wheel is joypad buttons 32/33 — bind it on
-## an OPS row with BIND instead.
+## an OPS row with BIND instead. HID picks attach to the X52's profile on SAVE.
 const HID_SOURCE_LABELS := {
 	"x52_mouse_x": "X52 nub X", "x52_mouse_y": "X52 nub Y",
 }
-## A motion past this magnitude counts as "the user moved this axis".
+const X52_GUID := "0300ea18a30600005c07000000000000"
+
+## Axis deviation from its BIND-start rest that counts as "the user moved this".
 const AXIS_CAPTURE_THRESHOLD := 0.6
+const AXIS_SCAN_COUNT := 10
 const MAX_SCAN_BUTTONS := 40
 
-var _device := -1
-var _guid := ""
-## key "neg|pos" -> {"kind":"joy","axis":int,"reverse":bool}
+## key "neg|pos" -> {"kind":"joy","guid":String,"axis":int,"reverse":bool}
 ##                | {"kind":"hid","source":String,"reverse":bool}
 var _axis_binds: Dictionary = {}
-var _button_binds: Dictionary = {}  # action -> button int
-var _throttle: Dictionary = {}      # {} or {"axis":int,"invert":bool}
-## The loaded profile's throttle spec, verbatim, so an untouched throttle keeps
-## its calibration (idle_deadzone / custom idle-full endpoints / deadzone) on SAVE.
+## action -> {"guid":String,"button":int}
+var _button_binds: Dictionary = {}
+## {} or {"guid":String,"axis":int,"invert":bool}
+var _throttle: Dictionary = {}
+## The loaded throttle spec, verbatim, so an untouched throttle keeps its
+## calibration (idle_deadzone / custom idle-full endpoints / deadzone) on SAVE.
 var _throttle_orig: Dictionary = {}
-## True once the user re-captures the throttle axis: a fresh bind has no
-## calibration, so it writes plain ±1 endpoints instead of preserving _throttle_orig.
+## True once the throttle axis is re-captured: a fresh bind has no calibration,
+## so it writes plain ±1 endpoints instead of preserving _throttle_orig.
 var _throttle_rebound := false
+## guid -> {"name":String, "reserved_buttons":Array} for every connected device,
+## so SAVE preserves each device's name + reserved banks.
+var _dev_meta: Dictionary = {}
 
 ## Active BIND capture, or {} when idle.
-var _listening: Dictionary = {}     # {"kind":"axis"|"button"|"throttle", "key":..}
-var _held_at_start: Dictionary = {} # button indices held when BIND began
+var _listening: Dictionary = {}       # {"kind":"axis"|"button"|"throttle", "key":..}
+var _axis_baseline: Dictionary = {}   # "device:axis" -> float rest sampled at BIND
+var _btn_held: Dictionary = {}        # "device:button" -> true, held at BIND start
 
-var _device_option: OptionButton
+var _devices_label: Label
 var _status: Label
 var _rows_box: VBoxContainer
-var _value_labels: Dictionary = {}  # row key -> Label
+var _value_labels: Dictionary = {}    # row key -> Label
 
 
 func start() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Parented to a CanvasLayer, not a Control, so anchors alone don't stretch us
+	# to the viewport — set offsets too and re-fit on resize, else the backdrop
+	# and rows collapse to the top (the game view showed through below them).
+	_fit_to_viewport()
+	get_viewport().size_changed.connect(_fit_to_viewport)
 	_build_ui()
-	_refresh_devices()
+	_reload()
+
+
+func _fit_to_viewport() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	size = get_viewport().get_visible_rect().size
 
 
 # --- UI construction -------------------------------------------------------
 
 func _build_ui() -> void:
 	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.02, 0.03, 0.05, 0.94)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.02, 0.03, 0.05, 0.98)
 	add_child(bg)
 
 	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 40)
 	add_child(margin)
@@ -95,9 +116,14 @@ func _build_ui() -> void:
 	vbox.add_child(title)
 
 	var hint := Label.new()
-	hint.text = "Pick your joystick, then BIND each control: press the button or " \
-		+ "wiggle the axis. For an axis you can instead pick an X52 mouse source. " \
-		+ "REV flips an axis. SAVE writes a profile for this device. Esc closes."
+	hint.text = "Each row is a bindable function. Press a bind button, then work " \
+		+ "just that control on any device — it auto-detects which. AXIS binds an " \
+		+ "analog axis to a pair; −btn / +btn bind a button to each direction (use " \
+		+ "these for a POV hat that reports as buttons, e.g. strafe on the X52 " \
+		+ "hat). REV flips an axis; a nub source can be picked instead. A throttle " \
+		+ "can rest anywhere; let a spring-loaded stick axis recenter before the " \
+		+ "next bind. The X52 wheel is buttons 32/33 — bind it on an OPS row. SAVE " \
+		+ "writes a profile per device. Esc or CLOSE exits."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
@@ -106,17 +132,13 @@ func _build_ui() -> void:
 	var dev_row := HBoxContainer.new()
 	dev_row.add_theme_constant_override("separation", 10)
 	vbox.add_child(dev_row)
-	var dev_label := Label.new()
-	dev_label.text = "Device:"
-	dev_row.add_child(dev_label)
-	_device_option = OptionButton.new()
-	_device_option.focus_mode = Control.FOCUS_NONE
-	_device_option.item_selected.connect(_on_device_selected)
-	dev_row.add_child(_device_option)
+	_devices_label = Label.new()
+	_devices_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dev_row.add_child(_devices_label)
 	var rescan := Button.new()
 	rescan.text = "Rescan"
 	rescan.focus_mode = Control.FOCUS_NONE
-	rescan.pressed.connect(_refresh_devices)
+	rescan.pressed.connect(_reload)
 	dev_row.add_child(rescan)
 
 	_status = Label.new()
@@ -124,13 +146,13 @@ func _build_ui() -> void:
 	_status.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4))
 	vbox.add_child(_status)
 
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(scroll)
+	# Rows go straight into the main column: an earlier ScrollContainer here
+	# collapsed to zero height and clipped every row invisible. The ~16 rows fit
+	# the Main display; re-introduce scrolling only with an explicit height.
 	_rows_box = VBoxContainer.new()
 	_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rows_box.add_theme_constant_override("separation", 6)
-	scroll.add_child(_rows_box)
+	vbox.add_child(_rows_box)
 
 	_build_rows()
 
@@ -156,6 +178,10 @@ func _build_rows() -> void:
 	for target: Dictionary in AXIS_TARGETS:
 		last_group = _maybe_group_header(target["group"], last_group)
 		_add_axis_row(target)
+		if target["pos"] == "glance_down":  # last GLANCE row
+			_add_note("The X55 POV hat drives glance automatically via raw HID " \
+				+ "(off Godot's DPAD to avoid the selector collision) — no binding " \
+				+ "needed. Bind Glance here only for other hardware.")
 	# Throttle sits with translation semantically but is its own binding kind.
 	_maybe_group_header("THROTTLE", "")
 	_add_throttle_row()
@@ -163,6 +189,15 @@ func _build_rows() -> void:
 	for target: Dictionary in BUTTON_TARGETS:
 		last_group = _maybe_group_header(target["group"], last_group)
 		_add_button_row(target)
+
+
+func _add_note(text: String) -> void:
+	var note := Label.new()
+	note.text = text
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_font_size_override("font_size", 13)
+	note.add_theme_color_override("font_color", Color(0.55, 0.62, 0.72))
+	_rows_box.add_child(note)
 
 
 func _maybe_group_header(group: String, last_group: String) -> String:
@@ -185,7 +220,7 @@ func _row_container(name_text: String, key: String) -> HBoxContainer:
 	name_label.custom_minimum_size = Vector2(130, 0)
 	row.add_child(name_label)
 	var value := Label.new()
-	value.custom_minimum_size = Vector2(150, 0)
+	value.custom_minimum_size = Vector2(250, 0)
 	value.add_theme_color_override("font_color", Color(0.6, 0.95, 0.7))
 	row.add_child(value)
 	_value_labels[key] = value
@@ -195,16 +230,37 @@ func _row_container(name_text: String, key: String) -> HBoxContainer:
 func _add_axis_row(target: Dictionary) -> void:
 	var key: String = "%s|%s" % [target["neg"], target["pos"]]
 	var row := _row_container(target["label"], key)
+	# A direction pair can be driven by one analog AXIS, or by a BUTTON per
+	# direction (a POV hat that reports as buttons — e.g. the X52 throttle hat),
+	# or by an X52 nub source. The three are mutually exclusive per pair.
 	var bind := Button.new()
-	bind.text = "BIND"
+	bind.text = "AXIS"
+	bind.tooltip_text = "Bind an analog axis to this pair"
 	bind.focus_mode = Control.FOCUS_NONE
 	bind.pressed.connect(_begin_listen.bind({"kind": "axis", "key": key}))
 	row.add_child(bind)
+	var neg_btn := Button.new()
+	neg_btn.text = "−btn"
+	neg_btn.tooltip_text = "Bind a button to %s" % target["neg"]
+	neg_btn.focus_mode = Control.FOCUS_NONE
+	neg_btn.pressed.connect(_begin_listen.bind({"kind": "button", "key": target["neg"]}))
+	row.add_child(neg_btn)
+	var pos_btn := Button.new()
+	pos_btn.text = "+btn"
+	pos_btn.tooltip_text = "Bind a button to %s" % target["pos"]
+	pos_btn.focus_mode = Control.FOCUS_NONE
+	pos_btn.pressed.connect(_begin_listen.bind({"kind": "button", "key": target["pos"]}))
+	row.add_child(pos_btn)
 	var rev := Button.new()
 	rev.text = "REV"
 	rev.focus_mode = Control.FOCUS_NONE
 	rev.pressed.connect(_toggle_reverse.bind(key))
 	row.add_child(rev)
+	var clear := Button.new()
+	clear.text = "×"
+	clear.focus_mode = Control.FOCUS_NONE
+	clear.pressed.connect(_clear_axis.bind(key))
+	row.add_child(clear)
 	for source: String in HID_SOURCE_LABELS:
 		var hid_btn := Button.new()
 		hid_btn.text = HID_SOURCE_LABELS[source]
@@ -221,6 +277,11 @@ func _add_button_row(target: Dictionary) -> void:
 	bind.focus_mode = Control.FOCUS_NONE
 	bind.pressed.connect(_begin_listen.bind({"kind": "button", "key": target["action"]}))
 	row.add_child(bind)
+	var clear := Button.new()
+	clear.text = "×"
+	clear.focus_mode = Control.FOCUS_NONE
+	clear.pressed.connect(_clear_button.bind(target["action"]))
+	row.add_child(clear)
 
 
 func _add_throttle_row() -> void:
@@ -237,74 +298,145 @@ func _add_throttle_row() -> void:
 	row.add_child(inv)
 
 
-# --- Device handling -------------------------------------------------------
+# --- Load current bindings -------------------------------------------------
 
-func _refresh_devices() -> void:
-	_device_option.clear()
-	var pads := Input.get_connected_joypads()
-	for device in pads:
-		_device_option.add_item("%d: %s" % [device, Input.get_joy_name(device)], device)
-	if pads.is_empty():
-		_status.text = "No joystick connected. Plug one in and press Rescan."
-		_device = -1
-		_guid = ""
-		_load_working_from_profile()
-		return
-	_device = pads[0]
-	_device_option.select(0)
-	_on_device_selected(0)
-
-
-func _on_device_selected(index: int) -> void:
-	_device = _device_option.get_item_id(index)
-	_guid = Input.get_joy_guid(_device)
+func _reload() -> void:
 	_listening = {}
-	_status.text = "Editing: %s" % Input.get_joy_name(_device)
-	_load_working_from_profile()
-
-
-## Seed the working binds from this device's current effective profile so the
-## screen shows what's already mapped and SAVE preserves untouched controls.
-func _load_working_from_profile() -> void:
 	_axis_binds.clear()
 	_button_binds.clear()
 	_throttle.clear()
-	var profile := InputRouter.profile_for_guid(_guid) if not _guid.is_empty() else {}
-	for spec: Dictionary in profile.get("axes", []):
-		var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
-		_axis_binds[key] = {"kind": "joy", "axis": int(spec.get("axis", 0)), "reverse": false}
-	for spec: Dictionary in profile.get("hid_axes", []):
-		var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
-		_axis_binds[key] = {"kind": "hid", "source": String(spec.get("source", "")), "reverse": false}
-	for spec: Dictionary in profile.get("buttons", []):
-		_button_binds[String(spec.get("action", ""))] = int(spec.get("button", 0))
 	_throttle_orig = {}
 	_throttle_rebound = false
-	if profile.has("throttle"):
-		var t: Dictionary = profile["throttle"]
-		_throttle_orig = t.duplicate(true)
-		# Legacy idle_deadzone form is idle=+1/full=-1 (not inverted).
-		var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
-		_throttle = {"axis": int(t.get("axis", 0)), "invert": inv}
+	_dev_meta.clear()
+	var pads := Input.get_connected_joypads()
+	var names: PackedStringArray = []
+	for device in pads:
+		names.append(Input.get_joy_name(device))
+	_devices_label.text = "Connected: " + (", ".join(names) if not names.is_empty()
+			else "none — plug in a joystick and press Rescan")
+	# Seed the working binds from every connected device's effective profile so
+	# the value column shows what is currently mapped and SAVE preserves it.
+	for device in pads:
+		var guid := Input.get_joy_guid(device)
+		var profile := InputRouter.profile_for_guid(guid)
+		_dev_meta[guid] = {
+			"name": String(profile.get("name", Input.get_joy_name(device))),
+			"reserved_buttons": profile.get("reserved_buttons", []),
+		}
+		for spec: Dictionary in profile.get("axes", []):
+			var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
+			_axis_binds[key] = {"kind": "joy", "guid": guid, "axis": int(spec.get("axis", 0)), "reverse": false}
+		for spec: Dictionary in profile.get("hid_axes", []):
+			var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
+			_axis_binds[key] = {"kind": "hid", "source": String(spec.get("source", "")), "reverse": false}
+		for spec: Dictionary in profile.get("buttons", []):
+			_button_binds[String(spec.get("action", ""))] = {"guid": guid, "button": int(spec.get("button", 0))}
+		if profile.has("throttle"):
+			var t: Dictionary = profile["throttle"]
+			_throttle_orig = t.duplicate(true)
+			var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
+			_throttle = {"guid": guid, "axis": int(t.get("axis", 0)), "invert": inv}
+	if _status:
+		_status.text = "Ready — press BIND on a row."
 	_refresh_values()
 
 
-# --- Binding actions -------------------------------------------------------
+# --- Binding: begin + poll-based capture -----------------------------------
 
 func _begin_listen(what: Dictionary) -> void:
-	if _device == -1:
-		_status.text = "Pick a device first."
+	if Input.get_connected_joypads().is_empty():
+		_status.text = "No joystick connected."
 		return
 	_listening = what
-	_held_at_start = {}
-	if what["kind"] == "button":
-		# Sample always-held selector buttons now so we can refuse them.
+	# Snapshot every device's axis rest values + held buttons so we capture only
+	# what MOVES from here (handles axes that rest off-center, like a throttle).
+	_axis_baseline.clear()
+	_btn_held.clear()
+	for device in Input.get_connected_joypads():
+		for axis in AXIS_SCAN_COUNT:
+			_axis_baseline["%d:%d" % [device, axis]] = Input.get_joy_axis(device, axis as JoyAxis)
 		for b in MAX_SCAN_BUTTONS:
-			if Input.is_joy_button_pressed(_device, b as JoyButton):
-				_held_at_start[b] = true
-		_status.text = "Press the button for this control…"
+			if Input.is_joy_button_pressed(device, b as JoyButton):
+				_btn_held["%d:%d" % [device, b]] = true
+	_status.text = ("Press the button now…" if what["kind"] == "button"
+			else "Move the axis now…")
+
+
+func _process(_delta: float) -> void:
+	if _listening.is_empty():
+		return
+	if _listening["kind"] == "button":
+		_poll_button_capture()
 	else:
-		_status.text = "Move the axis for this control…"
+		_poll_axis_capture()
+
+
+func _poll_axis_capture() -> void:
+	var best_dev := -1
+	var best_axis := -1
+	var best_delta := 0.0
+	for device in Input.get_connected_joypads():
+		for axis in AXIS_SCAN_COUNT:
+			var v := Input.get_joy_axis(device, axis as JoyAxis)
+			var base := float(_axis_baseline.get("%d:%d" % [device, axis], v))
+			var delta := v - base
+			if absf(delta) > absf(best_delta):
+				best_delta = delta
+				best_dev = device
+				best_axis = axis
+	if absf(best_delta) < AXIS_CAPTURE_THRESHOLD:
+		return
+	var guid := Input.get_joy_guid(best_dev)
+	if _listening["kind"] == "throttle":
+		# The rest position (baseline) is idle; its sign tells us which endpoint
+		# is idle without needing the user to hold full.
+		var base := float(_axis_baseline.get("%d:%d" % [best_dev, best_axis], 0.0))
+		_throttle = {"guid": guid, "axis": best_axis, "invert": base < 0.0}
+		_throttle_rebound = true
+	else:
+		# Pushing toward +axis maps to `pos`; if the user pushed negative to
+		# reach the threshold, pre-reverse so the felt direction matches.
+		var key: String = _listening["key"]
+		_axis_binds[key] = {
+			"kind": "joy", "guid": guid, "axis": best_axis, "reverse": best_delta < 0.0}
+		# Axis and per-direction buttons are mutually exclusive for a pair.
+		var pair := key.split("|")
+		_button_binds.erase(pair[0])
+		_button_binds.erase(pair[1])
+	_finish_listen()
+
+
+func _poll_button_capture() -> void:
+	for device in Input.get_connected_joypads():
+		for b in MAX_SCAN_BUTTONS:
+			if not Input.is_joy_button_pressed(device, b as JoyButton):
+				continue
+			if _btn_held.has("%d:%d" % [device, b]):
+				continue  # already down at BIND start (held selector) — ignore
+			var action: String = _listening["key"]
+			_button_binds[action] = {"guid": Input.get_joy_guid(device), "button": b}
+			# If this is one direction of an axis pair, drop the pair's axis bind
+			# so the two don't both drive it.
+			var pair_key := _pair_key_for_action(action)
+			if not pair_key.is_empty():
+				_axis_binds.erase(pair_key)
+			_finish_listen()
+			return
+
+
+## The "neg|pos" axis-row key whose neg or pos equals `action`, or "" if none
+## (i.e. a standalone OPS button like ops_cut).
+func _pair_key_for_action(action: String) -> String:
+	for target: Dictionary in AXIS_TARGETS:
+		if target["neg"] == action or target["pos"] == action:
+			return "%s|%s" % [target["neg"], target["pos"]]
+	return ""
+
+
+func _finish_listen() -> void:
+	_listening = {}
+	_status.text = "Bound. Continue, or SAVE."
+	_refresh_values()
 
 
 func _toggle_reverse(key: String) -> void:
@@ -316,6 +448,20 @@ func _toggle_reverse(key: String) -> void:
 func _bind_hid(key: String, source: String) -> void:
 	_axis_binds[key] = {"kind": "hid", "source": source, "reverse": false}
 	_listening = {}
+	_status.text = "Bound %s. Continue, or SAVE." % HID_SOURCE_LABELS.get(source, source)
+	_refresh_values()
+
+
+func _clear_axis(key: String) -> void:
+	_axis_binds.erase(key)
+	var pair := key.split("|")
+	_button_binds.erase(pair[0])
+	_button_binds.erase(pair[1])
+	_refresh_values()
+
+
+func _clear_button(action: String) -> void:
+	_button_binds.erase(action)
 	_refresh_values()
 
 
@@ -326,56 +472,53 @@ func _toggle_throttle_invert() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# Esc closes the overlay (and is swallowed so it doesn't reach InputRouter's
+	# quit-on-Esc). Keyboard reaches the focused window, which is this overlay's.
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
 		closed.emit()
-		return
-	if _listening.is_empty():
-		return
-	if event is InputEventJoypadButton and event.device == _device and event.pressed:
-		if _listening["kind"] != "button":
-			return
-		if _held_at_start.has(event.button_index):
-			_status.text = "Button %d is a held selector — pick another." % event.button_index
-			return
-		_button_binds[_listening["key"]] = int(event.button_index)
-		_finish_listen()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventJoypadMotion and event.device == _device:
-		if _listening["kind"] == "button":
-			return
-		if absf(event.axis_value) < AXIS_CAPTURE_THRESHOLD:
-			return
-		var axis := int(event.axis)
-		if _listening["kind"] == "throttle":
-			_throttle = {"axis": axis, "invert": event.axis_value < 0.0}
-			_throttle_rebound = true
-		else:
-			# Push toward +axis maps to `pos`; if the user pushed negative to
-			# reach the threshold, pre-reverse so the felt direction matches.
-			_axis_binds[_listening["key"]] = {
-				"kind": "joy", "axis": axis, "reverse": event.axis_value < 0.0}
-		_finish_listen()
-		get_viewport().set_input_as_handled()
-
-
-func _finish_listen() -> void:
-	_listening = {}
-	_status.text = "Bound. Continue, or SAVE."
-	_refresh_values()
 
 
 # --- Display + save --------------------------------------------------------
 
+func _dev_short(guid: String) -> String:
+	var name := String(_dev_meta.get(guid, {}).get("name", ""))
+	if name.is_empty():
+		name = guid.substr(0, 6)
+	return name.left(14)
+
+
 func _refresh_values() -> void:
 	for target: Dictionary in AXIS_TARGETS:
 		var key: String = "%s|%s" % [target["neg"], target["pos"]]
-		_value_labels[key].text = _axis_text(_axis_binds.get(key, {}))
+		_value_labels[key].text = _axis_row_text(target["neg"], target["pos"])
 	for target: Dictionary in BUTTON_TARGETS:
 		var action: String = target["action"]
-		var text := "Button %d" % _button_binds[action] if _button_binds.has(action) else "—"
+		var text := "—"
+		if _button_binds.has(action):
+			var bb: Dictionary = _button_binds[action]
+			text = "Button %d · %s" % [bb["button"], _dev_short(bb["guid"])]
 		_value_labels["btn:%s" % action].text = text
 	_value_labels["throttle"].text = _throttle_text()
+
+
+## An axis pair shows its analog/nub binding if set, else its per-direction
+## button bindings, else —.
+func _axis_row_text(neg: String, pos: String) -> String:
+	var key := "%s|%s" % [neg, pos]
+	if _axis_binds.has(key):
+		return _axis_text(_axis_binds[key])
+	var parts: PackedStringArray = []
+	var guid := ""
+	if _button_binds.has(neg):
+		parts.append("−Btn%d" % _button_binds[neg]["button"])
+		guid = _button_binds[neg]["guid"]
+	if _button_binds.has(pos):
+		parts.append("+Btn%d" % _button_binds[pos]["button"])
+		guid = _button_binds[pos]["guid"]
+	if parts.is_empty():
+		return "—"
+	return "%s · %s" % [" ".join(parts), _dev_short(guid)]
 
 
 func _axis_text(bind: Dictionary) -> String:
@@ -384,23 +527,21 @@ func _axis_text(bind: Dictionary) -> String:
 	var suffix := "  (rev)" if bind.get("reverse", false) else ""
 	if bind.get("kind", "") == "hid":
 		return HID_SOURCE_LABELS.get(bind.get("source", ""), bind.get("source", "")) + suffix
-	return "Axis %d%s" % [bind.get("axis", 0), suffix]
+	return "Axis %d · %s%s" % [bind.get("axis", 0), _dev_short(bind.get("guid", "")), suffix]
 
 
 func _throttle_text() -> String:
 	if not _throttle.has("axis"):
 		return "—"
-	return "Axis %d%s" % [_throttle["axis"], "  (inv)" if _throttle.get("invert", false) else ""]
+	return "Axis %d · %s%s" % [
+		_throttle["axis"], _dev_short(_throttle.get("guid", "")),
+		"  (inv)" if _throttle.get("invert", false) else ""]
 
 
-## Assemble the working binds into the profile schema and persist. InputConfig
-## emits profiles_changed, which InputRouter binds live.
+## Assemble the working binds into one profile PER device GUID and persist each.
+## InputConfig emits profiles_changed, which InputRouter binds live.
 func _save() -> void:
-	if _guid.is_empty():
-		_status.text = "No device to save."
-		return
-	var axes: Array = []
-	var hid_axes: Array = []
+	var by_guid: Dictionary = {}
 	for key: String in _axis_binds:
 		var bind: Dictionary = _axis_binds[key]
 		var pair := key.split("|")
@@ -411,24 +552,38 @@ func _save() -> void:
 			neg = pos
 			pos = tmp
 		if bind.get("kind", "") == "hid":
-			hid_axes.append({"source": bind["source"], "neg": neg, "pos": pos})
+			# The nub is read by a global bridge; its binding rides the X52 profile
+			# so it activates when the X52 is present.
+			_profile_for(by_guid, X52_GUID)["hid_axes"].append({"source": bind["source"], "neg": neg, "pos": pos})
 		else:
-			axes.append({"axis": bind["axis"], "neg": neg, "pos": pos})
-	var buttons: Array = []
+			_profile_for(by_guid, bind["guid"])["axes"].append({"axis": bind["axis"], "neg": neg, "pos": pos})
 	for action: String in _button_binds:
-		buttons.append({"button": _button_binds[action], "action": action})
-	var profile := {
-		"name": Input.get_joy_name(_device),
-		"guid": _guid,
-		"axes": axes,
-		"buttons": buttons,
-		"hid_axes": hid_axes,
-		"reserved_buttons": [],
-	}
+		var bb: Dictionary = _button_binds[action]
+		_profile_for(by_guid, bb["guid"])["buttons"].append({"button": bb["button"], "action": action})
 	if _throttle.has("axis"):
-		profile["throttle"] = _throttle_spec_out()
-	InputConfig.save_profile(profile)
-	_status.text = "Saved profile for %s." % Input.get_joy_name(_device)
+		_profile_for(by_guid, _throttle["guid"])["throttle"] = _throttle_spec_out()
+	if by_guid.is_empty():
+		_status.text = "Nothing bound to save."
+		return
+	for guid: String in by_guid:
+		InputConfig.save_profile(by_guid[guid])
+	_status.text = "Saved %d profile(s)." % by_guid.size()
+
+
+## Get-or-create the working profile for a device GUID, pre-filled with its name
+## and reserved-button bank so SAVE never drops a device's selector protection.
+func _profile_for(by_guid: Dictionary, guid: String) -> Dictionary:
+	if not by_guid.has(guid):
+		var meta: Dictionary = _dev_meta.get(guid, {})
+		by_guid[guid] = {
+			"name": String(meta.get("name", "HOTAS")),
+			"guid": guid,
+			"axes": [],
+			"buttons": [],
+			"hid_axes": [],
+			"reserved_buttons": meta.get("reserved_buttons", []),
+		}
+	return by_guid[guid]
 
 
 ## Throttle spec to persist. A freshly re-bound throttle (or a device with no
