@@ -21,11 +21,19 @@ const SwitchPanelBridge := preload("res://systems/hardware/SwitchPanelBridge.gd"
 ## the POV hat's byte offset/encoding for the planned HID glance bridge.
 const X55_VID := 0x0738
 const X55_PID := 0x2215
+## X52 throttle — every HID collection is opened (not just the joystick one) to
+## find which carries the mouse-stick nub + scroll wheel and at what byte offset,
+## for X52MouseBridge. Identity from the device GUID 0300ea18a30600005c07...
+const X52_VID := 0x06a3
+const X52_PID := 0x075c
 
 var _lines: PackedStringArray = []
 var _log_file: FileAccess
 var _panel: Object
 var _x55: Object
+## Every X52 HID collection: [{hid, label, last_report}]. Multiple handles so the
+## dump shows which collection changes when the nub/wheel move.
+var _x52_handles: Array = []
 ## Axis values last shown per "device:axis" key, to only log meaningful moves.
 var _axis_shown: Dictionary = {}
 var _last_panel_report := PackedByteArray()
@@ -49,6 +57,7 @@ func _ready() -> void:
 	_list_hid_devices()
 	_open_panel()
 	_open_x55()
+	_open_x52()
 
 
 func _list_joypads() -> void:
@@ -107,6 +116,31 @@ func _open_x55() -> void:
 			X55_VID, X55_PID])
 
 
+## Open EVERY X52 HID collection and dump each — we don't yet know which one
+## carries the mouse nub/wheel (it may be an OS-owned mouse collection, usage
+## 1/2). Work the nub and wheel and watch which collection's bytes change (^^),
+## then set the offsets in X52MouseBridge.parse_report().
+func _open_x52() -> void:
+	if not ClassDB.class_exists("Hid"):
+		return
+	var probe: Object = ClassDB.instantiate("Hid")
+	var found := false
+	for info: Dictionary in probe.call("list_devices"):
+		if int(info.get("vid", 0)) != X52_VID or int(info.get("pid", 0)) != X52_PID:
+			continue
+		found = true
+		var label := "up %d/us %d" % [int(info.get("usage_page", 0)), int(info.get("usage", 0))]
+		var hid: Object = ClassDB.instantiate("Hid")
+		if hid.call("open_path", info["path"]):
+			_x52_handles.append({"hid": hid, "label": label, "last": PackedByteArray()})
+			_emit("x52 collection open [%s]: %s" % [label, info["path"]])
+		else:
+			_emit("x52 collection open_path FAILED [%s] (likely OS-owned): %s" % [label, info["path"]])
+	if not found:
+		_emit("x52 not found (vid 0x%04x pid 0x%04x) — nub/wheel dump unavailable" % [
+				X52_VID, X52_PID])
+
+
 func _on_joy_changed(device: int, connected: bool) -> void:
 	_emit("joy_connection_changed: device %d %s" % [
 		device, "CONNECTED" if connected else "DISCONNECTED"])
@@ -157,6 +191,20 @@ func _process(_delta: float) -> void:
 			if not _last_x55_report.is_empty():
 				_emit("            %s" % marks.strip_edges(false, true))
 			_last_x55_report = report
+	for handle: Dictionary in _x52_handles:
+		var report: Variant = handle["hid"].call("read_timeout", 64, 0)
+		if typeof(report) != TYPE_PACKED_BYTE_ARRAY or report.is_empty() \
+				or report == handle["last"]:
+			continue
+		var last: PackedByteArray = handle["last"]
+		var marks := ""
+		for i in report.size():
+			var changed: bool = i >= last.size() or report[i] != last[i]
+			marks += "^^ " if changed else "   "
+		_emit("x52 [%s]: %s" % [handle["label"], _hex(report)])
+		if not last.is_empty():
+			_emit("       %s%s" % [" ".repeat(handle["label"].length()), marks.strip_edges(false, true)])
+		handle["last"] = report
 
 
 static func _hex(bytes: PackedByteArray) -> String:
