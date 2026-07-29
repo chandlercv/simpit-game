@@ -77,24 +77,46 @@ func _load_file(path: String) -> Dictionary:
 	return profile
 
 
-## True if every nested binding _bind_hotas() will index directly is present and
-## correctly shaped. Fields _bind_hotas() reads via .get()/.has() (throttle
-## idle/full, hid_axes) are not required here — only the direct-index keys that
-## would raise and abort rebinding mid-erase, leaving HOTAS half-bound.
+## True if every nested collection _bind_hotas() iterates is well shaped. Each of
+## axes/buttons/hid_axes must, when present, be an Array of Dictionaries carrying
+## the keys _bind_hotas() indexes directly — the ones that would raise and abort
+## rebinding mid-erase, leaving HOTAS half-bound. hid_axes is checked here too:
+## _bind_hotas() iterates it with a typed `Dictionary` loop var, so a non-array or
+## non-object entry crashes exactly like a bad axes/buttons entry would.
 func _is_valid_profile(profile: Dictionary, path: String) -> bool:
 	if profile.has("throttle"):
 		var throttle: Variant = profile["throttle"]
 		if typeof(throttle) != TYPE_DICTIONARY or not (throttle as Dictionary).has("axis"):
 			push_warning("InputConfig: %s has a malformed \"throttle\" (needs \"axis\") — skipped" % path)
 			return false
-	for spec: Variant in profile.get("axes", []):
-		if typeof(spec) != TYPE_DICTIONARY or not (spec.has("axis") and spec.has("neg") and spec.has("pos")):
-			push_warning("InputConfig: %s has a malformed \"axes\" entry (needs \"axis\", \"neg\", \"pos\") — skipped" % path)
+	if not _valid_specs(profile, "axes", ["axis", "neg", "pos"], path):
+		return false
+	if not _valid_specs(profile, "buttons", ["button", "action"], path):
+		return false
+	if not _valid_specs(profile, "hid_axes", ["source"], path):
+		return false
+	return true
+
+
+## True if profile[key] is absent, or an Array whose every entry is a Dictionary
+## holding all `required` keys. Rejects the malformed shape here — before
+## _bind_hotas() erases the current events — rather than letting a non-array
+## collection or non-object entry raise mid-rebind.
+func _valid_specs(profile: Dictionary, key: String, required: Array, path: String) -> bool:
+	if not profile.has(key):
+		return true
+	var value: Variant = profile[key]
+	if typeof(value) != TYPE_ARRAY:
+		push_warning("InputConfig: %s has a non-array \"%s\" — skipped" % [path, key])
+		return false
+	for spec: Variant in value:
+		if typeof(spec) != TYPE_DICTIONARY:
+			push_warning("InputConfig: %s has a non-object \"%s\" entry — skipped" % [path, key])
 			return false
-	for spec: Variant in profile.get("buttons", []):
-		if typeof(spec) != TYPE_DICTIONARY or not (spec.has("button") and spec.has("action")):
-			push_warning("InputConfig: %s has a malformed \"buttons\" entry (needs \"button\", \"action\") — skipped" % path)
-			return false
+		for field: String in required:
+			if not (spec as Dictionary).has(field):
+				push_warning("InputConfig: %s has a malformed \"%s\" entry (needs %s) — skipped" % [path, key, ", ".join(required)])
+				return false
 	return true
 
 
