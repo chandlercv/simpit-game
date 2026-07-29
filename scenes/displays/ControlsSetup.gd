@@ -79,7 +79,7 @@ var _loaded_guids: Dictionary = {}
 ## entry; REV/INVERT mutate in place, which must NOT evict the other device).
 var _shadow_axes: Array = []            # [{"key":String, "value":Dictionary}]
 var _shadow_buttons: Array = []         # [{"action":String, "value":Dictionary}]
-var _shadow_throttle: Dictionary = {}   # {} or {"guid":String, "spec":Dictionary}
+var _shadow_throttle: Array = []        # [{"guid":String, "spec":Dictionary}]
 var _load_winner_axis: Dictionary = {}  # shadowed axis key -> load-time winner instance
 var _load_winner_button: Dictionary = {}  # shadowed action -> load-time winner instance
 
@@ -362,10 +362,11 @@ func _reload() -> void:
 			_button_binds[action] = {"guid": guid, "button": int(spec.get("button", 0))}
 		if profile.has("throttle"):
 			var t: Dictionary = profile["throttle"]
-			# A second device's throttle would overwrite the first's below; keep the
-			# first as a shadow so SAVE doesn't erase it from that device's file.
+			# A later device's throttle would overwrite the working _throttle below;
+			# shadow the one it displaces so SAVE re-emits it to its own device's file.
+			# An array (not a single slot) keeps every displaced device with 3+ throttles.
 			if not _throttle.is_empty():
-				_shadow_throttle = {"guid": _throttle["guid"], "spec": _throttle_orig.duplicate(true)}
+				_shadow_throttle.append({"guid": _throttle["guid"], "spec": _throttle_orig.duplicate(true)})
 			_throttle_orig = t.duplicate(true)
 			var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
 			_throttle = {"guid": guid, "axis": int(t.get("axis", 0)), "invert": inv}
@@ -600,11 +601,13 @@ func _save() -> void:
 	for s: Dictionary in _shadow_buttons:
 		if is_same(_button_binds.get(s["action"]), _load_winner_button.get(s["action"])):
 			_emit_button(by_guid, s["action"], s["value"])
-	# Keep the shadow device's throttle unless the rebind captured THAT device.
-	# _throttle_rebound is global, so it would wrongly discard an untouched
-	# device's throttle when the user rebinds the OTHER device's throttle.
-	if not _shadow_throttle.is_empty() and _throttle.get("guid") != _shadow_throttle["guid"]:
-		_profile_for(by_guid, _shadow_throttle["guid"])["throttle"] = _shadow_throttle["spec"]
+	# Re-emit each throttle a later device displaced at load, keeping it on its own
+	# device — unless the current winner now lives on that device (its file is already
+	# written by the main SAVE pass above). Per-shadow guid check, not the global
+	# _throttle_rebound, so rebinding one device's throttle can't drop another's.
+	for s: Dictionary in _shadow_throttle:
+		if _throttle.get("guid") != s["guid"]:
+			_profile_for(by_guid, s["guid"])["throttle"] = s["spec"]
 	# A device whose every binding was cleared drops out of by_guid above. Force an
 	# empty override for each such device so the clear persists — otherwise its old
 	# user file (or built-in profile) survives and re-binds the cleared controls.
