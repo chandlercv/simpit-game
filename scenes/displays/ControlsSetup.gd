@@ -486,6 +486,9 @@ func _toggle_reverse(key: String) -> void:
 
 func _bind_hid(key: String, source: String) -> void:
 	_axis_binds[key] = {"kind": "hid", "source": source, "reverse": false}
+	var pair := key.split("|")
+	_button_binds.erase(pair[0])
+	_button_binds.erase(pair[1])
 	_listening = {}
 	_status.text = "Bound %s. Continue, or SAVE." % HID_SOURCE_LABELS.get(source, source)
 	_refresh_values()
