@@ -600,7 +600,10 @@ func _save() -> void:
 	for s: Dictionary in _shadow_buttons:
 		if is_same(_button_binds.get(s["action"]), _load_winner_button.get(s["action"])):
 			_emit_button(by_guid, s["action"], s["value"])
-	if not _shadow_throttle.is_empty() and not _throttle_rebound:
+	# Keep the shadow device's throttle unless the rebind captured THAT device.
+	# _throttle_rebound is global, so it would wrongly discard an untouched
+	# device's throttle when the user rebinds the OTHER device's throttle.
+	if not _shadow_throttle.is_empty() and _throttle.get("guid") != _shadow_throttle["guid"]:
 		_profile_for(by_guid, _shadow_throttle["guid"])["throttle"] = _shadow_throttle["spec"]
 	# A device whose every binding was cleared drops out of by_guid above. Force an
 	# empty override for each such device so the clear persists — otherwise its old
