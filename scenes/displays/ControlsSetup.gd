@@ -70,6 +70,18 @@ var _dev_meta: Dictionary = {}
 ## control on a device actually persists instead of leaving its stale file (or
 ## built-in) to reassert the cleared bindings on reload.
 var _loaded_guids: Dictionary = {}
+## Bindings shadowed at load: when two connected devices bind the SAME function,
+## the working dicts (keyed by function, not device) keep only the last-enumerated
+## device's entry. Without these, SAVE would rebuild the losing device's profile
+## from that collapsed state and drop its binding for good. Each shadow re-emits
+## its device's spec on SAVE — unless the winning entry was since rebound/cleared,
+## detected by instance identity against _load_winner_* (capture reassigns the
+## entry; REV/INVERT mutate in place, which must NOT evict the other device).
+var _shadow_axes: Array = []            # [{"key":String, "value":Dictionary}]
+var _shadow_buttons: Array = []         # [{"action":String, "value":Dictionary}]
+var _shadow_throttle: Dictionary = {}   # {} or {"guid":String, "spec":Dictionary}
+var _load_winner_axis: Dictionary = {}  # shadowed axis key -> load-time winner instance
+var _load_winner_button: Dictionary = {}  # shadowed action -> load-time winner instance
 
 ## Active BIND capture, or {} when idle.
 var _listening: Dictionary = {}       # {"kind":"axis"|"button"|"throttle", "key":..}
@@ -314,6 +326,11 @@ func _reload() -> void:
 	_throttle_rebound = false
 	_dev_meta.clear()
 	_loaded_guids.clear()
+	_shadow_axes.clear()
+	_shadow_buttons.clear()
+	_shadow_throttle.clear()
+	_load_winner_axis.clear()
+	_load_winner_button.clear()
 	var pads := Input.get_connected_joypads()
 	var names: PackedStringArray = []
 	for device in pads:
@@ -333,17 +350,31 @@ func _reload() -> void:
 		}
 		for spec: Dictionary in profile.get("axes", []):
 			var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
+			_shadow_if_bound(_axis_binds, _shadow_axes, "key", key)
 			_axis_binds[key] = {"kind": "joy", "guid": guid, "axis": int(spec.get("axis", 0)), "reverse": false}
 		for spec: Dictionary in profile.get("hid_axes", []):
 			var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
+			_shadow_if_bound(_axis_binds, _shadow_axes, "key", key)
 			_axis_binds[key] = {"kind": "hid", "source": String(spec.get("source", "")), "reverse": false}
 		for spec: Dictionary in profile.get("buttons", []):
-			_button_binds[String(spec.get("action", ""))] = {"guid": guid, "button": int(spec.get("button", 0))}
+			var action := String(spec.get("action", ""))
+			_shadow_if_bound(_button_binds, _shadow_buttons, "action", action)
+			_button_binds[action] = {"guid": guid, "button": int(spec.get("button", 0))}
 		if profile.has("throttle"):
 			var t: Dictionary = profile["throttle"]
+			# A second device's throttle would overwrite the first's below; keep the
+			# first as a shadow so SAVE doesn't erase it from that device's file.
+			if not _throttle.is_empty():
+				_shadow_throttle = {"guid": _throttle["guid"], "spec": _throttle_orig.duplicate(true)}
 			_throttle_orig = t.duplicate(true)
 			var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
 			_throttle = {"guid": guid, "axis": int(t.get("axis", 0)), "invert": inv}
+	# Snapshot each shadowed function's final winner instance, so SAVE can tell an
+	# untouched overlap (re-emit the shadow) from a rebound/cleared one (drop it).
+	for s: Dictionary in _shadow_axes:
+		_load_winner_axis[s["key"]] = _axis_binds.get(s["key"])
+	for s: Dictionary in _shadow_buttons:
+		_load_winner_button[s["action"]] = _button_binds.get(s["action"])
 	if _status:
 		_status.text = "Ready — press BIND on a row."
 	_refresh_values()
@@ -551,25 +582,23 @@ func _throttle_text() -> String:
 func _save() -> void:
 	var by_guid: Dictionary = {}
 	for key: String in _axis_binds:
-		var bind: Dictionary = _axis_binds[key]
-		var pair := key.split("|")
-		var neg := pair[0]
-		var pos := pair[1]
-		if bind.get("reverse", false):
-			var tmp := neg
-			neg = pos
-			pos = tmp
-		if bind.get("kind", "") == "hid":
-			# The nub is read by a global bridge; its binding rides the X52 profile
-			# so it activates when the X52 is present.
-			_profile_for(by_guid, X52_GUID)["hid_axes"].append({"source": bind["source"], "neg": neg, "pos": pos})
-		else:
-			_profile_for(by_guid, bind["guid"])["axes"].append({"axis": bind["axis"], "neg": neg, "pos": pos})
+		_emit_axis(by_guid, key, _axis_binds[key])
 	for action: String in _button_binds:
-		var bb: Dictionary = _button_binds[action]
-		_profile_for(by_guid, bb["guid"])["buttons"].append({"button": bb["button"], "action": action})
+		_emit_button(by_guid, action, _button_binds[action])
 	if _throttle.has("axis"):
 		_profile_for(by_guid, _throttle["guid"])["throttle"] = _throttle_spec_out()
+	# Re-emit bindings that a same-function bind on another device shadowed at load,
+	# so each device keeps its own binding. A shadow is stale — and dropped — if the
+	# winning entry was rebound or cleared since (its working instance no longer
+	# matches the load-time snapshot); an in-place REV/INVERT keeps both.
+	for s: Dictionary in _shadow_axes:
+		if is_same(_axis_binds.get(s["key"]), _load_winner_axis.get(s["key"])):
+			_emit_axis(by_guid, s["key"], s["value"])
+	for s: Dictionary in _shadow_buttons:
+		if is_same(_button_binds.get(s["action"]), _load_winner_button.get(s["action"])):
+			_emit_button(by_guid, s["action"], s["value"])
+	if not _shadow_throttle.is_empty() and not _throttle_rebound:
+		_profile_for(by_guid, _shadow_throttle["guid"])["throttle"] = _shadow_throttle["spec"]
 	# A device whose every binding was cleared drops out of by_guid above. Force an
 	# empty override for each such device so the clear persists — otherwise its old
 	# user file (or built-in profile) survives and re-binds the cleared controls.
@@ -582,6 +611,37 @@ func _save() -> void:
 	for guid: String in by_guid:
 		InputConfig.save_profile(by_guid[guid])
 	_status.text = "Saved %d profile(s)." % by_guid.size()
+
+
+## If `working[key]` is already bound (by an earlier-enumerated device), copy that
+## losing entry into `shadows` before the caller overwrites it, so SAVE can keep it
+## on its own device. `field` is the shadow key name ("key" for axes, "action").
+func _shadow_if_bound(working: Dictionary, shadows: Array, field: String, key: String) -> void:
+	if working.has(key):
+		shadows.append({field: key, "value": (working[key] as Dictionary).duplicate(true)})
+
+
+## Append one axis binding (analog or nub) to the right device's working profile,
+## swapping neg/pos when reversed. Shared by the main SAVE pass and shadow re-emit.
+func _emit_axis(by_guid: Dictionary, key: String, bind: Dictionary) -> void:
+	var pair := key.split("|")
+	var neg := pair[0]
+	var pos := pair[1]
+	if bind.get("reverse", false):
+		var tmp := neg
+		neg = pos
+		pos = tmp
+	if bind.get("kind", "") == "hid":
+		# The nub is read by a global bridge; its binding rides the X52 profile
+		# so it activates when the X52 is present.
+		_profile_for(by_guid, X52_GUID)["hid_axes"].append({"source": bind["source"], "neg": neg, "pos": pos})
+	else:
+		_profile_for(by_guid, bind["guid"])["axes"].append({"axis": bind["axis"], "neg": neg, "pos": pos})
+
+
+## Append one button binding to the right device's working profile.
+func _emit_button(by_guid: Dictionary, action: String, bb: Dictionary) -> void:
+	_profile_for(by_guid, bb["guid"])["buttons"].append({"button": bb["button"], "action": action})
 
 
 ## Get-or-create the working profile for a device GUID, pre-filled with its name
