@@ -93,7 +93,7 @@ func _is_valid_profile(profile: Dictionary, path: String) -> bool:
 		return false
 	if not _valid_specs(profile, "buttons", ["button", "action"], path):
 		return false
-	if not _valid_specs(profile, "hid_axes", ["source"], path):
+	if not _valid_specs(profile, "hid_axes", ["source", "neg", "pos"], path):
 		return false
 	return true
 
