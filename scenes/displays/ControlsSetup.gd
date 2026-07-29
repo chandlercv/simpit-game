@@ -48,6 +48,12 @@ var _guid := ""
 var _axis_binds: Dictionary = {}
 var _button_binds: Dictionary = {}  # action -> button int
 var _throttle: Dictionary = {}      # {} or {"axis":int,"invert":bool}
+## The loaded profile's throttle spec, verbatim, so an untouched throttle keeps
+## its calibration (idle_deadzone / custom idle-full endpoints / deadzone) on SAVE.
+var _throttle_orig: Dictionary = {}
+## True once the user re-captures the throttle axis: a fresh bind has no
+## calibration, so it writes plain ±1 endpoints instead of preserving _throttle_orig.
+var _throttle_rebound := false
 
 ## Active BIND capture, or {} when idle.
 var _listening: Dictionary = {}     # {"kind":"axis"|"button"|"throttle", "key":..}
@@ -272,8 +278,11 @@ func _load_working_from_profile() -> void:
 		_axis_binds[key] = {"kind": "hid", "source": String(spec.get("source", "")), "reverse": false}
 	for spec: Dictionary in profile.get("buttons", []):
 		_button_binds[String(spec.get("action", ""))] = int(spec.get("button", 0))
+	_throttle_orig = {}
+	_throttle_rebound = false
 	if profile.has("throttle"):
 		var t: Dictionary = profile["throttle"]
+		_throttle_orig = t.duplicate(true)
 		# Legacy idle_deadzone form is idle=+1/full=-1 (not inverted).
 		var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
 		_throttle = {"axis": int(t.get("axis", 0)), "invert": inv}
@@ -340,6 +349,7 @@ func _input(event: InputEvent) -> void:
 		var axis := int(event.axis)
 		if _listening["kind"] == "throttle":
 			_throttle = {"axis": axis, "invert": event.axis_value < 0.0}
+			_throttle_rebound = true
 		else:
 			# Push toward +axis maps to `pos`; if the user pushed negative to
 			# reach the threshold, pre-reverse so the felt direction matches.
@@ -416,11 +426,38 @@ func _save() -> void:
 		"reserved_buttons": [],
 	}
 	if _throttle.has("axis"):
-		var inv: bool = _throttle.get("invert", false)
-		profile["throttle"] = {
-			"axis": _throttle["axis"],
-			"idle": -1.0 if inv else 1.0,
-			"full": 1.0 if inv else -1.0,
-		}
+		profile["throttle"] = _throttle_spec_out()
 	InputConfig.save_profile(profile)
 	_status.text = "Saved profile for %s." % Input.get_joy_name(_device)
+
+
+## Throttle spec to persist. A freshly re-bound throttle (or a device with no
+## prior throttle) only knows axis + direction, so it writes plain ±1 endpoints.
+## But if the loaded throttle's axis was left alone we preserve its original
+## calibration (idle_deadzone / custom idle-full endpoints / deadzone) verbatim,
+## flipping it through _invert_throttle_spec() only when INVERT was toggled.
+func _throttle_spec_out() -> Dictionary:
+	var axis: int = _throttle["axis"]
+	var inv: bool = _throttle.get("invert", false)
+	if _throttle_rebound or _throttle_orig.is_empty():
+		return {"axis": axis, "idle": -1.0 if inv else 1.0, "full": 1.0 if inv else -1.0}
+	var orig_inv := float(_throttle_orig.get("idle", 1.0)) < float(_throttle_orig.get("full", -1.0))
+	return _invert_throttle_spec(_throttle_orig) if inv != orig_inv else _throttle_orig.duplicate(true)
+
+
+## Flip a throttle spec's direction while keeping its calibration. The legacy
+## idle_deadzone form (idle=+1/full=-1) has no inverted shorthand, so it expands
+## to the general {idle,full,deadzone} form — deadzone (1-d)/2 is the same
+## normalized idle band; the general form just swaps its endpoints.
+func _invert_throttle_spec(spec: Dictionary) -> Dictionary:
+	var out := {"axis": int(spec.get("axis", 0))}
+	if spec.has("idle_deadzone"):
+		out["idle"] = -1.0
+		out["full"] = 1.0
+		out["deadzone"] = (1.0 - float(spec["idle_deadzone"])) / 2.0
+	else:
+		out["idle"] = float(spec.get("full", -1.0))
+		out["full"] = float(spec.get("idle", 1.0))
+		if spec.has("deadzone"):
+			out["deadzone"] = float(spec["deadzone"])
+	return out
