@@ -65,6 +65,11 @@ var _throttle_rebound := false
 ## guid -> {"name":String, "reserved_buttons":Array} for every connected device,
 ## so SAVE preserves each device's name + reserved banks.
 var _dev_meta: Dictionary = {}
+## Set of GUIDs that had a non-empty effective profile at load. SAVE force-writes
+## an empty override for any of these left with no binds, so clearing every
+## control on a device actually persists instead of leaving its stale file (or
+## built-in) to reassert the cleared bindings on reload.
+var _loaded_guids: Dictionary = {}
 
 ## Active BIND capture, or {} when idle.
 var _listening: Dictionary = {}       # {"kind":"axis"|"button"|"throttle", "key":..}
@@ -308,6 +313,7 @@ func _reload() -> void:
 	_throttle_orig = {}
 	_throttle_rebound = false
 	_dev_meta.clear()
+	_loaded_guids.clear()
 	var pads := Input.get_connected_joypads()
 	var names: PackedStringArray = []
 	for device in pads:
@@ -319,6 +325,8 @@ func _reload() -> void:
 	for device in pads:
 		var guid := Input.get_joy_guid(device)
 		var profile := InputRouter.profile_for_guid(guid)
+		if not profile.is_empty():
+			_loaded_guids[guid] = true
 		_dev_meta[guid] = {
 			"name": String(profile.get("name", Input.get_joy_name(device))),
 			"reserved_buttons": profile.get("reserved_buttons", []),
@@ -562,6 +570,12 @@ func _save() -> void:
 		_profile_for(by_guid, bb["guid"])["buttons"].append({"button": bb["button"], "action": action})
 	if _throttle.has("axis"):
 		_profile_for(by_guid, _throttle["guid"])["throttle"] = _throttle_spec_out()
+	# A device whose every binding was cleared drops out of by_guid above. Force an
+	# empty override for each such device so the clear persists — otherwise its old
+	# user file (or built-in profile) survives and re-binds the cleared controls.
+	for guid: String in _loaded_guids:
+		if not by_guid.has(guid):
+			_profile_for(by_guid, guid)
 	if by_guid.is_empty():
 		_status.text = "Nothing bound to save."
 		return
