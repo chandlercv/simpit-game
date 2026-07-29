@@ -173,6 +173,7 @@ but have no gameplay effect yet.
 | **R / F** | Thrust up / down | | **Q / E** | Roll left / right |
 | **Arrow keys** | Glance camera | | **V** | Toggle approach |
 | **C** | Fire cutter | | **Esc** | Quit |
+| **F7** | Configure controls (remapper) | | **F5 / F6** | Re-detect / set up displays |
 
 > Lateral strafe (A/D) and vertical thrust (R/F) are also on the **X52 throttle
 > POV hat** (see above); at a plain desk the A/D and R/F keys are the fallback.
@@ -193,40 +194,62 @@ channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT HEAT).
 
 ### Remapping the HOTAS controls
 
-All stick/throttle bindings live in one place: the `PROFILES` constant at the
-top of `autoload/InputRouter.gd`. Gameplay code never sees hardware numbers —
-every device is remapped here at startup and re-bound on each replug, so this is
-the only file you touch to change bindings. Each device is one entry, matched by
-**GUID** (stable across replugs, unlike device index), with four keys:
+Bindings are **data, not code** — you don't edit GDScript to support a new stick.
+Every device is matched by **GUID** (stable across replugs, unlike device index)
+and there are three layers, in precedence order:
+
+- **In-game remapper (easiest).** Press **F7** for *Configure Controls*: pick your
+  joystick, hit **BIND** on a control and press the button or wiggle the axis (or
+  pick an X52 mouse source), **REV** flips an axis, **SAVE** writes a profile. It
+  rebinds live — no restart. Always-held mode-selector buttons are detected and
+  refused, so they can't be captured by accident.
+- **A profile file.** Each saved device is one JSON file at
+  `user://input_profiles/<guid>.json` — hand-editable and shareable (a tester can
+  mail theirs back; drop it in the folder). A user profile **overrides** the
+  built-in with the same GUID, or adds a brand-new device.
+- **Built-in defaults.** The shipped X52/X55 mappings are the `BUILTIN_PROFILES`
+  constant at the top of `autoload/InputRouter.gd`; a matching user profile wins
+  (`_effective_profiles()` merges the two). Gameplay code never sees hardware
+  numbers — bindings are injected into the Input Map at startup and on each replug.
+
+A profile entry (the file and `BUILTIN_PROFILES` share one schema) has these keys:
 
 | Key | What it maps |
 | --- | --- |
-| `axes` | Analog axes → a pair of direction actions, e.g. `{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"}`. Swap `neg`/`pos` to reverse an axis. |
+| `axes` | Analog axes → a pair of direction actions, e.g. `{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"}`. Swap `neg`/`pos` (or hit **REV**) to reverse. |
 | `buttons` | Momentary buttons → one action, e.g. `{"button": 0, "action": "ops_cut"}`. |
-| `throttle` | The one axis read directly instead of through the Input Map (the X52's `+1 (idle)..-1 (full)` range needs rescaling actions can't express): `{"axis": 2, "idle_deadzone": 0.95}`. |
+| `throttle` | The one axis read directly and rescaled to 0..1. General form `{"axis": 2, "idle": 1.0, "full": -1.0}` fits any rest/travel range and direction; the legacy X52 form `{"axis": 2, "idle_deadzone": 0.95}` still works. |
+| `hid_axes` | A **raw-HID virtual axis** → a direction pair, e.g. `{"source": "x52_mouse_x", "neg": "yaw_left", "pos": "yaw_right"}`. Sources: `x52_mouse_x`, `x52_mouse_y` — the X52 throttle's mouse nub, which Godot doesn't expose as joystick axes (see below). |
 | `reserved_buttons` | Documentation only — selector-position banks where one button is always held. Never bind an action to these. |
 
 The action names (`pitch_up`, `roll_left`, `ops_approach`, …) are the stable
 intent layer consumed in `InputRouter._process()`; they're defined in
-`project.godot` under `[input]`. To **rebind** a control, edit the
-`axis`/`button`/`action` value in place. To **add a device**, append a new
-profile dict with its GUID — no gameplay code changes.
+`project.godot` under `[input]`.
 
-**Finding the right index:** don't guess. Run `tools/InputEcho.tscn` for a live
-dump of axes/buttons and read the device's GUID from `Input.get_joy_guid()`.
-Note that both sticks are read as **raw joysticks** (no SDL controller mapping),
-so raw Godot indices are what you bind — a controller mapping would cap each
-device to ~21 buttons / 6 axes and silently drop the rest.
+**Finding the right index (for hand-editing):** don't guess. Run
+`tools/InputEcho.tscn` for a live dump of axes/buttons and the device's GUID from
+`Input.get_joy_guid()`. Both sticks are read as **raw joysticks** (no SDL
+controller mapping), so raw Godot indices are what you bind — a controller
+mapping would cap each device to ~21 buttons / 6 axes and silently drop the rest.
 
-**Glance is the exception.** The X55 POV hat is *not* in `PROFILES`: Godot
-collapses the hat onto the `DPAD_*` buttons, where `DPAD_RIGHT` collides with
-the stick's always-held selector button. It's decoded straight from the raw HID
+**Glance is the exception.** The X55 POV hat is *not* in the profiles: Godot
+collapses the hat onto the `DPAD_*` buttons, where `DPAD_RIGHT` collides with the
+stick's always-held selector button. It's decoded straight from the raw HID
 report in `systems/hardware/HidGlanceBridge.gd` instead. To point glance at a
-different hat that *doesn't* collide, bind the `glance_*` actions through
-`PROFILES` like any other control; to keep using raw HID for a colliding hat,
-change the `VID`/`PID`, report offset (`parse_pov()`), and usage filter in
+different hat that *doesn't* collide, bind the `glance_*` actions in a profile
+like any other control; to keep using raw HID for a colliding hat, change the
+`VID`/`PID`, report offset (`parse_pov()`), and usage filter in
 `HidGlanceBridge.gd`. The switch panel is likewise raw-HID
-(`SwitchPanelBridge.gd`), not part of `PROFILES`.
+(`SwitchPanelBridge.gd`), not part of the profiles.
+
+**X52 mouse nub.** The throttle's mouse nub is raw-HID-only — Godot's joypad
+layer doesn't surface it — so it's read from the X52 joystick HID report in
+`systems/hardware/X52MouseBridge.gd` (byte 13: low nibble = X, high nibble = Y)
+and exposed as the `x52_mouse_x` / `x52_mouse_y` sources you bind via `hid_axes`.
+The bridge opens the X52 collection only when a profile actually binds one of
+these. The X52 **scroll wheel**, by contrast, *is* visible to Godot as **joypad
+buttons 32 (up) / 33 (down)** — bind it like any button (a wheel notch is a
+button press). To inspect either on your unit, run `tools/InputEcho.tscn`.
 
 ---
 
