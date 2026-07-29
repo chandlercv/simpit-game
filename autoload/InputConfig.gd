@@ -72,7 +72,30 @@ func _load_file(path: String) -> Dictionary:
 	if String(profile.get("guid", "")).is_empty():
 		push_warning("InputConfig: %s has no \"guid\" — skipped" % path)
 		return {}
+	if not _is_valid_profile(profile, path):
+		return {}
 	return profile
+
+
+## True if every nested binding _bind_hotas() will index directly is present and
+## correctly shaped. Fields _bind_hotas() reads via .get()/.has() (throttle
+## idle/full, hid_axes) are not required here — only the direct-index keys that
+## would raise and abort rebinding mid-erase, leaving HOTAS half-bound.
+func _is_valid_profile(profile: Dictionary, path: String) -> bool:
+	if profile.has("throttle"):
+		var throttle: Variant = profile["throttle"]
+		if typeof(throttle) != TYPE_DICTIONARY or not (throttle as Dictionary).has("axis"):
+			push_warning("InputConfig: %s has a malformed \"throttle\" (needs \"axis\") — skipped" % path)
+			return false
+	for spec: Variant in profile.get("axes", []):
+		if typeof(spec) != TYPE_DICTIONARY or not (spec.has("axis") and spec.has("neg") and spec.has("pos")):
+			push_warning("InputConfig: %s has a malformed \"axes\" entry (needs \"axis\", \"neg\", \"pos\") — skipped" % path)
+			return false
+	for spec: Variant in profile.get("buttons", []):
+		if typeof(spec) != TYPE_DICTIONARY or not (spec.has("button") and spec.has("action")):
+			push_warning("InputConfig: %s has a malformed \"buttons\" entry (needs \"button\", \"action\") — skipped" % path)
+			return false
+	return true
 
 
 ## Write one device's profile; overwrites the file for that GUID. Emits
