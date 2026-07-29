@@ -198,11 +198,18 @@ Bindings are **data, not code** — you don't edit GDScript to support a new sti
 Every device is matched by **GUID** (stable across replugs, unlike device index)
 and there are three layers, in precedence order:
 
-- **In-game remapper (easiest).** Press **F7** for *Configure Controls*: pick your
-  joystick, hit **BIND** on a control and press the button or wiggle the axis (or
-  pick an X52 mouse source), **REV** flips an axis, **SAVE** writes a profile. It
-  rebinds live — no restart. Always-held mode-selector buttons are detected and
-  refused, so they can't be captured by accident.
+- **In-game remapper (easiest).** Press **F7** for *Configure Controls*. Each row
+  is a bindable function showing its current mapping; hit a bind button and work
+  that control on **whichever device you want** — it auto-detects which
+  stick/throttle it was, so a HOTAS split across two devices saves a profile for
+  each. On a direction pair, **AXIS** binds an analog axis while **−btn / +btn**
+  bind a button per direction (for a POV hat that reports as buttons, e.g. strafe
+  on the X52 hat); **REV** flips an axis, the nub can be picked instead. **SAVE**
+  writes the profile(s) and rebinds live (no restart). Always-held mode-selector
+  buttons are refused. (Capture picks whichever control moves most from where it
+  sat at bind, so a throttle can rest anywhere — just let a spring-loaded stick
+  axis recenter first.) Glance from the X55 hat is raw-HID and always on, so its
+  rows are blank by design.
 - **A profile file.** Each saved device is one JSON file at
   `user://input_profiles/<guid>.json` — hand-editable and shareable (a tester can
   mail theirs back; drop it in the folder). A user profile **overrides** the
