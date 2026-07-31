@@ -235,7 +235,9 @@ unlike device index) and there are three layers, in precedence order:
   the shipped default keyboard mapping. On a direction pair, **AXIS** binds
   an analog axis, **−btn / +btn** bind a button *or key* per direction (for a POV
   hat that reports as buttons, e.g. strafe on the X52 hat); **REV** flips an axis,
-  the nub can be picked instead. **SAVE** writes the profile(s) and rebinds live
+  the nub can be picked instead (except on the four POWER rows — the self-centring
+  nub can't hold an allocation, so those take an axis, buttons, or the switch
+  panel). **SAVE** writes the profile(s) and rebinds live
   (no restart). Always-held mode-selector buttons are refused; **Esc** cancels an
   in-progress bind. (Capture picks whichever control moves most from where it sat
   at bind, so a throttle can rest anywhere — just let a spring-loaded stick axis
@@ -361,3 +363,4 @@ disabled but the rest still works.
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
 | `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |
+| `AxisKeyNormalizeSmoke.tscn` | Headless smoke for the remapper's axis-key normalization: a saved axis/nub spec listed in the swapped (REV-encoded) order folds back to its row's canonical key with reverse set, so it stays visible on its row instead of vanishing under a phantom key. |

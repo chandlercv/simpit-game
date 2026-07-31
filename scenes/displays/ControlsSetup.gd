@@ -324,12 +324,16 @@ func _add_axis_row(target: Dictionary) -> void:
 	clear.focus_mode = Control.FOCUS_NONE
 	clear.pressed.connect(_clear_axis.bind(key))
 	row.add_child(clear)
-	for source: String in HID_SOURCE_LABELS:
-		var hid_btn := Button.new()
-		hid_btn.text = HID_SOURCE_LABELS[source]
-		hid_btn.focus_mode = Control.FOCUS_NONE
-		hid_btn.pressed.connect(_bind_hid.bind(key, source))
-		row.add_child(hid_btn)
+	# The X52 nub self-centers, so it can't hold an absolute power allocation, and
+	# InputRouter._process_power_axes ignores HID axes anyway — don't offer it on
+	# POWER rows. Those take an analog lever, per-direction buttons, or the switch panel.
+	if not _is_power_key(key):
+		for source: String in HID_SOURCE_LABELS:
+			var hid_btn := Button.new()
+			hid_btn.text = HID_SOURCE_LABELS[source]
+			hid_btn.focus_mode = Control.FOCUS_NONE
+			hid_btn.pressed.connect(_bind_hid.bind(key, source))
+			row.add_child(hid_btn)
 
 
 func _add_button_row(target: Dictionary) -> void:
@@ -397,13 +401,20 @@ func _reload() -> void:
 			"reserved_buttons": profile.get("reserved_buttons", []),
 		}
 		for spec: Dictionary in profile.get("axes", []):
-			var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
+			var canon := _canonical_axis_key(String(spec.get("neg", "")), String(spec.get("pos", "")))
+			var key: String = canon["key"]
 			_shadow_if_bound(_axis_binds, _shadow_axes, "key", key)
-			_axis_binds[key] = {"kind": "joy", "guid": guid, "axis": int(spec.get("axis", 0)), "reverse": false}
+			_axis_binds[key] = {"kind": "joy", "guid": guid, "axis": int(spec.get("axis", 0)), "reverse": canon["reverse"]}
 		for spec: Dictionary in profile.get("hid_axes", []):
-			var key: String = "%s|%s" % [spec.get("neg", ""), spec.get("pos", "")]
+			var canon := _canonical_axis_key(String(spec.get("neg", "")), String(spec.get("pos", "")))
+			var key: String = canon["key"]
+			# A nub-on-power binding is disallowed (see _add_axis_row); if a
+			# hand-edited profile carries one, don't load it — so it's neither shown
+			# nor re-saved, and SAVE drops it.
+			if _is_power_key(key):
+				continue
 			_shadow_if_bound(_axis_binds, _shadow_axes, "key", key)
-			_axis_binds[key] = {"kind": "hid", "source": String(spec.get("source", "")), "reverse": false}
+			_axis_binds[key] = {"kind": "hid", "source": String(spec.get("source", "")), "reverse": canon["reverse"]}
 		for spec: Dictionary in profile.get("buttons", []):
 			var action := String(spec.get("action", ""))
 			_shadow_if_bound(_button_binds, _shadow_buttons, "action", action)
@@ -527,6 +538,32 @@ func _pair_key_for_action(action: String) -> String:
 		if target["neg"] == action or target["pos"] == action:
 			return "%s|%s" % [target["neg"], target["pos"]]
 	return ""
+
+
+## Map a saved axis/hid spec's (neg, pos) to the "neg|pos" key of its row and the
+## reverse flag that order implies. A binding saves with neg/pos SWAPPED to encode
+## REV (see _emit_axis) and a hand-authored profile may list a pair either way, but
+## rows are keyed by the AXIS_TARGETS order — so a spec in the other order must be
+## folded back to the canonical key here, or it lands under a phantom key and
+## vanishes from its row (while still driving the axis at runtime, which is order-
+## blind). An unknown pair is kept as-is, unreversed.
+func _canonical_axis_key(neg: String, pos: String) -> Dictionary:
+	for target: Dictionary in AXIS_TARGETS:
+		if target["neg"] == neg and target["pos"] == pos:
+			return {"key": "%s|%s" % [neg, pos], "reverse": false}
+		if target["neg"] == pos and target["pos"] == neg:
+			return {"key": "%s|%s" % [target["neg"], target["pos"]], "reverse": true}
+	return {"key": "%s|%s" % [neg, pos], "reverse": false}
+
+
+## True if `key` ("neg|pos") is a POWER row. The X52 nub (a HID axis) is not
+## offered on these — see _add_axis_row for why.
+func _is_power_key(key: String) -> bool:
+	for target: Dictionary in AXIS_TARGETS:
+		if target.get("group", "") == "POWER" \
+				and "%s|%s" % [target["neg"], target["pos"]] == key:
+			return true
+	return false
 
 
 func _finish_listen() -> void:
