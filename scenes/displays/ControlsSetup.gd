@@ -31,10 +31,40 @@ const AXIS_TARGETS := [
 	{"label": "Thrust F/B", "neg": "thrust_back", "pos": "thrust_forward", "group": "TRANSLATION"},
 	{"label": "Glance X", "neg": "glance_left", "pos": "glance_right", "group": "GLANCE"},
 	{"label": "Glance Y", "neg": "glance_up", "pos": "glance_down", "group": "GLANCE"},
+	# A bound axis takes over its MFD power channel (0..1); leave unbound to keep
+	# switch-panel/touch control (see InputRouter._process_power_axes).
+	{"label": "Power THRUST", "neg": "power_thrust_lo", "pos": "power_thrust_hi", "group": "POWER"},
+	{"label": "Power CUTTER", "neg": "power_cutter_lo", "pos": "power_cutter_hi", "group": "POWER"},
+	{"label": "Power SENSORS", "neg": "power_sensors_lo", "pos": "power_sensors_hi", "group": "POWER"},
+	{"label": "Power LIFE", "neg": "power_life_lo", "pos": "power_life_hi", "group": "POWER"},
 ]
 const BUTTON_TARGETS := [
 	{"label": "Approach", "action": "ops_approach", "group": "OPS"},
 	{"label": "Cut", "action": "ops_cut", "group": "OPS"},
+	{"label": "Cycle Contact", "action": "contact_cycle", "group": "OPS"},
+	{"label": "Tactical SCOPE/CHART", "action": "tactical_view_cycle", "group": "TACTICAL"},
+	{"label": "Tactical → Scope", "action": "tactical_scope", "group": "TACTICAL"},
+	{"label": "Tactical → Chart", "action": "tactical_chart", "group": "TACTICAL"},
+	{"label": "Prev Cut Target", "action": "salvage_prev", "group": "SALVAGE"},
+	{"label": "Next Cut Target", "action": "salvage_next", "group": "SALVAGE"},
+	{"label": "Cycle Sensor Mode", "action": "sensor_mode_cycle", "group": "SALVAGE"},
+	{"label": "MFD-A Menu", "action": "mfd_a_menu", "group": "MFD"},
+	{"label": "MFD-A Page +", "action": "mfd_a_page_next", "group": "MFD"},
+	{"label": "MFD-A Page −", "action": "mfd_a_page_prev", "group": "MFD"},
+	{"label": "MFD-B Menu", "action": "mfd_b_menu", "group": "MFD"},
+	{"label": "MFD-B Page +", "action": "mfd_b_page_next", "group": "MFD"},
+	{"label": "MFD-B Page −", "action": "mfd_b_page_prev", "group": "MFD"},
+	{"label": "Prev Cargo Item", "action": "cargo_prev", "group": "CARGO"},
+	{"label": "Next Cargo Item", "action": "cargo_next", "group": "CARGO"},
+	{"label": "Jettison Cargo", "action": "cargo_jettison", "group": "CARGO"},
+	{"label": "Dock", "action": "market_dock", "group": "MARKET"},
+	{"label": "Sell Hold", "action": "market_sell", "group": "MARKET"},
+	{"label": "Depart", "action": "market_depart", "group": "MARKET"},
+	{"label": "Cycle View", "action": "view_cycle", "group": "VIEW"},
+	{"label": "View Rear", "action": "view_rear", "group": "VIEW"},
+	{"label": "View Side", "action": "view_side", "group": "VIEW"},
+	{"label": "View Chase", "action": "view_chase", "group": "VIEW"},
+	{"label": "View Top", "action": "view_top", "group": "VIEW"},
 ]
 ## X52 nub virtual axes offered as explicit picks for an axis row (matches
 ## InputRouter.HID_SOURCES). The X52 wheel is joypad buttons 32/33 — bind it on
@@ -54,6 +84,13 @@ const MAX_SCAN_BUTTONS := 40
 var _axis_binds: Dictionary = {}
 ## action -> {"guid":String,"button":int}
 var _button_binds: Dictionary = {}
+## action -> physical keycode. Keyboard binds coexist with any joypad bind on the
+## same action (both fire it) and persist in the device-less "keyboard" profile —
+## there are no keyboard defaults in project.godot, so every key mapping is here.
+var _key_binds: Dictionary = {}
+## True if a keyboard profile existed at load, so clearing every key bind saves an
+## empty profile rather than leaving the old file to reassert the cleared keys.
+var _keyboard_loaded := false
 ## {} or {"guid":String,"axis":int,"invert":bool}
 var _throttle: Dictionary = {}
 ## The loaded throttle spec, verbatim, so an untouched throttle keeps its
@@ -134,7 +171,8 @@ func _build_ui() -> void:
 
 	var hint := Label.new()
 	hint.text = "Each row is a bindable function. Press a bind button, then work " \
-		+ "just that control on any device — it auto-detects which. AXIS binds an " \
+		+ "just that control on any device — it auto-detects which — or press a " \
+		+ "keyboard KEY to bind a key (a key and a HOTAS bind can coexist). AXIS binds an " \
 		+ "analog axis to a pair; −btn / +btn bind a button to each direction (use " \
 		+ "these for a POV hat that reports as buttons, e.g. strafe on the X52 " \
 		+ "hat). REV flips an axis; a nub source can be picked instead. A throttle " \
@@ -163,13 +201,20 @@ func _build_ui() -> void:
 	_status.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4))
 	vbox.add_child(_status)
 
-	# Rows go straight into the main column: an earlier ScrollContainer here
-	# collapsed to zero height and clipped every row invisible. The ~16 rows fit
-	# the Main display; re-introduce scrolling only with an explicit height.
+	# Rows scroll inside an EXPAND_FILL ScrollContainer: the row list now runs well
+	# past a screen (flight + glance + power axes + every MFD/camera/market/cargo
+	# command), so the list needs to scroll. The earlier zero-height collapse is
+	# avoided by giving the scroll an expanding height (it fills the column's
+	# leftover space under the header) rather than sizing to its content.
+	var rows_scroll := ScrollContainer.new()
+	rows_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rows_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(rows_scroll)
 	_rows_box = VBoxContainer.new()
 	_rows_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rows_box.add_theme_constant_override("separation", 6)
-	vbox.add_child(_rows_box)
+	rows_scroll.add_child(_rows_box)
 
 	_build_rows()
 
@@ -258,13 +303,13 @@ func _add_axis_row(target: Dictionary) -> void:
 	row.add_child(bind)
 	var neg_btn := Button.new()
 	neg_btn.text = "−btn"
-	neg_btn.tooltip_text = "Bind a button to %s" % target["neg"]
+	neg_btn.tooltip_text = "Bind a button or keyboard key to %s" % target["neg"]
 	neg_btn.focus_mode = Control.FOCUS_NONE
 	neg_btn.pressed.connect(_begin_listen.bind({"kind": "button", "key": target["neg"]}))
 	row.add_child(neg_btn)
 	var pos_btn := Button.new()
 	pos_btn.text = "+btn"
-	pos_btn.tooltip_text = "Bind a button to %s" % target["pos"]
+	pos_btn.tooltip_text = "Bind a button or keyboard key to %s" % target["pos"]
 	pos_btn.focus_mode = Control.FOCUS_NONE
 	pos_btn.pressed.connect(_begin_listen.bind({"kind": "button", "key": target["pos"]}))
 	row.add_child(pos_btn)
@@ -321,6 +366,8 @@ func _reload() -> void:
 	_listening = {}
 	_axis_binds.clear()
 	_button_binds.clear()
+	_key_binds.clear()
+	_keyboard_loaded = false
 	_throttle.clear()
 	_throttle_orig = {}
 	_throttle_rebound = false
@@ -370,6 +417,12 @@ func _reload() -> void:
 			_throttle_orig = t.duplicate(true)
 			var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
 			_throttle = {"guid": guid, "axis": int(t.get("axis", 0)), "invert": inv}
+	# Seed keyboard binds from the device-less "keyboard" pseudo-profile.
+	var kb := InputRouter.profile_for_guid("keyboard")
+	if not kb.is_empty():
+		_keyboard_loaded = true
+		for spec: Dictionary in kb.get("keys", []):
+			_key_binds[String(spec.get("action", ""))] = int(spec.get("key", 0))
 	# Snapshot each shadowed function's final winner instance, so SAVE can tell an
 	# untouched overlap (re-emit the shadow) from a rebound/cleared one (drop it).
 	for s: Dictionary in _shadow_axes:
@@ -384,8 +437,10 @@ func _reload() -> void:
 # --- Binding: begin + poll-based capture -----------------------------------
 
 func _begin_listen(what: Dictionary) -> void:
-	if Input.get_connected_joypads().is_empty():
-		_status.text = "No joystick connected."
+	# A button row can be bound to a keyboard key with no joypad present; only the
+	# analog axis / throttle capture actually needs a connected stick.
+	if Input.get_connected_joypads().is_empty() and what["kind"] != "button":
+		_status.text = "No joystick connected — analog axis/throttle need one."
 		return
 	_listening = what
 	# Snapshot every device's axis rest values + held buttons so we capture only
@@ -398,7 +453,7 @@ func _begin_listen(what: Dictionary) -> void:
 		for b in MAX_SCAN_BUTTONS:
 			if Input.is_joy_button_pressed(device, b as JoyButton):
 				_btn_held["%d:%d" % [device, b]] = true
-	_status.text = ("Press the button now…" if what["kind"] == "button"
+	_status.text = ("Press a button or key now…" if what["kind"] == "button"
 			else "Move the axis now…")
 
 
@@ -500,11 +555,14 @@ func _clear_axis(key: String) -> void:
 	var pair := key.split("|")
 	_button_binds.erase(pair[0])
 	_button_binds.erase(pair[1])
+	_key_binds.erase(pair[0])
+	_key_binds.erase(pair[1])
 	_refresh_values()
 
 
 func _clear_button(action: String) -> void:
 	_button_binds.erase(action)
+	_key_binds.erase(action)
 	_refresh_values()
 
 
@@ -515,11 +573,37 @@ func _toggle_throttle_invert() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# Esc closes the overlay (and is swallowed so it doesn't reach InputRouter's
-	# quit-on-Esc). Keyboard reaches the focused window, which is this overlay's.
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	# Esc cancels an in-progress capture, else closes the overlay (swallowed so it
+	# doesn't reach InputRouter's quit-on-Esc). Keyboard reaches the focused window,
+	# which is this overlay's.
+	if event.keycode == KEY_ESCAPE:
 		get_viewport().set_input_as_handled()
-		closed.emit()
+		if _listening.is_empty():
+			closed.emit()
+		else:
+			_cancel_listen()
+		return
+	# While binding a button-style control, a key press captures a keyboard bind:
+	# keyboard is a first-class bind surface here, not a project.godot default.
+	if _listening.get("kind", "") == "button":
+		_capture_key(int(event.physical_keycode))
+		get_viewport().set_input_as_handled()
+
+
+func _cancel_listen() -> void:
+	_listening = {}
+	if _status:
+		_status.text = "Bind cancelled."
+
+
+## Bind the currently-listened action to a keyboard key. Coexists with any joypad
+## bind on the same action (both fire it) — mirroring the old keyboard-fallback
+## behaviour, now user-authored instead of hardcoded.
+func _capture_key(keycode: int) -> void:
+	_key_binds[_listening["key"]] = keycode
+	_finish_listen()
 
 
 # --- Display + save --------------------------------------------------------
@@ -537,31 +621,53 @@ func _refresh_values() -> void:
 		_value_labels[key].text = _axis_row_text(target["neg"], target["pos"])
 	for target: Dictionary in BUTTON_TARGETS:
 		var action: String = target["action"]
-		var text := "—"
-		if _button_binds.has(action):
-			var bb: Dictionary = _button_binds[action]
-			text = "Button %d · %s" % [bb["button"], _dev_short(bb["guid"])]
-		_value_labels["btn:%s" % action].text = text
+		_value_labels["btn:%s" % action].text = _button_row_text(action)
 	_value_labels["throttle"].text = _throttle_text()
+
+
+## A button row shows its joypad button and/or its keyboard key (both can be set).
+func _button_row_text(action: String) -> String:
+	var parts: PackedStringArray = []
+	if _button_binds.has(action):
+		var bb: Dictionary = _button_binds[action]
+		parts.append("Button %d · %s" % [bb["button"], _dev_short(bb["guid"])])
+	if _key_binds.has(action):
+		parts.append("Key %s" % _key_name(_key_binds[action]))
+	return " + ".join(parts) if not parts.is_empty() else "—"
+
+
+func _key_name(keycode: int) -> String:
+	var name := OS.get_keycode_string(keycode as Key)
+	return name if not name.is_empty() else "Key%d" % keycode
 
 
 ## An axis pair shows its analog/nub binding if set, else its per-direction
 ## button bindings, else —.
 func _axis_row_text(neg: String, pos: String) -> String:
 	var key := "%s|%s" % [neg, pos]
-	if _axis_binds.has(key):
-		return _axis_text(_axis_binds[key])
 	var parts: PackedStringArray = []
-	var guid := ""
-	if _button_binds.has(neg):
-		parts.append("−Btn%d" % _button_binds[neg]["button"])
-		guid = _button_binds[neg]["guid"]
-	if _button_binds.has(pos):
-		parts.append("+Btn%d" % _button_binds[pos]["button"])
-		guid = _button_binds[pos]["guid"]
-	if parts.is_empty():
-		return "—"
-	return "%s · %s" % [" ".join(parts), _dev_short(guid)]
+	if _axis_binds.has(key):
+		parts.append(_axis_text(_axis_binds[key]))
+	else:
+		var btns: PackedStringArray = []
+		var guid := ""
+		if _button_binds.has(neg):
+			btns.append("−Btn%d" % _button_binds[neg]["button"])
+			guid = _button_binds[neg]["guid"]
+		if _button_binds.has(pos):
+			btns.append("+Btn%d" % _button_binds[pos]["button"])
+			guid = _button_binds[pos]["guid"]
+		if not btns.is_empty():
+			parts.append("%s · %s" % [" ".join(btns), _dev_short(guid)])
+	# Keyboard keys per direction coexist with an axis/button binding.
+	var keys: PackedStringArray = []
+	if _key_binds.has(neg):
+		keys.append("−%s" % _key_name(_key_binds[neg]))
+	if _key_binds.has(pos):
+		keys.append("+%s" % _key_name(_key_binds[pos]))
+	if not keys.is_empty():
+		parts.append("Key %s" % " ".join(keys))
+	return "  ·  ".join(parts) if not parts.is_empty() else "—"
 
 
 func _axis_text(bind: Dictionary) -> String:
@@ -614,12 +720,21 @@ func _save() -> void:
 	for guid: String in _loaded_guids:
 		if not by_guid.has(guid):
 			_profile_for(by_guid, guid)
-	if by_guid.is_empty():
+	# Keyboard binds persist in their own device-less profile. Force an empty one
+	# when every key was cleared but a profile existed at load, so the clear sticks.
+	var kb_saved := false
+	if not _key_binds.is_empty() or _keyboard_loaded:
+		var kbp := {"guid": "keyboard", "name": "Keyboard", "keys": []}
+		for action: String in _key_binds:
+			kbp["keys"].append({"key": _key_binds[action], "action": action})
+		InputConfig.save_profile(kbp)
+		kb_saved = true
+	if by_guid.is_empty() and not kb_saved:
 		_status.text = "Nothing bound to save."
 		return
 	for guid: String in by_guid:
 		InputConfig.save_profile(by_guid[guid])
-	_status.text = "Saved %d profile(s)." % by_guid.size()
+	_status.text = "Saved %d profile(s)." % (by_guid.size() + (1 if kb_saved else 0))
 
 
 ## If `working[key]` is already bound (by an earlier-enumerated device), copy that

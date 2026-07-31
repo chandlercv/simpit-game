@@ -2,14 +2,15 @@ extends Control
 ## Radar/sensor scope for the Tactical display: rotating sweep, range rings,
 ## contact blips plotted around own ship on the XZ plane. This is the
 ## omnidirectional view the main HUD deliberately does not duplicate (plan
-## Phase 2 rule of thumb). Mouse-driven — the Surface Go is treated as
-## non-touch — click a blip to lock it.
+## Phase 2 rule of thumb).
 ##
-## In STRUCT mode this becomes the wreck's structural map (plan Phase 4):
-## once a scan has resolved the graph, members are plotted with their frame
-## load, cut state, and predicted risk spike — click one to select it as the
-## cut target. Choosing where to cut is a read-the-wreck decision, so the
-## information that drives it lives here, not on a numeric meter.
+## Read-only instrument: it draws, it doesn't take clicks. Contact locking and
+## cut-target selection moved to the MFD (CONTACTS and SALVAGE pages); the scope
+## reflects whatever those set via GameState.tracked_contact_id /
+## selected_member_id. In STRUCT mode it draws the wreck's structural map — once
+## a scan has resolved the graph, members are plotted with their frame load, cut
+## state, and predicted risk spike, so you can read the wreck while the MFD list
+## drives the pick.
 
 @export var accent: Color = Color(1.0, 0.72, 0.2)
 
@@ -17,7 +18,6 @@ extends Control
 const RANGE_BY_MODE := {"PASSIVE": 600.0, "ACTIVE": 250.0, "STRUCT": 250.0}
 const SWEEP_HZ_BY_MODE := {"PASSIVE": 0.2, "ACTIVE": 0.5, "STRUCT": 0.35}
 
-const CLICK_RADIUS := 24.0
 const SWEEP_TRAIL_STEPS := 36
 
 const LOAD_HIGH_COLOR := Color(1.0, 0.42, 0.15)
@@ -56,28 +56,6 @@ func _process(delta: float) -> void:
 	var hz: float = SWEEP_HZ_BY_MODE[GameState.sensor_mode]
 	_sweep = fposmod(_sweep + TAU * hz * delta, TAU)
 	queue_redraw()
-
-
-func _gui_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed \
-			and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-	if _struct_overlay_active():
-		for member: Dictionary in GameState.wreck["members"]:
-			if _member_pos(member).distance_to(event.position) <= CLICK_RADIUS:
-				SalvageSystem.select_member(member["id"])
-				accept_event()
-				return
-		return
-	for blip in _blips():
-		if blip["pos"].distance_to(event.position) <= CLICK_RADIUS:
-			GameState.set_tracked_contact(blip["contact"]["id"])
-			accept_event()
-			return
-
-
-func _struct_overlay_active() -> bool:
-	return GameState.sensor_mode == "STRUCT" and GameState.wreck.get("scanned", false)
 
 
 func _scope_center() -> Vector2:
@@ -196,7 +174,7 @@ func _draw_struct(font: Font) -> void:
 			draw_arc(c, r * 0.5, -PI / 2.0, -PI / 2.0 + TAU * progress, 64, accent, 2.0, true)
 		if GameState.power("SENSORS") < 0.1:
 			draw_string(font, Vector2(0, c.y + 16),
-					"SENSORS UNPOWERED — RAISE ALLOCATION ON TABLET",
+					"SENSORS UNPOWERED — RAISE ALLOCATION ON AN MFD",
 					HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, LOAD_HIGH_COLOR)
 		return
 

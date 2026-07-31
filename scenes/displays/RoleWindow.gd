@@ -1,5 +1,5 @@
 extends Window
-## Root of a secondary display window (Tactical / Tablet / Chart).
+## Root of a secondary display window (Tactical / MFDs / Camera).
 ## WindowManager instantiates it at boot and positions it on its configured
 ## screen. Each native window gets its own input event stream, so quit keys
 ## are handled here rather than in InputRouter (which only sees the main

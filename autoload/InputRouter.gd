@@ -34,8 +34,10 @@ extends Node
 ## is {axis, idle_deadzone} (idle=+1, full=-1); the general form is
 ## {axis, idle, full}. `hid_axes` bind a raw-HID virtual axis (e.g. the X52
 ## mouse nub, see X52MouseBridge / HID_SOURCES) to a direction-action pair.
-## `reserved_buttons` are selector-position banks where one button is always
-## held — never bind actions to them.
+## `keys` (only on the device-less "keyboard" profile) bind physical keycodes to
+## actions — the shipped default keyboard mapping lives there, overridable like
+## any profile. `reserved_buttons` are selector-position banks where one button
+## is always held — never bind actions to them.
 const BUILTIN_PROFILES := [
 	{
 		"name": "Saitek X52 Flight Control System",
@@ -71,6 +73,49 @@ const BUILTIN_PROFILES := [
 		],
 		"reserved_buttons": [14, 15, 16],
 	},
+	## Default keyboard mapping — a device-less pseudo-profile (guid "keyboard")
+	## with a `keys` array (physical keycode -> action), injected by _bind_hotas
+	## regardless of joypads. It's DATA, not hardcoded project.godot [input] events:
+	## the remapper shows it, a user keyboard.json OVERRIDES it entirely, and
+	## clearing every key in the remapper persists an empty override. Only flight /
+	## glance / ops / the common panel+camera+tactical commands get a default key;
+	## MFD paging, cargo, market and power axes ship unbound (bind in the remapper).
+	{
+		"name": "Keyboard (default)",
+		"guid": "keyboard",
+		"keys": [
+			{"key": KEY_W, "action": "thrust_forward"},
+			{"key": KEY_S, "action": "thrust_back"},
+			{"key": KEY_A, "action": "strafe_left"},
+			{"key": KEY_D, "action": "strafe_right"},
+			{"key": KEY_R, "action": "thrust_up"},
+			{"key": KEY_F, "action": "thrust_down"},
+			{"key": KEY_I, "action": "pitch_up"},
+			{"key": KEY_K, "action": "pitch_down"},
+			{"key": KEY_J, "action": "yaw_left"},
+			{"key": KEY_L, "action": "yaw_right"},
+			{"key": KEY_Q, "action": "roll_left"},
+			{"key": KEY_E, "action": "roll_right"},
+			{"key": KEY_LEFT, "action": "glance_left"},
+			{"key": KEY_RIGHT, "action": "glance_right"},
+			{"key": KEY_UP, "action": "glance_up"},
+			{"key": KEY_DOWN, "action": "glance_down"},
+			{"key": KEY_V, "action": "ops_approach"},
+			{"key": KEY_C, "action": "ops_cut"},
+			{"key": KEY_M, "action": "sensor_mode_cycle"},
+			{"key": KEY_COMMA, "action": "salvage_prev"},
+			{"key": KEY_PERIOD, "action": "salvage_next"},
+			{"key": KEY_N, "action": "contact_cycle"},
+			{"key": KEY_G, "action": "mfd_a_menu"},
+			{"key": KEY_H, "action": "mfd_b_menu"},
+			{"key": KEY_T, "action": "tactical_view_cycle"},
+			{"key": KEY_BRACKETRIGHT, "action": "view_cycle"},
+			{"key": KEY_1, "action": "view_rear"},
+			{"key": KEY_2, "action": "view_side"},
+			{"key": KEY_3, "action": "view_chase"},
+			{"key": KEY_4, "action": "view_top"},
+		],
+	},
 ]
 
 const SwitchPanelBridgeScene := preload("res://systems/hardware/SwitchPanelBridge.gd")
@@ -84,6 +129,21 @@ const ControlsSetupScene := preload("res://scenes/displays/ControlsSetup.gd")
 ## joypad layer can't see it; the X52 scroll wheel does NOT — Godot exposes it as
 ## joypad buttons 32/33, bound through a profile's normal `buttons`.
 const HID_SOURCES: Array[String] = ["x52_mouse_x", "x52_mouse_y"]
+
+## Power channel -> its [lo, hi] axis-pair action names. A bound axis on the pair
+## drives the channel 0..1 (see _process_power_axes). Kept as data so the remapper
+## rows and the consumer stay in step.
+const POWER_AXES: Dictionary = {
+	"THRUST": ["power_thrust_lo", "power_thrust_hi"],
+	"CUTTER": ["power_cutter_lo", "power_cutter_hi"],
+	"SENSORS": ["power_sensors_lo", "power_sensors_hi"],
+	"LIFE": ["power_life_lo", "power_life_hi"],
+}
+
+## Direct-select camera-view action -> the vantage it picks.
+const VIEW_ACTIONS: Dictionary = {
+	"view_rear": "REAR", "view_side": "SIDE", "view_chase": "CHASE", "view_top": "TOP",
+}
 
 var _throttle_device := -1
 var _throttle_axis := 0
@@ -203,6 +263,17 @@ func _bind_hotas() -> void:
 			for spec: Dictionary in profile.get("hid_axes", []):
 				if HID_SOURCES.has(spec.get("source", "")):
 					_hid_axis_bindings.append(spec)
+	# Keyboard bindings live in a device-less "keyboard" pseudo-profile (written by
+	# the remapper). There are no hardware keyboard defaults in project.godot any
+	# more — every key mapping comes from here — so inject them regardless of which
+	# joypads are connected.
+	for profile: Dictionary in profiles:
+		if String(profile.get("guid", "")) != "keyboard":
+			continue
+		for spec: Dictionary in profile.get("keys", []):
+			var event := InputEventKey.new()
+			event.physical_keycode = int(spec["key"]) as Key
+			_inject(String(spec["action"]), event)
 	# Only open the X52 mouse HID (which may enumerate as an OS-owned mouse) when
 	# a profile actually binds it.
 	if _mouse_bridge:
@@ -292,6 +363,104 @@ func _process(_delta: float) -> void:
 		SalvageSystem.toggle_approach()
 	if Input.is_action_just_pressed("ops_cut"):
 		SalvageSystem.request_cut()
+	_process_panel_commands()
+
+
+## Mapped equivalents of the MFD/Tactical/Camera touch controls, so every panel
+## command is reachable from a bound button/axis (README: any input surface can
+## drive the same intent). All go through the same GameState/system intents the
+## on-screen buttons call, so touch and HOTAS stay in agreement.
+func _process_panel_commands() -> void:
+	# MFD page navigation (per unit, via the "mfd_unit" group).
+	if Input.is_action_just_pressed("mfd_a_menu"):
+		_mfd_call("A", "go_home")
+	if Input.is_action_just_pressed("mfd_b_menu"):
+		_mfd_call("B", "go_home")
+	if Input.is_action_just_pressed("mfd_a_page_next"):
+		_mfd_call("A", "page_step", 1)
+	if Input.is_action_just_pressed("mfd_a_page_prev"):
+		_mfd_call("A", "page_step", -1)
+	if Input.is_action_just_pressed("mfd_b_page_next"):
+		_mfd_call("B", "page_step", 1)
+	if Input.is_action_just_pressed("mfd_b_page_prev"):
+		_mfd_call("B", "page_step", -1)
+
+	# Salvage / sensors.
+	if Input.is_action_just_pressed("salvage_next"):
+		SalvageSystem.cycle_member(1)
+	if Input.is_action_just_pressed("salvage_prev"):
+		SalvageSystem.cycle_member(-1)
+	if Input.is_action_just_pressed("sensor_mode_cycle"):
+		GameState.cycle_sensor_mode()
+	if Input.is_action_just_pressed("contact_cycle"):
+		GameState.cycle_tracked_contact(1)
+
+	# Tactical display mode (SCOPE / CHART) — toggle or jump straight to one.
+	if Input.is_action_just_pressed("tactical_view_cycle"):
+		GameState.cycle_tactical_view()
+	if Input.is_action_just_pressed("tactical_scope"):
+		GameState.set_tactical_view("SCOPE")
+	if Input.is_action_just_pressed("tactical_chart"):
+		GameState.set_tactical_view("CHART")
+
+	# Market. Dock has no unambiguous target from a single button, so it docks at
+	# the first faction; SELL / DEPART are unambiguous.
+	if Input.is_action_just_pressed("market_dock") and GameState.docked_faction == -1 \
+			and not GameState.market_factions.is_empty():
+		MarketSystem.request_dock(0)
+	if Input.is_action_just_pressed("market_sell"):
+		MarketSystem.sell_hold()
+	if Input.is_action_just_pressed("market_depart"):
+		MarketSystem.request_undock()
+
+	# Cargo (via the "cargo_grid" group — acts on whichever grid(s) are up).
+	if Input.is_action_just_pressed("cargo_next"):
+		_cargo_call("select_step", 1)
+	if Input.is_action_just_pressed("cargo_prev"):
+		_cargo_call("select_step", -1)
+	if Input.is_action_just_pressed("cargo_jettison"):
+		_cargo_call("jettison_selected")
+
+	# External camera views.
+	if Input.is_action_just_pressed("view_cycle"):
+		GameState.cycle_external_view()
+	for action: String in VIEW_ACTIONS:
+		if Input.is_action_just_pressed(action):
+			GameState.set_external_view(VIEW_ACTIONS[action])
+
+	_process_power_axes()
+
+
+## A bound axis per power channel takes slider-like authority over that channel
+## (last writer wins, alongside the switch panel/touch). Only a channel whose
+## axis actually has bound events is driven, so an unbound axis (get_axis == 0)
+## doesn't peg the channel to its midpoint. The -1..1 axis maps to 0..1.
+func _process_power_axes() -> void:
+	for channel: String in POWER_AXES:
+		var pair: Array = POWER_AXES[channel]
+		if InputMap.action_get_events(pair[0]).is_empty() \
+				and InputMap.action_get_events(pair[1]).is_empty():
+			continue
+		var axis := Input.get_axis(pair[0], pair[1])
+		GameState.set_power(channel, (axis + 1.0) / 2.0)
+
+
+func _mfd_call(unit_id: String, method: String, arg: Variant = null) -> void:
+	for node in get_tree().get_nodes_in_group("mfd_unit"):
+		if node.unit_id == unit_id:
+			if arg == null:
+				node.call(method)
+			else:
+				node.call(method, arg)
+			return
+
+
+func _cargo_call(method: String, arg: Variant = null) -> void:
+	for node in get_tree().get_nodes_in_group("cargo_grid"):
+		if arg == null:
+			node.call(method)
+		else:
+			node.call(method, arg)
 
 
 ## Digital glance direction, +x = right, +y = down: the X55 POV hat via raw

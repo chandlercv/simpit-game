@@ -1,5 +1,5 @@
 extends Control
-## Hull integrity heatmap for the tablet: top-down ship silhouette split into
+## Hull integrity heatmap for the Tactical SCOPE view: top-down ship silhouette split into
 ## sections colored by integrity (green → amber → red). Tap a section (touch
 ## or mouse) for its readout. Values are GameState placeholders until Phase 4
 ## damage events drive them.

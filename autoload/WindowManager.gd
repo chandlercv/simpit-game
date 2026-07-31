@@ -14,8 +14,8 @@ extends Node
 
 const SECONDARY_SCENES: Dictionary = {
 	"tactical": "res://scenes/displays/TacticalWindow.tscn",
-	"tablet": "res://scenes/displays/TabletWindow.tscn",
-	"chart": "res://scenes/displays/StarChartWindow.tscn",
+	"mfd": "res://scenes/displays/MfdWindow.tscn",
+	"camera": "res://scenes/displays/CameraWindow.tscn",
 }
 
 const RoleTabHostScript := preload("res://scenes/displays/RoleTabHost.gd")
@@ -32,6 +32,30 @@ func _ready() -> void:
 		return
 	# Deferred so get_tree().current_scene is set and all autoloads are ready.
 	_setup.call_deferred()
+
+
+## The 3D World3D that the Main hull-cam SubViewport renders. The CameraWindow
+## assigns this to its own SubViewport so its external cameras render the SAME
+## world (rather than a private copy). Returns null before the Main view exists.
+func main_world_3d() -> World3D:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return null
+	var vp := _find_subviewport(scene)
+	# find_world_3d(), not world_3d: the Main SubViewport uses own_world_3d, whose
+	# auto-created World3D is returned by find_world_3d() — the `world_3d` property
+	# is only the (here empty) explicit override, so reading it hands back null.
+	return vp.find_world_3d() if vp else null
+
+
+func _find_subviewport(node: Node) -> SubViewport:
+	if node is SubViewport:
+		return node
+	for child in node.get_children():
+		var found := _find_subviewport(child)
+		if found:
+			return found
+	return null
 
 
 func _setup() -> void:

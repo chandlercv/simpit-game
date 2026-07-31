@@ -1,0 +1,62 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
+[ext_resource type="Script" path="res://scenes/displays/CameraWindow.gd" id="2_cam"]
+[ext_resource type="Script" path="res://scenes/world/ExternalCameraRig.gd" id="3_rig"]
+[ext_resource type="PackedScene" path="res://scenes/ui/StatusStrip.tscn" id="4_status"]
+
+[node name="CameraWindow" type="Window"]
+title = "Salvager — Camera"
+size = Vector2i(960, 540)
+content_scale_mode = 1
+content_scale_aspect = 4
+content_scale_size = Vector2i(1280, 720)
+script = ExtResource("1_win")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("2_cam")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="Root/SubViewportContainer"]
+handle_input_locally = false
+
+[node name="ExternalCameraRig" type="Node3D" parent="Root/SubViewportContainer/SubViewport"]
+script = ExtResource("3_rig")
+
+[node name="Overlay" type="Control" parent="Root"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ViewLabel" type="Label" parent="Root/Overlay"]
+layout_mode = 1
+anchors_preset = 2
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 400.0
+offset_bottom = 40.0
+theme_override_colors/font_color = Color(0.45, 0.7, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "EXTERNAL CAM — CHASE"
+
+[node name="StatusStrip" parent="Root" instance=ExtResource("4_status")]
+role_name = "CAMERA"
+accent = Color(0.45, 0.7, 1, 1)

@@ -8,8 +8,8 @@ extends Node
 
 const SCENES := [
 	"res://scenes/displays/TacticalWindow.tscn",
-	"res://scenes/displays/TabletWindow.tscn",
-	"res://scenes/displays/StarChartWindow.tscn",
+	"res://scenes/displays/MfdWindow.tscn",
+	"res://scenes/displays/CameraWindow.tscn",
 	"res://scenes/boot/Boot.tscn",
 ]
 
@@ -36,5 +36,25 @@ func _finish() -> void:
 	GameState.wreck["cut_progress"] = 0.5
 	for i in 30:
 		await get_tree().process_frame
+
+	# Exercise the restructured navigation/selection intents so their code paths
+	# run (page switching, camera views, cut/contact cycling) — a runtime error in
+	# any of them surfaces on stderr here rather than only in a live playtest.
+	for unit in get_tree().get_nodes_in_group("mfd_unit"):
+		unit.go_home()
+		unit.page_step(1)
+		unit.page_step(-1)
+	for view: String in GameState.EXTERNAL_VIEWS:
+		GameState.set_external_view(view)
+	GameState.cycle_external_view()
+	GameState.cycle_tactical_view()
+	GameState.set_tactical_view("SCOPE")
+	GameState.cycle_sensor_mode()
+	SalvageSystem.cycle_member(1)
+	SalvageSystem.cycle_member(-1)
+	GameState.cycle_tracked_contact(1)
+	for i in 10:
+		await get_tree().process_frame
+
 	print("DISPLAY LOAD CHECK DONE")
 	get_tree().quit(0)

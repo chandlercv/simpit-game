@@ -12,6 +12,10 @@ signal tick_changed(tick: int)
 signal contacts_changed
 signal tracked_contact_changed(id: int)
 signal sensor_mode_changed(mode: String)
+## External-camera vantage changed (the Camera display), one of EXTERNAL_VIEWS.
+signal external_view_changed(view: String)
+## Tactical display mode changed (SCOPE / CHART), one of TACTICAL_VIEWS.
+signal tactical_view_changed(view: String)
 signal power_changed
 ## Passive-scanner visibility multiplier changed (master electrical switches).
 signal signature_changed(value: float)
@@ -51,6 +55,15 @@ const LOCAL_PEER_ID := 1
 const TICK_RATE_HZ := 10.0
 
 const SENSOR_MODES: Array[String] = ["PASSIVE", "ACTIVE", "STRUCT"]
+
+## External-camera vantages for the Camera display (see ExternalCameraRig):
+## REAR looks aft (a rear-view), SIDE frames the ship's profile, CHASE trails it,
+## TOP looks straight down.
+const EXTERNAL_VIEWS: Array[String] = ["REAR", "SIDE", "CHASE", "TOP"]
+
+## Tactical display modes (see TacticalContent): SCOPE (sensor scope + hull
+## status) and CHART (system star chart).
+const TACTICAL_VIEWS: Array[String] = ["SCOPE", "CHART"]
 
 ## Power allocation channels, each 0..1. The reactor can't run everything at
 ## full: the UI warns when the summed allocation exceeds power_budget().
@@ -110,6 +123,13 @@ var tracked_contact_id: int = -1
 
 ## Active sensor mode, one of SENSOR_MODES (drives the Tactical scope).
 var sensor_mode: String = "PASSIVE"
+
+## Active external-camera vantage, one of EXTERNAL_VIEWS (drives the Camera
+## display's ExternalCameraRig).
+var external_view: String = "CHASE"
+
+## Active Tactical display mode, one of TACTICAL_VIEWS (drives TacticalContent).
+var tactical_view: String = "SCOPE"
 
 ## 0..1, owned by SalvageSystem: eases toward a baseline that ratchets up with
 ## each structural cut, and spikes when a load-bearing member is severed.
@@ -295,12 +315,65 @@ func set_tracked_contact(id: int) -> void:
 	tracked_contact_changed.emit(id)
 
 
+## Step the locked contact to the next in the contact list (mapped contact-cycle
+## intent); wraps, and locks the first when nothing is tracked. No-op with no
+## contacts.
+func cycle_tracked_contact(delta: int) -> void:
+	if contacts.is_empty():
+		return
+	var here := -1
+	for i in contacts.size():
+		if contacts[i]["id"] == tracked_contact_id:
+			here = i
+			break
+	if here == -1:
+		set_tracked_contact(contacts[0 if delta >= 0 else contacts.size() - 1]["id"])
+	else:
+		var step := 1 if delta >= 0 else -1
+		set_tracked_contact(contacts[(here + step + contacts.size()) % contacts.size()]["id"])
+
+
 func set_sensor_mode(mode: String) -> void:
 	if mode == sensor_mode or not SENSOR_MODES.has(mode):
 		return
 	sensor_mode = mode
 	sensor_mode_changed.emit(mode)
 	post_comms("SENSORS", "SWEEP MODE %s" % mode)
+
+
+## Cycle the sensor mode to the next in SENSOR_MODES (mapped control intent).
+func cycle_sensor_mode() -> void:
+	var idx := SENSOR_MODES.find(sensor_mode)
+	set_sensor_mode(SENSOR_MODES[(idx + 1) % SENSOR_MODES.size()])
+
+
+## Camera-display intent: pick an external vantage (one of EXTERNAL_VIEWS).
+func set_external_view(view: String) -> void:
+	if view == external_view or not EXTERNAL_VIEWS.has(view):
+		return
+	external_view = view
+	external_view_changed.emit(view)
+
+
+## Cycle to the next external vantage (mapped view-cycle intent).
+func cycle_external_view() -> void:
+	var idx := EXTERNAL_VIEWS.find(external_view)
+	set_external_view(EXTERNAL_VIEWS[(idx + 1) % EXTERNAL_VIEWS.size()])
+
+
+## Tactical-display intent: pick a mode (SCOPE / CHART).
+func set_tactical_view(view: String) -> void:
+	if view == tactical_view or not TACTICAL_VIEWS.has(view):
+		return
+	tactical_view = view
+	tactical_view_changed.emit(view)
+
+
+## Toggle the Tactical display between SCOPE and CHART (mapped HOTAS-button
+## intent).
+func cycle_tactical_view() -> void:
+	var idx := TACTICAL_VIEWS.find(tactical_view)
+	set_tactical_view(TACTICAL_VIEWS[(idx + 1) % TACTICAL_VIEWS.size()])
 
 
 ## Touch-slider intent: set a channel's desired allocation. No-op while power is

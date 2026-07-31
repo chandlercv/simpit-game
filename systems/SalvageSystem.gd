@@ -97,6 +97,27 @@ func select_member(id: int) -> void:
 	GameState.selected_member_changed.emit(id)
 
 
+## Step the cut-target selection to the next still-cuttable member (mapped
+## salvage-next/prev intent). Wraps; picks the first cuttable when nothing is
+## selected. No-op until the wreck is scanned.
+func cycle_member(delta: int) -> void:
+	if GameState.run_phase != "ON_SITE" or not GameState.wreck.get("scanned", false):
+		return
+	var members: Array = GameState.wreck.get("members", [])
+	var cuttable: Array[int] = []
+	for member: Dictionary in members:
+		if not member["cut"] and not member["destroyed"]:
+			cuttable.append(member["id"])
+	if cuttable.is_empty():
+		return
+	var here := cuttable.find(GameState.selected_member_id)
+	if here == -1:
+		select_member(cuttable[0] if delta >= 0 else cuttable[cuttable.size() - 1])
+	else:
+		var step := 1 if delta >= 0 else -1
+		select_member(cuttable[(here + step + cuttable.size()) % cuttable.size()])
+
+
 ## InputRouter, every frame: current HOTAS/keyboard flight input. Any real
 ## input while the approach autopilot is flying disengages it — the stick
 ## always wins.

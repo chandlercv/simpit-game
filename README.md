@@ -4,8 +4,8 @@ A space-sim that treats HOTAS, switches and multi-monitors as first-class compon
 
 A cyberpunk mercenary **salvage sim** built for a multi-display hardware simpit.
 One process drives one native window per monitor — an external hull-camera view,
-a tactical scope, a systems tablet, and a market chart — fed by a HOTAS,
-a Saitek switch panel, and touch/mouse on the secondary screens.
+a read-only tactical scope, two touch MFDs, and a second external camera — fed by
+a HOTAS, a Saitek switch panel, and touch/mouse on the secondary screens.
 
 > Status: Phases 1–5 complete and hardware-verified. Engine: Godot 4.7
 > (Forward+). Main scene: `scenes/boot/Boot.tscn`.
@@ -30,9 +30,9 @@ with its own input stream.
 | Role | Window | What it shows | How you interact |
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
-| **Tactical** | `TacticalWindow` | Sensor scope, contact list, structural risk meter, sensor-mode + ops controls. | Mouse/touch: sensor mode, approach, cut, **click a wreck member to select it**. |
-| **Tablet** | `TabletWindow` | Power sliders, cargo inventory grid, hull-damage heatmap. | Touch sliders for the four power channels. |
-| **Chart** | `StarChartWindow` | Market price feed, comms/mission log, star chart. | Mouse/touch: dock, sell hold, depart. |
+| **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **MARKET** (prices + comms), **CONTACTS** (lock list). | Touch/mouse: tap MENU to jump straight to any page, then operate it. Every command is also HOTAS-mappable. |
+| **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP** — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
 
@@ -63,39 +63,41 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
 You fly a salvage ship to a wreck, cut it apart for cargo without letting the
 frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
 
-1. **Scan the wreck.** On the Tactical display set sensor mode to **STRUCT**,
-   allocate **SENSORS** power on the tablet, and close inside 300 u. A full
+1. **Scan the wreck.** On an MFD **SALVAGE** page set sensor mode to **STRUCT**,
+   raise **SENSORS** power on the **POWER** page, and close inside 300 u. A full
    structural scan takes ~5 s at 100% SENSORS and reveals the wreck's member
-   graph (which parts carry frame stress).
+   graph (which parts carry frame stress); read it on the Tactical **SCOPE**.
 2. **Approach & match velocity.** Trigger the approach autopilot. It flies you
    to a standoff just inside cutting range (14 u) and matches the wreck's
    velocity → state goes `HOLDING` → `APPROACHING` → `MATCHED`.
    *The throttle must be eased back under ~40% to arm the autopilot, and any
    real stick/throttle input while it's flying hands control back to you.*
-3. **Pick a cut target.** Click a structural member on the Tactical scope.
-   The overlay shows each member's load class and the risk spike cutting it
-   would cause.
+3. **Pick a cut target.** Tap a member in the **SALVAGE** list on an MFD (or
+   cycle it with a mapped control). Each row shows the member's load class and
+   the risk spike cutting it would cause; the Tactical **SCOPE** plots the same
+   graph so you can read the wreck while you pick.
 4. **Power the cutter.** Raise the **CUTTER** power channel to at least 0.2 on
-   the tablet.
+   an MFD **POWER** page.
 5. **Cut.** With the approach `MATCHED`, fire the cutter. The member severs over
    time and its salvage is stowed in the hold.
 6. **Watch structural risk.** Cutting load-bearing members spikes risk and
    ratchets the resting baseline up; cosmetic panels barely move it. If the
    frame collapses, every uncut member is lost.
-7. **Dock and sell.** On the Chart display, dock at a faction (this leaves the
-   claim), sell your hold at that faction's prices, then depart back to the
+7. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
+   the claim), sell your hold at that faction's prices, then depart back to the
    claim for a fresh wreck.
 
 **Power budget:** four channels — **THRUST, CUTTER, SENSORS, LIFE** — each
-0..1. The reactor can't run everything at full; the tablet header turns red on
-overdraw. THRUST gates approach/manual acceleration, CUTTER gates cutting,
-SENSORS gates scan speed.
+0..1. The reactor can't run everything at full; the MFD **POWER** page header
+turns red on overdraw. THRUST gates approach/manual acceleration, CUTTER gates
+cutting, SENSORS gates scan speed.
 
 Each channel can be driven from the switch panel (see the switch table below):
 FUEL PUMP→THRUST, AVIONICS→SENSORS, DE-ICE→CUTTER, PITOT HEAT→LIFE. The first
 three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
-full (100%) on / low off. Any channel can also be set to any value on the tablet
-sliders. The two master electrical switches override the whole mix: **MASTER ALT
+full (100%) on / low off. Any channel can also be set to any value on an MFD
+**POWER** page (or from a mapped power axis). The two master electrical switches
+override the whole mix: **MASTER ALT
 off** rigs for escape (THRUST 100% and LIFE 100%, cutter and sensors to 0);
 **MASTER BAT off** kills everything. While either master is off the live mix is
 locked and the master override owns it, but the physical channel switches still
@@ -111,8 +113,12 @@ before it can fine you (a quarter if both masters are off).
 
 The physical rig is a **Saitek X55 Rhino stick** + **Saitek X52 throttle** +
 **Saitek Pro Flight Switch Panel**. Devices are matched by GUID at runtime
-(`autoload/InputRouter.gd`), so replugging never rebinds anything. Everything
-also has a keyboard/mouse fallback so the game is playable at a desk.
+(`autoload/InputRouter.gd`), so replugging never rebinds anything. The secondary
+displays are driven by mouse/touch. **Every gameplay control is assigned in the
+remapper** (F7) — HOTAS *and* keyboard — but sensible defaults ship for each, the
+keyboard ones as a *data profile* rather than hardcoded keys. So the game is
+playable at a desk out of the box; you only open the remapper to change something
+(see **Remapping the controls** below).
 
 ### X55 Rhino stick (flight + cutter + camera)
 
@@ -156,15 +162,22 @@ the comms log, but only these are wired to gameplay today:
 | **LANDING** | Ship landing light on/off. |
 
 The four channel switches toggle between shared **high (80%)** and **low (20%)**
-settings; the tablet's touch sliders can still set any value in between (until
-the next switch flip). MASTER ALT / MASTER BAT off lock the live mix on both
-surfaces, though physical switch positions still register for when power returns.
+settings; the MFD **POWER** page sliders (or a mapped power axis) can still set
+any value in between (until the next switch flip). MASTER ALT / MASTER BAT off
+lock the live mix on every surface, though physical switch positions still
+register for when power returns.
 
 The remaining switches — COWL, PANEL, BEACON, STROBE, TAXI, the 5-position
 magneto (OFF/R/L/BOTH/START), and the GEAR UP/DOWN lever — are decoded and logged
 but have no gameplay effect yet.
 
-### Keyboard fallback (main window focus)
+### Keyboard (default mapping — overridable in the remapper)
+
+A default keyboard mapping **ships as a built-in profile** (the `keyboard` entry
+in `BUILTIN_PROFILES`, `autoload/InputRouter.gd`) — it's *data*, not hardcoded
+`project.godot` keys, so the remapper shows it and a user profile
+(`user://input_profiles/keyboard.json`) can override or clear any of it. The
+defaults:
 
 | Key | Action | | Key | Action |
 | --- | --- | --- | --- | --- |
@@ -172,51 +185,72 @@ but have no gameplay effect yet.
 | **A / D** | Strafe left / right | | **J / L** | Yaw left / right |
 | **R / F** | Thrust up / down | | **Q / E** | Roll left / right |
 | **Arrow keys** | Glance camera | | **V** | Toggle approach |
-| **C** | Fire cutter | | **Esc** | Quit |
-| **F7** | Configure controls (remapper) | | **F5 / F6** | Re-detect / set up displays |
+| **C** | Fire cutter | | **M** | Cycle sensor mode |
+| **, / .** | Prev / next cut target | | **N** | Cycle locked contact |
+| **G / H** | MFD-A / MFD-B → MENU | | **T** | Toggle Tactical SCOPE / CHART |
+| **]** | Cycle external camera | | **1 / 2 / 3 / 4** | Camera REAR / SIDE / CHASE / TOP |
 
-> Lateral strafe (A/D) and vertical thrust (R/F) are also on the **X52 throttle
-> POV hat** (see above); at a plain desk the A/D and R/F keys are the fallback.
-> The X55 stick binds rotation, the trigger, and glance — not translation.
-> Reverse thrust is the **S** key (the throttle only pushes forward).
+MFD paging, cargo, market, and the power-channel axes ship **unbound** on the
+keyboard — bind them in the remapper if you want keys for them. Every default
+here is also HOTAS-bindable, and a key + a HOTAS bind can coexist on one function.
+
+The only fixed keys — not rebindable, since F7 must stay fixed to open the
+remapper at all:
+
+| Key | Action |
+| --- | --- |
+| **F7** | Open the remapper (Configure Controls) |
+| **F5 / F6** | Re-detect monitors / open Display Setup |
+| **Esc** | Quit (or cancel an in-progress bind while the remapper is open) |
 
 ### Mouse / touch (secondary displays)
 
 | Display | Controls |
 | --- | --- |
-| **Tactical** | Sensor mode buttons (PASSIVE / ACTIVE / STRUCT); approach and cut buttons; **click a member on the scope to select the cut target**. |
-| **Tablet** | Touch sliders for THRUST / CUTTER / SENSORS / LIFE power. |
-| **Chart** | Per-faction **DOCK**, then **SELL HOLD** / **DEPART FOR CLAIM**. |
+| **Tactical** | Read-only. **SCOPE** / **CHART** mode buttons; mouse pan/zoom on the chart. |
+| **MFDs** | Tap **MENU** to open a page. **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock. |
+| **Camera** | View is picked by a mapped control (no on-screen buttons). |
 
 Any input surface can drive the same intent — e.g. the four power channels are
-set from the tablet's touch sliders and, equivalently, from the switch panel's
-channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT HEAT).
+set from an MFD's touch sliders, from a mapped power axis, and, equivalently,
+from the switch panel's channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT
+HEAT). Everything you can do on an MFD is also bindable to a HOTAS button or
+axis (see the remapper groups **MFD / SALVAGE / TACTICAL / CARGO / MARKET / VIEW
+/ POWER**). The Tactical SCOPE⇄CHART toggle is in **TACTICAL** — bind it to a
+HOTAS button to flip the Tactical display without touching the screen.
 
-### Remapping the HOTAS controls
+### Remapping the controls
 
-Bindings are **data, not code** — you don't edit GDScript to support a new stick.
-Every device is matched by **GUID** (stable across replugs, unlike device index)
-and there are three layers, in precedence order:
+Bindings are **data, not code** — you don't edit GDScript to support a new stick
+or to move a key. Every device is matched by **GUID** (stable across replugs,
+unlike device index) and there are three layers, in precedence order:
 
 - **In-game remapper (easiest).** Press **F7** for *Configure Controls*. Each row
   is a bindable function showing its current mapping; hit a bind button and work
   that control on **whichever device you want** — it auto-detects which
   stick/throttle it was, so a HOTAS split across two devices saves a profile for
-  each. On a direction pair, **AXIS** binds an analog axis while **−btn / +btn**
-  bind a button per direction (for a POV hat that reports as buttons, e.g. strafe
-  on the X52 hat); **REV** flips an axis, the nub can be picked instead. **SAVE**
-  writes the profile(s) and rebinds live (no restart). Always-held mode-selector
-  buttons are refused. (Capture picks whichever control moves most from where it
-  sat at bind, so a throttle can rest anywhere — just let a spring-loaded stick
-  axis recenter first.) Glance from the X55 hat is raw-HID and always on, so its
-  rows are blank by design.
+  each. **Or press a keyboard key** to bind a key to that function — a key and a
+  HOTAS bind can coexist on the same row (both trigger it); this is how you edit
+  the shipped default keyboard mapping. On a direction pair, **AXIS** binds
+  an analog axis, **−btn / +btn** bind a button *or key* per direction (for a POV
+  hat that reports as buttons, e.g. strafe on the X52 hat); **REV** flips an axis,
+  the nub can be picked instead. **SAVE** writes the profile(s) and rebinds live
+  (no restart). Always-held mode-selector buttons are refused; **Esc** cancels an
+  in-progress bind. (Capture picks whichever control moves most from where it sat
+  at bind, so a throttle can rest anywhere — just let a spring-loaded stick axis
+  recenter first.) Glance from the X55 hat is raw-HID and always on, so its rows
+  are blank by design.
 - **A profile file.** Each saved device is one JSON file at
   `user://input_profiles/<guid>.json` — hand-editable and shareable (a tester can
   mail theirs back; drop it in the folder). A user profile **overrides** the
-  built-in with the same GUID, or adds a brand-new device.
-- **Built-in defaults.** The shipped X52/X55 mappings are the `BUILTIN_PROFILES`
-  constant at the top of `autoload/InputRouter.gd`; a matching user profile wins
-  (`_effective_profiles()` merges the two). Gameplay code never sees hardware
+  built-in with the same GUID, or adds a brand-new device. Keyboard bindings live
+  in the same folder as a device-less `keyboard.json` (GUID `keyboard`) carrying a
+  `keys` array — see the schema below.
+- **Built-in defaults.** The shipped X52/X55 mappings **and the default keyboard
+  mapping** are the `BUILTIN_PROFILES` constant at the top of
+  `autoload/InputRouter.gd` (the keyboard one is the device-less `keyboard`
+  entry); a matching user profile wins (`_effective_profiles()` merges the two).
+  Gameplay code never sees hardware
   numbers — bindings are injected into the Input Map at startup and on each replug.
 
 A profile entry (the file and `BUILTIN_PROFILES` share one schema) has these keys:
@@ -225,6 +259,7 @@ A profile entry (the file and `BUILTIN_PROFILES` share one schema) has these key
 | --- | --- |
 | `axes` | Analog axes → a pair of direction actions, e.g. `{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"}`. Swap `neg`/`pos` (or hit **REV**) to reverse. |
 | `buttons` | Momentary buttons → one action, e.g. `{"button": 0, "action": "ops_cut"}`. |
+| `keys` | **Keyboard keys → one action** (only on the device-less `keyboard` profile), e.g. `{"key": 67, "action": "ops_cut"}`. `key` is a Godot physical keycode. The shipped default keyboard mapping is the built-in `keyboard` profile; a user `keyboard.json` overrides it. |
 | `throttle` | The one axis read directly and rescaled to 0..1. General form `{"axis": 2, "idle": 1.0, "full": -1.0}` fits any rest/travel range and direction; the legacy X52 form `{"axis": 2, "idle_deadzone": 0.95}` still works. |
 | `hid_axes` | A **raw-HID virtual axis** → a direction pair, e.g. `{"source": "x52_mouse_x", "neg": "yaw_left", "pos": "yaw_right"}`. Sources: `x52_mouse_x`, `x52_mouse_y` — the X52 throttle's mouse nub, which Godot doesn't expose as joystick axes (see below). |
 | `reserved_buttons` | Documentation only — selector-position banks where one button is always held. Never bind an action to these. |
@@ -270,7 +305,7 @@ can't get their own screen share one via a **tabbed host** (`WindowManager`,
 
 - **You choose the layout.** The first time a monitor setup with fewer screens
   than displays is seen, the game shows an in-game **Display Setup** chooser: each
-  screen shows a card, and you tap a role (MAIN / TACTICAL / TABLET / CHART) to
+  screen shows a card, and you tap a role (MAIN / TACTICAL / MFD / CAMERA) to
   put it there. A sensible layout is pre-filled — press **START** to accept it, or
   reassign first. The choice is saved **per monitor setup**
   (`user://display_config.cfg`, keyed by screen count + geometry), so the same rig
@@ -303,8 +338,9 @@ can't get their own screen share one via a **tabbed host** (`WindowManager`,
 ## Running
 
 Open the project in **Godot 4.7** and run `scenes/boot/Boot.tscn`. The game runs
-degraded-gracefully: with no HOTAS or switch panel it falls back to
-keyboard/mouse and retries hardware in the background, and with fewer than four
+degraded-gracefully: with no HOTAS or switch panel it retries hardware in the
+background while you fly on the **default keyboard mapping** (mouse/touch on the
+secondary displays; rebind any key via **F7**), and with fewer than four
 monitors it prompts you (once per setup) to assign displays to screens and packs
 the overflow into a tabbed host (see **Simpit / multi-display setup** above; `F6`
 re-opens the chooser, `F5` re-detects monitors). The `hid-gd` GDExtension is
