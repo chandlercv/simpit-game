@@ -460,6 +460,13 @@ func power(channel: String) -> float:
 	return local_ship()["power"].get(channel, 0.0)
 
 
+## The desired mix for a channel (what the sliders/switches/nudges set), before
+## the master overrides in _apply_electrical() rewrite the live value. Digital
+## POWER nudges step this so a master being off never ratchets the stored mix.
+func power_target(channel: String) -> float:
+	return _power_target.get(channel, 0.0)
+
+
 func power_total() -> float:
 	var total := 0.0
 	for value: float in local_ship()["power"].values():

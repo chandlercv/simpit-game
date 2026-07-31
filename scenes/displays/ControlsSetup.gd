@@ -31,8 +31,9 @@ const AXIS_TARGETS := [
 	{"label": "Thrust F/B", "neg": "thrust_back", "pos": "thrust_forward", "group": "TRANSLATION"},
 	{"label": "Glance X", "neg": "glance_left", "pos": "glance_right", "group": "GLANCE"},
 	{"label": "Glance Y", "neg": "glance_up", "pos": "glance_down", "group": "GLANCE"},
-	# A bound axis takes over its MFD power channel (0..1); leave unbound to keep
-	# switch-panel/touch control (see InputRouter._process_power_axes).
+	# A bound analog axis acts as that MFD power channel's slider (0..1); a bound
+	# key/button nudges it per press; leave unbound to keep switch-panel/touch
+	# control (see InputRouter._process_power_axes).
 	{"label": "Power THRUST", "neg": "power_thrust_lo", "pos": "power_thrust_hi", "group": "POWER"},
 	{"label": "Power CUTTER", "neg": "power_cutter_lo", "pos": "power_cutter_hi", "group": "POWER"},
 	{"label": "Power SENSORS", "neg": "power_sensors_lo", "pos": "power_sensors_hi", "group": "POWER"},

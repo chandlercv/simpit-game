@@ -96,7 +96,8 @@ Each channel can be driven from the switch panel (see the switch table below):
 FUEL PUMP→THRUST, AVIONICS→SENSORS, DE-ICE→CUTTER, PITOT HEAT→LIFE. The first
 three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
 full (100%) on / low off. Any channel can also be set to any value on an MFD
-**POWER** page (or from a mapped power axis). The two master electrical switches
+**POWER** page, from a mapped analog axis (used as a slider), or nudged up/down
+by a mapped key/button. The two master electrical switches
 override the whole mix: **MASTER ALT
 off** rigs for escape (THRUST 100% and LIFE 100%, cutter and sensors to 0);
 **MASTER BAT off** kills everything. While either master is off the live mix is
@@ -162,8 +163,8 @@ the comms log, but only these are wired to gameplay today:
 | **LANDING** | Ship landing light on/off. |
 
 The four channel switches toggle between shared **high (80%)** and **low (20%)**
-settings; the MFD **POWER** page sliders (or a mapped power axis) can still set
-any value in between (until the next switch flip). MASTER ALT / MASTER BAT off
+settings; the MFD **POWER** page sliders (or a mapped power axis / nudge
+key) can still set any value in between (until the next switch flip). MASTER ALT / MASTER BAT off
 lock the live mix on every surface, though physical switch positions still
 register for when power returns.
 
@@ -212,8 +213,8 @@ remapper at all:
 | **Camera** | View is picked by a mapped control (no on-screen buttons). |
 
 Any input surface can drive the same intent — e.g. the four power channels are
-set from an MFD's touch sliders, from a mapped power axis, and, equivalently,
-from the switch panel's channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT
+set from an MFD's touch sliders, from a mapped power axis (slider) or key/button
+(nudge), and, equivalently, from the switch panel's channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT
 HEAT). Everything you can do on an MFD is also bindable to a HOTAS button or
 axis (see the remapper groups **MFD / SALVAGE / TACTICAL / CARGO / MARKET / VIEW
 / POWER**). The Tactical SCOPE⇄CHART toggle is in **TACTICAL** — bind it to a
@@ -358,3 +359,5 @@ disabled but the rest still works.
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
+| `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
+| `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |

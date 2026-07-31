@@ -431,18 +431,48 @@ func _process_panel_commands() -> void:
 	_process_power_axes()
 
 
-## A bound axis per power channel takes slider-like authority over that channel
-## (last writer wins, alongside the switch panel/touch). Only a channel whose
-## axis actually has bound events is driven, so an unbound axis (get_axis == 0)
-## doesn't peg the channel to its midpoint. The -1..1 axis maps to 0..1.
+## How much a digital (key/button) POWER binding nudges its channel per press.
+const POWER_STEP := 0.1
+
+## Per power channel, split by how the row is bound (last writer wins, alongside
+## the switch panel/touch):
+##   * an analog axis on either row acts as a slider — the -1..1 axis maps to 0..1
+##     and is re-asserted every frame from the lever's resting position;
+##   * otherwise digital keys/buttons nudge the channel by POWER_STEP per press
+##     (_hi steps up, _lo steps down) and hold — a digital event's idle state
+##     never drives the channel, so it can't peg it to the midpoint.
+## A row with neither bound is skipped, so an unbound channel isn't driven.
 func _process_power_axes() -> void:
 	for channel: String in POWER_AXES:
 		var pair: Array = POWER_AXES[channel]
-		if InputMap.action_get_events(pair[0]).is_empty() \
-				and InputMap.action_get_events(pair[1]).is_empty():
+		if _row_has_analog(pair[0]) or _row_has_analog(pair[1]):
+			var axis := Input.get_axis(pair[0], pair[1])
+			GameState.set_power(channel, (axis + 1.0) / 2.0)
 			continue
-		var axis := Input.get_axis(pair[0], pair[1])
-		GameState.set_power(channel, (axis + 1.0) / 2.0)
+		_nudge_power(channel, Input.is_action_just_pressed(pair[1]),
+				Input.is_action_just_pressed(pair[0]))
+
+
+## Step a power channel by ±POWER_STEP from its current target on a digital
+## up/down press, clamped to 0..1 by set_power. Split out from the input reading
+## above so the stepping is testable without synthesising just-pressed input.
+func _nudge_power(channel: String, up: bool, down: bool) -> void:
+	var step := 0.0
+	if up:
+		step += POWER_STEP
+	if down:
+		step -= POWER_STEP
+	if step != 0.0:
+		GameState.set_power(channel, GameState.power_target(channel) + step)
+
+
+## True if the action has at least one analog (joypad-motion) event bound, i.e.
+## the row should be driven as a continuous slider rather than a digital nudge.
+func _row_has_analog(action: String) -> bool:
+	for event: InputEvent in InputMap.action_get_events(action):
+		if event is InputEventJoypadMotion:
+			return true
+	return false
 
 
 func _mfd_call(unit_id: String, method: String, arg: Variant = null) -> void:
