@@ -220,6 +220,13 @@ axis (see the remapper groups **MFD / SALVAGE / TACTICAL / CARGO / MARKET / VIEW
 / POWER**). The Tactical SCOPE⇄CHART toggle is in **TACTICAL** — bind it to a
 HOTAS button to flip the Tactical display without touching the screen.
 
+The mapped **CARGO** commands (next / prev / jettison) act on whichever CARGO
+page is **currently on screen**, not on a hidden one. The two MFDs page
+independently, so if you have **CARGO open on both at once**, each keeps its own
+selection and a single mapped jettison dumps the selected item from **both** —
+two items in one press. Keep CARGO up on only one MFD when jettisoning by HOTAS,
+or use the on-screen JETTISON button (which only ever affects its own grid).
+
 ### Remapping the controls
 
 Bindings are **data, not code** — you don't edit GDScript to support a new stick
