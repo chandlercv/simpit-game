@@ -485,8 +485,15 @@ func _mfd_call(unit_id: String, method: String, arg: Variant = null) -> void:
 			return
 
 
+## Only the grid(s) actually on screen respond: both MFD units eagerly build a
+## CARGO InventoryGrid that joins this group at _ready(), so a hidden page's grid
+## would otherwise step its selection and — worse — jettison its stale selection
+## from a screen the player isn't even looking at. is_visible_in_tree() enforces
+## the "whichever grid(s) are up" contract this dispatch was always meant to have.
 func _cargo_call(method: String, arg: Variant = null) -> void:
 	for node in get_tree().get_nodes_in_group("cargo_grid"):
+		if not node.is_visible_in_tree():
+			continue
 		if arg == null:
 			node.call(method)
 		else:
