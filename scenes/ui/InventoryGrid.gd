@@ -1,5 +1,5 @@
 extends Control
-## Cargo manifest for the tablet — touch-first: tap a tile to select it and
+## Cargo manifest for the MFD CARGO page — touch-first: tap a tile to select it and
 ## see its details, tap JETTISON to dump it (CargoSystem intent). Tap-to-select
 ## over free-drag per the plan (spacedesk ~30fps + latency); every widget here
 ## answers raw touch and mouse alike since touch emulation is off project-wide.
@@ -26,8 +26,30 @@ func _ready() -> void:
 	_jettison.custom_minimum_size = Vector2(0, 44)
 	_jettison.tapped.connect(_on_jettison)
 	_detail.get_parent().add_child(_jettison)
+	# Mapped cargo controls (InputRouter) reach the grid through this group.
+	add_to_group("cargo_grid")
 	GameState.cargo_changed.connect(_rebuild)
 	_rebuild()
+
+
+## Step the selection to the next/previous cargo tile (mapped cargo-next/prev).
+func select_step(delta: int) -> void:
+	if _tiles.is_empty():
+		return
+	var ids: Array = []
+	for tile in _tiles:
+		ids.append(tile.item["id"])
+	var here := ids.find(_selected_id)
+	if here == -1:
+		_select(ids[0] if delta >= 0 else ids[ids.size() - 1])
+	else:
+		var step := 1 if delta >= 0 else -1
+		_select(ids[(here + step + ids.size()) % ids.size()])
+
+
+## Jettison the selected item (mapped cargo-jettison intent).
+func jettison_selected() -> void:
+	_on_jettison()
 
 
 func _rebuild() -> void:

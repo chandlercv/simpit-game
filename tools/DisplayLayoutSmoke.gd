@@ -80,7 +80,7 @@ func _test_persistence() -> void:
 	DisplayConfig.reload()
 	_check(DisplayConfig.has_layout_for_current_setup(),
 			"saved layout survives reload")
-	_check(DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_CHART) == 0,
+	_check(DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_CAMERA) == 0,
 			"reloaded role mapping matches what was saved")
 
 
@@ -88,7 +88,7 @@ func _test_harvest_and_host() -> void:
 	# Opaque host with all three secondary roles harvested from their windows.
 	var host := RoleTabHostScript.new()
 	host.configure(true)
-	var roles := ["tactical", "tablet", "chart"]
+	var roles := ["tactical", "mfd", "camera"]
 	for role in roles:
 		host.add_role(role, WindowManager._harvest_content(role))
 	host.finish()
@@ -101,14 +101,14 @@ func _test_harvest_and_host() -> void:
 		await get_tree().process_frame
 
 	_check(host._panels.size() == 3, "host hosts all three harvested panels")
-	_check(host._panels["tactical"].visible and not host._panels["tablet"].visible,
+	_check(host._panels["tactical"].visible and not host._panels["mfd"].visible,
 			"opaque host shows the first role on finish()")
 	host._select_index(1)
-	_check(host._panels["tablet"].visible and not host._panels["tactical"].visible,
+	_check(host._panels["mfd"].visible and not host._panels["tactical"].visible,
 			"selecting a tab swaps the visible panel")
 	# The reparented content kept its subtree (a %-lookup node resolves).
-	var inv: Node = host._panels["tablet"].find_child("InventoryGrid", true, false)
-	_check(inv != null, "reparented Tablet content kept its InventoryGrid subtree")
+	var unit: Node = host._panels["mfd"].find_child("MfdUnit*", true, false)
+	_check(unit != null, "reparented MFD content kept an MfdUnit subtree")
 	w.queue_free()
 
 	# Overlay host starts clean (Main visible), toggles a panel up and back.

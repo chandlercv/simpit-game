@@ -1,13 +1,9 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/displays/RoleWindow.gd" id="1_win"]
-[ext_resource type="Script" path="res://scenes/ui/TacticalScope.gd" id="2_scope"]
-[ext_resource type="Script" path="res://scenes/ui/SensorModeBar.gd" id="3_modes"]
-[ext_resource type="Script" path="res://scenes/ui/RiskMeter.gd" id="4_risk"]
-[ext_resource type="Script" path="res://scenes/ui/ContactList.gd" id="5_contacts"]
+[ext_resource type="Script" path="res://scenes/displays/TacticalContent.gd" id="2_content"]
 [ext_resource type="Shader" path="res://scenes/ui/scanlines.gdshader" id="6_scan"]
 [ext_resource type="PackedScene" path="res://scenes/ui/StatusStrip.tscn" id="7_status"]
-[ext_resource type="Script" path="res://scenes/ui/OpsBar.gd" id="8_ops"]
 
 [sub_resource type="ShaderMaterial" id="scan_mat"]
 shader = ExtResource("6_scan")
@@ -44,54 +40,14 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 20
-theme_override_constants/margin_right = 20
-theme_override_constants/margin_bottom = 36
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 32
 
-[node name="Layout" type="HBoxContainer" parent="Root/Margin"]
+[node name="Content" type="Control" parent="Root/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 24
-
-[node name="TacticalScope" type="Control" parent="Root/Margin/Layout"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 1.8
-script = ExtResource("2_scope")
-accent = Color(1, 0.72, 0.2, 1)
-
-[node name="Right" type="VBoxContainer" parent="Root/Margin/Layout"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 16
-
-[node name="SensorModeBar" type="HBoxContainer" parent="Root/Margin/Layout/Right"]
-layout_mode = 2
-theme_override_constants/separation = 8
-script = ExtResource("3_modes")
-accent = Color(1, 0.72, 0.2, 1)
-
-[node name="OpsBar" type="HBoxContainer" parent="Root/Margin/Layout/Right"]
-layout_mode = 2
-theme_override_constants/separation = 8
-script = ExtResource("8_ops")
-accent = Color(1, 0.72, 0.2, 1)
-
-[node name="RiskMeter" type="Control" parent="Root/Margin/Layout/Right"]
-layout_mode = 2
-script = ExtResource("4_risk")
-accent = Color(1, 0.72, 0.2, 1)
-
-[node name="Scroll" type="ScrollContainer" parent="Root/Margin/Layout/Right"]
-layout_mode = 2
-size_flags_vertical = 3
-horizontal_scroll_mode = 0
-
-[node name="ContactList" type="VBoxContainer" parent="Root/Margin/Layout/Right/Scroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 4
-script = ExtResource("5_contacts")
+script = ExtResource("2_content")
 accent = Color(1, 0.72, 0.2, 1)
 
 [node name="Scanlines" type="ColorRect" parent="Root"]

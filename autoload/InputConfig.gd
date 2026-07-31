@@ -95,6 +95,10 @@ func _is_valid_profile(profile: Dictionary, path: String) -> bool:
 		return false
 	if not _valid_specs(profile, "hid_axes", ["source", "neg", "pos"], path):
 		return false
+	# The device-less "keyboard" pseudo-profile carries key bindings (physical
+	# keycode -> action); validated here so a bad file can't crash the injector.
+	if not _valid_specs(profile, "keys", ["key", "action"], path):
+		return false
 	return true
 
 

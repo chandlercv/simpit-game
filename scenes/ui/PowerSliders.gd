@@ -1,5 +1,5 @@
 extends Control
-## Power allocation panel for the tablet: one touch slider per channel plus a
+## Power allocation panel for the MFD POWER page: one touch slider per channel plus a
 ## reactor budget readout that goes red when the summed allocation exceeds
 ## the ship's power budget. Sliders call the set_power intent; Phase 4 systems
 ## read the allocations: THRUST gates approach speed, CUTTER gates cutting,

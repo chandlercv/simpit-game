@@ -19,10 +19,14 @@ const CONFIG_PATH := "user://display_config.cfg"
 
 const ROLE_MAIN := "main"
 const ROLE_TACTICAL := "tactical"
-const ROLE_TABLET := "tablet"
-const ROLE_CHART := "chart"
+const ROLE_MFD := "mfd"
+const ROLE_CAMERA := "camera"
 
-const ALL_ROLES: Array[String] = [ROLE_MAIN, ROLE_TACTICAL, ROLE_TABLET, ROLE_CHART]
+const ALL_ROLES: Array[String] = [ROLE_MAIN, ROLE_TACTICAL, ROLE_MFD, ROLE_CAMERA]
+
+## Old role names -> current, so a layout saved before the tablet→mfd /
+## chart→camera rename keeps its screen assignment instead of re-prompting.
+const _ROLE_ALIASES: Dictionary = {"tablet": ROLE_MFD, "chart": ROLE_CAMERA}
 
 var _role_to_screen: Dictionary = {}
 ## Roles explicitly assigned (loaded from disk or via set_role_screen/commit_all),
@@ -71,6 +75,15 @@ func reload() -> void:
 				if value >= 0:
 					_role_to_screen[role] = value
 					_user_set[role] = true
+			# Adopt a pre-rename layout: an old role key fills in for its new name
+			# when the new one wasn't itself saved.
+			for old_role: String in _ROLE_ALIASES:
+				var new_role: String = _ROLE_ALIASES[old_role]
+				if not _user_set.get(new_role, false):
+					var value: int = cfg.get_value(section, old_role, -1)
+					if value >= 0:
+						_role_to_screen[new_role] = value
+						_user_set[new_role] = true
 	_fill_defaults()
 
 
