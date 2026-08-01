@@ -23,6 +23,13 @@ extends Resource
 @export var rotation_rate_deg := 45.0
 @export var max_speed := 25.0
 
+## Every directional thruster other than the main (forward) one — strafe,
+## vertical, and reverse — is a smaller tap off the same drive, not a matched
+## engine of its own: each rates at this fraction of forward performance
+## (manual_accel for strafe/vertical, manual_accel and max_speed for reverse).
+## One knob for all of them so the whole maneuvering profile tunes together.
+@export var secondary_thrust_fraction := 0.5
+
 ## Cutting-head throughput at full CUTTER allocation, fraction of a member
 ## severed per second.
 @export var cut_rate := 0.35

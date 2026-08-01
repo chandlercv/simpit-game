@@ -76,6 +76,15 @@ var _risk_base := 0.15
 var _manual_thrust := Vector3.ZERO
 var _manual_rot := Vector3.ZERO
 
+## Forward/back throttle command law. SPEED (default) treats the throttle as a
+## target fraction of max_speed and closes on it — cruise-control style, no
+## need to ride the lever to hold a speed. THRUST is the legacy behavior,
+## where the throttle is felt directly as acceleration. Toggled in flight via
+## a bindable button (throttle_cmd_toggle); independent of the per-device
+## lever/gamepad binding curve set in the F7 remapper (ControlsSetup).
+enum ThrottleCmdMode { SPEED, THRUST }
+var _throttle_cmd_mode := ThrottleCmdMode.SPEED
+
 
 func _ready() -> void:
 	_rng.randomize()
@@ -151,6 +160,14 @@ func toggle_approach() -> void:
 		_abort_cut("APPROACH BROKEN")
 		_set_approach("HOLDING")
 		GameState.post_comms("OPS", "STATION-KEEPING RELEASED — HOLDING")
+
+
+## Bindable (throttle_cmd_toggle): flip between SPEED and THRUST throttle
+## command law. See ThrottleCmdMode above.
+func toggle_throttle_cmd_mode() -> void:
+	_throttle_cmd_mode = (ThrottleCmdMode.THRUST if _throttle_cmd_mode == ThrottleCmdMode.SPEED
+			else ThrottleCmdMode.SPEED)
+	GameState.post_comms("OPS", "THROTTLE — %s COMMAND" % ThrottleCmdMode.keys()[_throttle_cmd_mode])
 
 
 func request_cut() -> void:
@@ -375,6 +392,13 @@ func _update_approach(delta: float) -> void:
 ## Newtonian-lite manual flight (Phase 5): rate-controlled attitude, thruster
 ## acceleration gated by THRUST power, mild flight-assist damping and a speed
 ## ceiling so the pit stays flyable without a full sim.
+##
+## The throttle (forward/back) axis runs its own control law via
+## _apply_throttle_axis, independent of strafe/vertical: SPEED mode (default)
+## commands a target fraction of max_speed and closes on it, like cruise
+## control; THRUST mode is the legacy direct-acceleration behavior. Strafe and
+## vertical stay acceleration-based in both cases, and — like reverse — rate at
+## only secondary_thrust_fraction of the main thruster (see ShipDefinition).
 func _update_manual_flight(delta: float) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var transform: Transform3D = ship["transform"]
@@ -383,18 +407,37 @@ func _update_manual_flight(delta: float) -> void:
 		var rate := deg_to_rad(GameState.ship_def.rotation_rate_deg)
 		transform.basis = (transform.basis
 				* Basis.from_euler(_manual_rot * rate * delta)).orthonormalized()
+	var accel: float = GameState.ship_def.manual_accel * maxf(GameState.power("THRUST"), 0.0)
 	if _manual_thrust.length_squared() > 0.001:
-		var accel: float = GameState.ship_def.manual_accel \
-				* maxf(GameState.power("THRUST"), 0.0)
-		var local := Vector3(_manual_thrust.x, _manual_thrust.y, -_manual_thrust.z)
-		velocity += transform.basis * local * accel * delta
+		var secondary_accel := accel * GameState.ship_def.secondary_thrust_fraction
+		var lateral := Vector3(_manual_thrust.x, _manual_thrust.y, 0.0)
+		velocity += transform.basis * lateral * secondary_accel * delta
 	else:
 		# Flight assist: bleed residual drift so station-keeping is feasible.
 		velocity *= exp(-0.35 * delta)
+	velocity = _apply_throttle_axis(transform, velocity, accel, delta)
 	velocity = velocity.limit_length(GameState.ship_def.max_speed)
 	transform.origin += velocity * delta
 	ship["transform"] = transform
 	ship["velocity"] = velocity
+
+
+## Advance `velocity`'s forward/back component only, per the active throttle
+## command mode (see ThrottleCmdMode). Reverse is capped at
+## secondary_thrust_fraction of forward — clamping the command rather than the
+## result, so it scales both the THRUST-mode acceleration and the SPEED-mode
+## target uniformly, whatever secondary_thrust_fraction is tuned to.
+func _apply_throttle_axis(transform: Transform3D, velocity: Vector3, accel: float, delta: float) -> Vector3:
+	var forward_dir: Vector3 = -transform.basis.z
+	var reverse_cap: float = GameState.ship_def.secondary_thrust_fraction
+	var z_cmd: float = clampf(_manual_thrust.z, -reverse_cap, 1.0)
+	var fwd_speed := velocity.dot(forward_dir)
+	var new_fwd_speed: float
+	if _throttle_cmd_mode == ThrottleCmdMode.THRUST:
+		new_fwd_speed = fwd_speed + z_cmd * accel * delta
+	else:
+		new_fwd_speed = move_toward(fwd_speed, z_cmd * GameState.ship_def.max_speed, accel * delta)
+	return velocity + forward_dir * (new_fwd_speed - fwd_speed)
 
 
 func _update_cut(delta: float) -> void:

@@ -40,6 +40,7 @@ const AXIS_TARGETS := [
 	{"label": "Power LIFE", "neg": "power_life_lo", "pos": "power_life_hi", "group": "POWER"},
 ]
 const BUTTON_TARGETS := [
+	{"label": "Throttle Cmd Mode", "action": "throttle_cmd_toggle", "group": "THROTTLE"},
 	{"label": "Approach", "action": "ops_approach", "group": "OPS"},
 	{"label": "Cut", "action": "ops_cut", "group": "OPS"},
 	{"label": "Cycle Contact", "action": "contact_cycle", "group": "OPS"},
@@ -178,8 +179,10 @@ func _build_ui() -> void:
 		+ "these for a POV hat that reports as buttons, e.g. strafe on the X52 " \
 		+ "hat). REV flips an axis; a nub source can be picked instead. A throttle " \
 		+ "can rest anywhere; let a spring-loaded stick axis recenter before the " \
-		+ "next bind. The X52 wheel is buttons 32/33 — bind it on an OPS row. SAVE " \
-		+ "writes a profile per device. Esc or CLOSE exits."
+		+ "next bind. The throttle's MODE button toggles Lever (rests anywhere, " \
+		+ "idle→full) vs Gamepad (center-rest, bipolar — pick this for a self-" \
+		+ "centering stick/trigger axis). The X52 wheel is buttons 32/33 — bind it " \
+		+ "on an OPS row. SAVE writes a profile per device. Esc or CLOSE exits."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
@@ -363,6 +366,13 @@ func _add_throttle_row() -> void:
 	inv.focus_mode = Control.FOCUS_NONE
 	inv.pressed.connect(_toggle_throttle_invert)
 	row.add_child(inv)
+	var mode := Button.new()
+	mode.text = "MODE"
+	mode.tooltip_text = "Toggle Lever (one-directional, rests anywhere) / " \
+		+ "Gamepad (center-rest, bipolar) throttle curve"
+	mode.focus_mode = Control.FOCUS_NONE
+	mode.pressed.connect(_toggle_throttle_mode)
+	row.add_child(mode)
 
 
 # --- Load current bindings -------------------------------------------------
@@ -427,8 +437,10 @@ func _reload() -> void:
 			if not _throttle.is_empty():
 				_shadow_throttle.append({"guid": _throttle["guid"], "spec": _throttle_orig.duplicate(true)})
 			_throttle_orig = t.duplicate(true)
-			var inv := float(t.get("idle", 1.0)) < float(t.get("full", -1.0))
-			_throttle = {"guid": guid, "axis": int(t.get("axis", 0)), "invert": inv}
+			var mode := String(t.get("mode", "lever"))
+			var inv: bool = (bool(t.get("invert", false)) if mode == "gamepad"
+					else float(t.get("idle", 1.0)) < float(t.get("full", -1.0)))
+			_throttle = {"guid": guid, "axis": int(t.get("axis", 0)), "invert": inv, "mode": mode}
 	# Seed keyboard binds from the device-less "keyboard" pseudo-profile.
 	var kb := InputRouter.profile_for_guid("keyboard")
 	if not kb.is_empty():
@@ -498,7 +510,7 @@ func _poll_axis_capture() -> void:
 		# The rest position (baseline) is idle; its sign tells us which endpoint
 		# is idle without needing the user to hold full.
 		var base := float(_axis_baseline.get("%d:%d" % [best_dev, best_axis], 0.0))
-		_throttle = {"guid": guid, "axis": best_axis, "invert": base < 0.0}
+		_throttle = {"guid": guid, "axis": best_axis, "invert": base < 0.0, "mode": "lever"}
 		_throttle_rebound = true
 	else:
 		# Pushing toward +axis maps to `pos`; if the user pushed negative to
@@ -607,6 +619,12 @@ func _clear_button(action: String) -> void:
 func _toggle_throttle_invert() -> void:
 	if _throttle.has("axis"):
 		_throttle["invert"] = not _throttle.get("invert", false)
+		_refresh_values()
+
+
+func _toggle_throttle_mode() -> void:
+	if _throttle.has("axis"):
+		_throttle["mode"] = "gamepad" if String(_throttle.get("mode", "lever")) == "lever" else "lever"
 		_refresh_values()
 
 
@@ -720,9 +738,10 @@ func _axis_text(bind: Dictionary) -> String:
 func _throttle_text() -> String:
 	if not _throttle.has("axis"):
 		return "—"
-	return "Axis %d · %s%s" % [
+	return "Axis %d · %s%s  [%s]" % [
 		_throttle["axis"], _dev_short(_throttle.get("guid", "")),
-		"  (inv)" if _throttle.get("invert", false) else ""]
+		"  (inv)" if _throttle.get("invert", false) else "",
+		String(_throttle.get("mode", "lever")).to_upper()]
 
 
 ## Assemble the working binds into one profile PER device GUID and persist each.
@@ -822,14 +841,18 @@ func _profile_for(by_guid: Dictionary, guid: String) -> Dictionary:
 	return by_guid[guid]
 
 
-## Throttle spec to persist. A freshly re-bound throttle (or a device with no
-## prior throttle) only knows axis + direction, so it writes plain ±1 endpoints.
-## But if the loaded throttle's axis was left alone we preserve its original
-## calibration (idle_deadzone / custom idle-full endpoints / deadzone) verbatim,
-## flipping it through _invert_throttle_spec() only when INVERT was toggled.
+## Throttle spec to persist. Gamepad mode has no calibration to preserve — it's
+## always just axis + invert. Lever mode: a freshly re-bound throttle (or a
+## device with no prior throttle) only knows axis + direction, so it writes
+## plain ±1 endpoints; otherwise we preserve the loaded throttle's original
+## calibration (idle_deadzone / custom idle-full endpoints / deadzone)
+## verbatim, flipping it through _invert_throttle_spec() only when INVERT was
+## toggled.
 func _throttle_spec_out() -> Dictionary:
 	var axis: int = _throttle["axis"]
 	var inv: bool = _throttle.get("invert", false)
+	if String(_throttle.get("mode", "lever")) == "gamepad":
+		return {"axis": axis, "mode": "gamepad", "invert": inv}
 	if _throttle_rebound or _throttle_orig.is_empty():
 		return {"axis": axis, "idle": -1.0 if inv else 1.0, "full": 1.0 if inv else -1.0}
 	var orig_inv := float(_throttle_orig.get("idle", 1.0)) < float(_throttle_orig.get("full", -1.0))

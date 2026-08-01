@@ -94,6 +94,15 @@ frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
 turns red on overdraw. THRUST gates approach/manual acceleration, CUTTER gates
 cutting, SENSORS gates scan speed.
 
+**Manual flight throttle:** by default the throttle (forward/back) commands a
+target speed, not raw thrust — ease it to 50% and the ship accelerates to,
+then holds, 50% of max speed; let go and it holds station on that axis. A
+mapped **Throttle Cmd Mode** button swaps this for the legacy direct-thrust
+feel (throttle = acceleration, no cruise control). Strafe, vertical, and
+reverse are all secondary thrusters off the same drive — each rated at 50% of
+the main thruster's forward performance (`ShipDefinition.secondary_thrust_fraction`,
+one knob for the whole maneuvering profile).
+
 Each channel can be driven from the switch panel (see the switch table below):
 FUEL PUMP→THRUST, AVIONICS→SENSORS, DE-ICE→CUTTER, PITOT HEAT→LIFE. The first
 three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
@@ -140,7 +149,7 @@ playable at a desk out of the box; you only open the remapper to change somethin
 
 | Control | Action |
 | --- | --- |
-| **Throttle lever** (axis 2) | Forward thrust. Idle near the top; push forward to accelerate. Folds into the ship's forward thrust and must sit under ~40% travel to arm the approach autopilot. |
+| **Throttle lever** (axis 2) | Forward/back command. Idle near the top; push forward to command more speed (a target % of max speed by default — see **Manual flight throttle** above). Folds into the ship's forward/back command and must sit under ~40% travel to arm the approach autopilot. |
 | **POV hat** (buttons 19–22) | **Strafe & vertical thrust** — hat left/right strafes left/right, hat up/down thrusts up/down. Lateral and vertical translation without touching the stick. |
 | **Button 7** (Fire E) | **Toggle approach / match-velocity** (`ops_approach`) |
 
@@ -220,7 +229,9 @@ set from an MFD's touch sliders, from a mapped power axis (slider) or key/button
 HEAT). Everything you can do on an MFD is also bindable to a HOTAS button or
 axis (see the remapper groups **MFD / SALVAGE / TACTICAL / CARGO / MARKET / VIEW
 / POWER**). The Tactical SCOPE⇄CHART toggle is in **TACTICAL** — bind it to a
-HOTAS button to flip the Tactical display without touching the screen.
+HOTAS button to flip the Tactical display without touching the screen. **Throttle
+Cmd Mode** (group **THROTTLE**) ships unbound — map it to a button to flip
+between speed- and thrust-command throttle in flight.
 
 The mapped **CARGO** commands (next / prev / jettison) act on whichever CARGO
 page is **currently on screen**, not on a hidden one. The two MFDs page
@@ -272,7 +283,7 @@ A profile entry (the file and `BUILTIN_PROFILES` share one schema) has these key
 | `axes` | Analog axes → a pair of direction actions, e.g. `{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"}`. Swap `neg`/`pos` (or hit **REV**) to reverse. |
 | `buttons` | Momentary buttons → one action, e.g. `{"button": 0, "action": "ops_cut"}`. |
 | `keys` | **Keyboard keys → one action** (only on the device-less `keyboard` profile), e.g. `{"key": 67, "action": "ops_cut"}`. `key` is a Godot physical keycode. The shipped default keyboard mapping is the built-in `keyboard` profile; a user `keyboard.json` overrides it. |
-| `throttle` | The one axis read directly and rescaled to 0..1. General form `{"axis": 2, "idle": 1.0, "full": -1.0}` fits any rest/travel range and direction; the legacy X52 form `{"axis": 2, "idle_deadzone": 0.95}` still works. |
+| `throttle` | The one axis read directly. Two curves, toggled by **MODE** in the remapper: **Lever** (default) — a one-directional lever that rests anywhere, rescaled to 0..1. General form `{"axis": 2, "idle": 1.0, "full": -1.0}` fits any rest/travel range and direction; the legacy X52 form `{"axis": 2, "idle_deadzone": 0.95}` still works. **Gamepad** — `{"axis": 2, "mode": "gamepad", "invert": false}`, for a self-centering stick/trigger axis: raw value is the command directly, 0 at center, ±1 at the stops. |
 | `hid_axes` | A **raw-HID virtual axis** → a direction pair, e.g. `{"source": "x52_mouse_x", "neg": "yaw_left", "pos": "yaw_right"}`. Sources: `x52_mouse_x`, `x52_mouse_y` — the X52 throttle's mouse nub, which Godot doesn't expose as joystick axes (see below). |
 | `reserved_buttons` | Documentation only — selector-position banks where one button is always held. Never bind an action to these. |
 

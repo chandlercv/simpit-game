@@ -70,6 +70,31 @@ Corporatists are emerging, but there's still room for independents to make a goo
 
 Travel between planetary systems requires far more energy than an individual ship can provide — it's very expensive and happens on roughly a once-a-century timescale.
 
+## Ship Performance: Why There's a Speed Ceiling
+
+- **Waste heat, not drag.** A drive's exhaust/reaction losses scale faster than
+  a hull's radiator area can shed them. Every ship has a speed past which its
+  radiators can't dump heat as fast as the drive makes it — that's the real
+  ceiling, not some exotic drag-on-spacetime effect. It's an engineering limit
+  (radiator sizing), not a physics one, so it varies hull to hull rather than
+  being a universal constant.
+- **Salvage ships run hotter than their rating.** A salvager is built from
+  wreck parts — the drive and the radiators bolted to it were never designed
+  as a matched set — so its practical ceiling sits below a purpose-built
+  hull's. That's the in-fiction reason a player ship feels sluggish next to
+  the military-surplus wrecks it's cutting apart, and it's a legitimate
+  upgrade path (better-matched radiators, not a bigger engine).
+- **Ties to the Totalitarian/Democrat split.** Totalitarian yards built for
+  the "warrior" ethos and skimped on damage control (see WWII reference below)
+  — their surplus hulls tend to be overdriven for their radiators, fast in a
+  straight line but quick to cook themselves under sustained burn. Independent
+  and salvager builds lean conservative, trading peak speed for a ceiling they
+  can actually sit at all day.
+- **Reverse is deliberately weak.** No yard designs a drive to push backward
+  as hard as forward — reverse thrust is a braking/maneuvering tap off the
+  main drive, not a mirrored engine. A ship's reverse performance is a small
+  fraction of its forward performance, full stop.
+
 ## WWII (Reference)
 
 ### Totalitarians
