@@ -26,8 +26,13 @@ const PROXIMITY_RANGE := 25.0
 ## Keeps the nose reticle / velocity marker off the very edge when clamped.
 const EDGE_MARGIN := 24.0
 
-## Below this speed the velocity direction is unstable, so hide the marker.
+## At/below this speed the ship is effectively stationary; hide the resting marker.
 const VEL_EPSILON := 0.05
+
+## Drift-marker sensitivity: screen offset per (m/s) of lateral velocity, as a
+## fraction of viewport height. At 0.04, ~10 m/s of drift pushes the brackets
+## ~40% of the way to the screen edge before the margin clamp catches them.
+const VEL_MARKER_SCALE := 0.04
 
 var _time := 0.0
 
@@ -142,36 +147,48 @@ func _project_direction(dir: Vector3) -> Variant:
 	return p.clamp(Vector2(EDGE_MARGIN, EDGE_MARGIN), size - Vector2(EDGE_MARGIN, EDGE_MARGIN))
 
 
+## The nose reticle, and the drift marker's anchor, both live here: the ship's
+## *nose* projected to screen (glance rotates only the camera gimbal, so the nose
+## slides off-centre as you look around). Falls back to screen centre when the
+## nose is behind the camera or the camera isn't wired up yet.
+func _nose_center() -> Vector2:
+	if camera == null:
+		return size / 2.0
+	var xform: Transform3D = GameState.local_ship()["transform"]
+	var p = _project_direction(-xform.basis.z)
+	return p if p != null else size / 2.0
+
+
 ## The reticle marks the ship's *nose*, not the view centre: glance rotates only
 ## the camera gimbal, so the nose slides off-centre as you look around. At rest
 ## (no glance) the nose projects to screen centre, matching the old fixed glyph.
 func _draw_reticle() -> void:
-	var c := size / 2.0
-	if camera != null:
-		var xform: Transform3D = GameState.local_ship()["transform"]
-		var nose := -xform.basis.z
-		var p = _project_direction(nose)
-		if p != null:
-			c = p
+	var c := _nose_center()
 	draw_arc(c, 14.0, 0.0, TAU, 48, HUD_COLOR, 1.5, true)
 	for dir: Vector2 in [Vector2.RIGHT, Vector2.LEFT, Vector2.UP, Vector2.DOWN]:
 		draw_line(c + dir * 22.0, c + dir * 34.0, HUD_COLOR, 1.5)
 
 
-## Flight-path marker: a pair of vertical brackets [ ] at the ship's direction
-## of travel. Pure main-engine thrust drives velocity toward the nose, so the
-## brackets converge to frame the reticle; side thrust / drift splits them off.
-## Hidden at rest (unstable normalize) and when travel is behind the view.
+## Drift marker: a pair of vertical brackets [ ] offset from the nose reticle by
+## the ship's *lateral* velocity — the component perpendicular to the nose;
+## forward speed shows in the VEL readout, not here. The offset scales with drift
+## *magnitude* (not just direction), so the brackets rest on the reticle when you
+## fly straight and slide smoothly back onto it as you counter-thrust to null,
+## instead of pinning to the screen edge the moment travel goes off-axis.
 func _draw_velocity_vector() -> void:
 	if camera == null:
 		return
 	var vel: Vector3 = GameState.local_ship().get("velocity", Vector3.ZERO)
 	if vel.length() < VEL_EPSILON:
 		return
-	var p = _project_direction(vel)
-	if p == null:
-		return
-	_draw_flanking_brackets(p, 18.0, HUD_COLOR, 1.5)
+	var nose := -(GameState.local_ship()["transform"] as Transform3D).basis.z
+	var drift := vel - nose * vel.dot(nose)
+	var cam_basis := camera.global_transform.basis
+	var px_per_ms := size.y * VEL_MARKER_SCALE
+	var offset := Vector2(drift.dot(cam_basis.x), -drift.dot(cam_basis.y)) * px_per_ms
+	var center := (_nose_center() + offset).clamp(
+			Vector2(EDGE_MARGIN, EDGE_MARGIN), size - Vector2(EDGE_MARGIN, EDGE_MARGIN))
+	_draw_flanking_brackets(center, 18.0, HUD_COLOR, 1.5)
 
 
 func _draw_flanking_brackets(center: Vector2, r: float, color: Color, width: float) -> void:

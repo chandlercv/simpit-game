@@ -319,15 +319,28 @@ func _inject(action: String, event: InputEvent) -> void:
 	_bound[action].append(event)
 
 
-## 0..1 forward thrust from the throttle profile's axis, 0 when absent or at
-## idle. Two spec forms:
-##   {idle_deadzone}   legacy X52 (idle=+1, full=-1; zero when raw >= deadzone)
-##   {idle, full}      general — any rest/travel range and direction, with an
-##                     optional normalized `deadzone` (default 0.02) near idle.
+## -1..1 forward/back command from the throttle profile's axis, 0 when absent
+## or at rest. Three spec forms:
+##   {mode:"gamepad"}  bipolar, center-rest (a self-centering stick/trigger axis
+##                     rather than a lever): raw value is the command directly,
+##                     0 at center, ±1 at the stops; `invert` flips sign. The
+##                     ship-wide reverse cap (SalvageSystem, secondary_thrust_
+##                     fraction) does the asymmetric forward/reverse scaling,
+##                     not this curve.
+##   {idle_deadzone}   legacy X52 lever (idle=+1, full=-1; zero when raw >= deadzone)
+##   {idle, full}      general lever — any rest/travel range and direction, with
+##                     an optional normalized `deadzone` (default 0.02) near idle.
 func throttle() -> float:
 	if _throttle_device == -1:
 		return 0.0
 	var value := Input.get_joy_axis(_throttle_device, _throttle_axis as JoyAxis)
+	if String(_throttle_spec.get("mode", "")) == "gamepad":
+		var v := clampf(value, -1.0, 1.0)
+		if _throttle_spec.get("invert", false):
+			v = -v
+		if absf(v) <= float(_throttle_spec.get("deadzone", 0.05)):
+			return 0.0
+		return v
 	if _throttle_spec.has("idle_deadzone"):
 		if value >= float(_throttle_spec["idle_deadzone"]):
 			return 0.0
@@ -363,6 +376,8 @@ func _process(_delta: float) -> void:
 		SalvageSystem.toggle_approach()
 	if Input.is_action_just_pressed("ops_cut"):
 		SalvageSystem.request_cut()
+	if Input.is_action_just_pressed("throttle_cmd_toggle"):
+		SalvageSystem.toggle_throttle_cmd_mode()
 	_process_panel_commands()
 
 
