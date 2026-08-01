@@ -11,11 +11,11 @@ a HOTAS, a Saitek switch panel, and touch/mouse on the secondary screens.
 > (Forward+). Main scene: `scenes/boot/Boot.tscn`.
 
 ![Main hull-camera view: a derelict frigate at cutting range framed by the thin
-flight HUD — a centre nose reticle, velocity-vector brackets, VEL/HDG/EL readouts,
+flight HUD — a centre nose reticle, drift brackets, VEL/HDG/EL readouts,
 a locked-target box on the frigate, and a flagged UNSTABLE DEBRIS hazard.](assets/docs/main_view.png)
 
 *The Main display — an external hull-camera feed of the wreck at cutting range,
-with the thin flight HUD: nose reticle, velocity-vector brackets,
+with the thin flight HUD: nose reticle, drift brackets,
 velocity/heading/elevation readouts, a locked-target box on the derelict frigate,
 and a flagged UNSTABLE DEBRIS hazard.*
 
@@ -46,11 +46,13 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   a *glance* rotates only the camera and not the hull, the reticle slides
   off-centre toward the nose as you glance, pinning to the screen edge on a hard
   glance. It's how you keep track of where "forward" is while looking around.
-- **Velocity vector** — a pair of brackets `[ ]` marking the ship's **direction
-  of travel**. Thrust straight ahead on the main engine and the brackets drift in
-  to frame the reticle (`[ ⊕ ]`); strafe or drift sideways and they split off
-  toward the way you're actually moving. They fade out at rest and when you're
-  travelling backwards, out of view.
+- **Drift marker** — a pair of brackets `[ ]` offset from the nose reticle by how
+  fast you're sliding **sideways** (your velocity across the nose; straight-ahead
+  speed shows in the VEL readout, not here). Fly straight and they rest on the
+  reticle (`[ ⊕ ]`); strafe or drift and they slide off proportionally to the way
+  you're sliding. The offset tracks drift *magnitude*, so counter-thrusting eases
+  the brackets smoothly back onto the reticle and parks them there once you've
+  nulled the drift — that's your cue you're dead in the water. Hidden at rest.
 - **Readouts** — bottom-left **VEL** (speed) and **HDG / EL** (heading and
   elevation of the view); a tracked contact gets corner brackets with its name and
   range, plus a pulsing threat frame and **PROXIMITY** warning when it's a close
