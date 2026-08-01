@@ -853,7 +853,12 @@ func _throttle_spec_out() -> Dictionary:
 	var inv: bool = _throttle.get("invert", false)
 	if String(_throttle.get("mode", "lever")) == "gamepad":
 		return {"axis": axis, "mode": "gamepad", "invert": inv}
-	if _throttle_rebound or _throttle_orig.is_empty():
+	# A rebound throttle, a device with no prior throttle, OR a loaded gamepad
+	# throttle just switched to lever — none carry lever calibration to preserve,
+	# so write plain ±1 endpoints. (Returning _throttle_orig below would persist the
+	# gamepad spec verbatim, silently reverting the Lever selection on reload.)
+	if _throttle_rebound or _throttle_orig.is_empty() \
+			or String(_throttle_orig.get("mode", "")) == "gamepad":
 		return {"axis": axis, "idle": -1.0 if inv else 1.0, "full": 1.0 if inv else -1.0}
 	var orig_inv := float(_throttle_orig.get("idle", 1.0)) < float(_throttle_orig.get("full", -1.0))
 	return _invert_throttle_spec(_throttle_orig) if inv != orig_inv else _throttle_orig.duplicate(true)
