@@ -12,10 +12,16 @@ extends Node3D
 @onready var _beacon_light: OmniLight3D = $BeaconLight
 
 var _time := 0.0
-## Per-member collision: node name -> {hull: PackedVector3Array (world),
-## center: Vector3, radius: float, id: int}. Baked once (the frame is static),
-## and each member's obstacle is registered while it's intact / removed when it's
-## cut or collapses, so the ship collides with exactly the visible structure.
+## This site's tumble angular velocity (parent space, rad/s), read from the wreck
+## graph — SalvageSystem.reset_site() rolls a fresh axis + rate per claim, so no two
+## derelicts spin alike. Gentle enough to read as adrift, not spinning. Published
+## per member as v = ω × r so the approach autopilot can track the orbiting standoff.
+var _tumble_omega: Vector3 = Vector3.ZERO
+## Per-member collision/geometry, node name -> {hull_local, center_local,
+## seam_local: (all wreck-local), radius: float, id: int}. Baked once in the
+## wreck's local frame (the body is rigid); each frame _publish_world transforms
+## it by the live tumble to refresh the member's world center/seam and its
+## registered obstacle, so collision and the cut seam ride the visible rotation.
 var _member_bodies: Dictionary = {}
 
 
@@ -27,6 +33,7 @@ func _ready() -> void:
 	GameState.wreck_member_cut.connect(_on_member_cut)
 	GameState.wreck_members_lost.connect(_sync_members)
 	GameState.site_reset.connect(_on_site_reset)
+	_tumble_omega = GameState.wreck.get("tumble_omega", Vector3.ZERO)
 	_sync_members()
 
 
@@ -40,6 +47,13 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	# Advance this site's tumble (spin about ω in parent space) and refresh every
+	# intact member's world geometry + collision body against the new orientation.
+	if _tumble_omega.length() > 0.0001:
+		rotate(_tumble_omega.normalized(), _tumble_omega.length() * delta)
+	for member: Dictionary in GameState.wreck.get("members", []):
+		if not (member["cut"] or member["destroyed"]) and _member_bodies.has(member["node"]):
+			_publish_world(member, _member_bodies[member["node"]])
 	# Slow distress-beacon pulse.
 	var pulse := 0.5 + 0.5 * sin(_time * TAU * 0.4)
 	_beacon_light.light_energy = 1.0 + 5.0 * pulse
@@ -52,6 +66,10 @@ func _on_member_cut(id: int) -> void:
 
 
 func _on_site_reset() -> void:
+	# Fresh claim → fresh tumble (and a random start orientation so the new derelict
+	# isn't caught mid-pose from the last one; the site swap hides the snap).
+	_tumble_omega = GameState.wreck.get("tumble_omega", Vector3.ZERO)
+	basis = Basis.from_euler(Vector3(randf_range(-PI, PI), randf_range(-PI, PI), randf_range(-PI, PI)))
 	_sync_members()
 
 
@@ -73,13 +91,43 @@ func _apply_member(member: Dictionary) -> void:
 	if not _member_bodies.has(node_name):
 		return
 	var body: Dictionary = _member_bodies[node_name]
-	if solid and body["id"] == -1:
-		body["id"] = GameState.register_obstacle(
-				"WRECK: %s" % member["name"], body["center"], body["radius"],
-				body["hull"], true)
-	elif not solid and body["id"] != -1:
+	if solid:
+		# Seed the graph's world center/seam/vel now; _process keeps them live as the
+		# wreck tumbles. reset_site() rebuilds the members array, so re-write on sync.
+		_publish_world(member, body)
+		if body["id"] == -1:
+			body["id"] = GameState.register_obstacle(
+					"WRECK: %s" % member["name"], member["center"], body["radius"],
+					_world_hull(body), true)
+	elif body["id"] != -1:
 		GameState.remove_obstacle(body["id"])
 		body["id"] = -1
+
+
+## Transform a member's baked local geometry by the wreck's current tumble and
+## write the results into the graph (world centroid, cut-seam point, and the
+## orbital velocity ω × r the autopilot feed-forwards) plus its live obstacle
+## dict, so collision, approach, and the alignment seam all track the rotation.
+func _publish_world(member: Dictionary, body: Dictionary) -> void:
+	var xform := global_transform
+	member["center"] = xform * body["center_local"]
+	member["seam"] = xform * body["seam_local"]
+	member["radius"] = body["radius"]
+	member["vel"] = _tumble_omega.cross(member["center"] - global_position)
+	if body["id"] != -1:
+		var obstacle := GameState.get_obstacle(body["id"])
+		if not obstacle.is_empty():
+			obstacle["position"] = member["center"]
+			obstacle["hull"] = _world_hull(body)
+
+
+## The member's convex hull in world space for this frame's orientation.
+func _world_hull(body: Dictionary) -> PackedVector3Array:
+	var xform := global_transform
+	var out := PackedVector3Array()
+	for p: Vector3 in body["hull_local"]:
+		out.append(xform * p)
+	return out
 
 
 ## Bake each member's convex hull once (the frame is static). Hulls are in world
@@ -94,9 +142,14 @@ func _bake_member_hulls() -> void:
 			_member_bodies[node_name] = body
 
 
-## World-space convex hull of a member node's meshes, with a bounding sphere for
-## the GJK broadphase. `id` starts unregistered (-1). Radius 0 when it has no mesh.
+## Convex hull of a member node's meshes in the wreck's LOCAL frame (the body is
+## rigid, so it's baked once and re-transformed by the live tumble each frame),
+## with a bounding-sphere radius for the GJK broadphase and a seam point — the
+## hull vertex farthest along local +Y, a fixed spot on the member's surface that
+## the pre-cut alignment targets as it swings around with the spin. `id` starts
+## unregistered (-1). Radius 0 when the node has no mesh.
 func _bake_hull(node: Node3D) -> Dictionary:
+	var to_local := global_transform.affine_inverse()
 	var pts := PackedVector3Array()
 	for child in node.find_children("*", "MeshInstance3D", true, false):
 		var mi: MeshInstance3D = child
@@ -106,7 +159,7 @@ func _bake_hull(node: Node3D) -> Dictionary:
 		if shape == null:
 			continue
 		for p in shape.points:
-			pts.append(mi.global_transform * p)
+			pts.append(to_local * (mi.global_transform * p))
 	if pts.is_empty():
 		return {"radius": 0.0, "id": -1}
 	var centroid := Vector3.ZERO
@@ -114,6 +167,10 @@ func _bake_hull(node: Node3D) -> Dictionary:
 		centroid += p
 	centroid /= pts.size()
 	var radius := 0.0
+	var seam: Vector3 = pts[0]
 	for p in pts:
 		radius = maxf(radius, centroid.distance_to(p))
-	return {"hull": pts, "center": centroid, "radius": radius, "id": -1}
+		if p.y > seam.y:
+			seam = p
+	return {"hull_local": pts, "center_local": centroid, "seam_local": seam,
+			"radius": radius, "id": -1}

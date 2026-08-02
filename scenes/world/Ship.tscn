@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/world/HullCameraRig.tscn" id="1_rig"]
 [ext_resource type="Script" path="res://scenes/world/Ship.gd" id="3_ship"]
 [ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/craft_miner.glb" id="4_craft"]
+[ext_resource type="Script" path="res://scenes/world/CuttingBeam.gd" id="5_beam"]
 
 [node name="Ship" type="Node3D"]
 script = ExtResource("3_ship")
@@ -39,3 +40,6 @@ spot_angle = 24.0
 
 [node name="HullCameraRig" parent="." instance=ExtResource("1_rig")]
 position = Vector3(0, -0.5, -0.55)
+
+[node name="CuttingBeam" type="MeshInstance3D" parent="."]
+script = ExtResource("5_beam")

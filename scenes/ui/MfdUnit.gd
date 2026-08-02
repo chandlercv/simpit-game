@@ -19,9 +19,10 @@ const MarketPanelScene := preload("res://scenes/ui/MarketPanel.tscn")
 const CommsLogScene := preload("res://scenes/ui/CommsLog.tscn")
 const ContactListScript := preload("res://scenes/ui/ContactList.gd")
 const SalvagePanelScript := preload("res://scenes/ui/SalvagePanel.gd")
+const AlignPanelScript := preload("res://scenes/ui/AlignPanel.gd")
 
 ## Page order (also the menu grid order). Empty string = the MENU home.
-const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "MARKET", "CONTACTS"]
+const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "MARKET", "CONTACTS"]
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 @export var background: Color = Color(0.012, 0.038, 0.038)
@@ -33,6 +34,9 @@ const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "MARKET", "CONTACTS"]
 
 ## "" == the MENU home; otherwise one of PAGES.
 var _current := ""
+## Page that was up when alignment auto-opened the ALIGN page, restored after
+## (primary unit only). "" means the MENU home was showing.
+var _page_before_align := ""
 var _pages: Dictionary = {}   # page name -> Control
 var _menu: Control
 var _content: MarginContainer
@@ -48,6 +52,23 @@ func _ready() -> void:
 		show_page(default_page.to_upper())
 	else:
 		go_home()
+	GameState.align_changed.connect(_on_align_changed)
+
+
+## Surface the alignment mini-game on the primary MFD the moment it opens, then
+## hand the screen back to whatever was up once it commits or aborts. Only unit A
+## auto-switches, so the other MFD stays free for power/cargo during the cut.
+func _on_align_changed(state: String) -> void:
+	if unit_id != "A":
+		return
+	if state == "ALIGNING":
+		_page_before_align = _current
+		show_page("ALIGN")
+	elif _current == "ALIGN":
+		if _page_before_align == "":
+			go_home()
+		else:
+			show_page(_page_before_align)
 
 
 func _build() -> void:
@@ -121,6 +142,10 @@ func _build_page(page: String) -> Control:
 			var salvage := SalvagePanelScript.new()
 			salvage.accent = accent
 			return salvage
+		"ALIGN":
+			var align := AlignPanelScript.new()
+			align.accent = accent
+			return align
 		"MARKET":
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 8)

@@ -39,6 +39,48 @@ const RISK_EASE := 0.25
 ## Members below this load fraction are cosmetic (panels, masts).
 const COSMETIC_LOAD := 0.2
 
+## Per-site derelict tumble: reset_site() rolls a random spin axis + rate (rad/s)
+## into wreck["tumble_omega"], so no two claims tumble alike and the alignment
+## challenge can't be memorised. Rate is capped low so it reads as adrift (not
+## spinning) and the approach feed-forward can still hold station — v = ω × r stays
+## small enough that MATCHED is reachable. A minority of wrecks come in barely
+## turning, for variety. Wreck.gd (view/physics) reads the published omega.
+const TUMBLE_RATE_MIN := 0.07
+const TUMBLE_RATE_MAX := 0.20
+const TUMBLE_STABLE_CHANCE := 0.2
+const TUMBLE_STABLE_MIN := 0.02
+const TUMBLE_STABLE_MAX := 0.05
+
+## --- Pre-cut alignment mini-game ------------------------------------------
+## Once MATCHED on a member, firing the cutter opens a 2-axis crosshair: the
+## player steers a reticle (align.reticle, -1..1) onto a drifting seam point
+## (align.target) and holds it inside LOCK_RADIUS to build align.lock to 1.0
+## (auto-commit). Straying past SLIP_RADIUS grows align.slip; a full slip aborts
+## the cut (the hard-fail). The captured align.quality (0..1) then scales the
+## cut's speed, risk spike, and yield — a clean cut is faster, safer, richer.
+## Reticle aim comes from the flight pitch/yaw axes (InputRouter routes them here
+## while ALIGNING so they don't disengage the match).
+const ALIGN_LOCK_RADIUS := 0.18
+const ALIGN_SLIP_RADIUS := 0.55
+const ALIGN_LOCK_RATE := 0.7
+const ALIGN_LOCK_BLEED := 0.9
+const ALIGN_SLIP_RATE := 0.6
+const ALIGN_SLIP_RECOVER := 0.4
+const ALIGN_RETICLE_RATE := 1.4
+## The seam is a real point on the member (Wreck.gd bakes it), so it "drifts"
+## because the derelict tumbles — no synthetic wander. This maps the seam's offset
+## from the member centroid (up to its radius) into the -1..1 align field: larger
+## members sweep a wider arc, so a big spar is harder to hold than a small panel.
+const ALIGN_SEAM_SPAN := 1.6
+## Quality (0..1) -> outcome. Cut-rate multiplier floor, risk-spike multiplier
+## band (poor alignment spikes harder), yield multiplier floor, and the risk
+## nudge a botched (slipped-out) alignment leaves behind.
+const ALIGN_RATE_MIN := 0.45
+const ALIGN_RISK_MIN := 0.6
+const ALIGN_RISK_MAX := 1.6
+const ALIGN_YIELD_MIN := 0.55
+const ALIGN_BOTCH_RISK := 0.05
+
 const DEFAULT_WRECK_POS := Vector3(0, 0, -40)
 
 ## Member catalog for the current wreck kit: node names match Wreck.tscn
@@ -76,6 +118,11 @@ var _risk_base := 0.15
 var _manual_thrust := Vector3.ZERO
 var _manual_rot := Vector3.ZERO
 
+## Alignment aim for this frame, fed by InputRouter from the flight pitch/yaw axes
+## while ALIGNING, already oriented to the reticle field (x = screen-right,
+## y = screen-down), each -1..1. Consumed by _update_align.
+var _align_input := Vector2.ZERO
+
 ## Forward/back throttle command law. SPEED (default) treats the throttle as a
 ## target fraction of max_speed and closes on it — cruise-control style, no
 ## need to ride the lever to hold a speed. THRUST is the legacy behavior,
@@ -102,6 +149,17 @@ func select_member(id: int) -> void:
 	var member := GameState.get_member(id)
 	if member.is_empty() or member["cut"] or member["destroyed"]:
 		return
+	if id == GameState.selected_member_id:
+		return
+	# A new cut target means a new approach destination: the current match (and any
+	# cut/alignment on it) no longer applies, so drop to HOLDING and make the pilot
+	# re-arm the approach to reposition onto the new member.
+	if GameState.approach_state != "HOLDING":
+		_abort_align("TARGET CHANGED")
+		_abort_cut("TARGET CHANGED")
+		_set_approach("HOLDING")
+		GameState.post_comms("OPS",
+				"REPOSITION REQUIRED — RE-ARM APPROACH FOR %s" % member["name"])
 	GameState.selected_member_id = id
 	GameState.selected_member_changed.emit(id)
 
@@ -140,6 +198,7 @@ func set_manual_flight(thrust: Vector3, rot: Vector3) -> void:
 	var moved := Vector3(thrust.x, thrust.y, forward_over).length() > MANUAL_OVERRIDE_DELTA \
 			or rot.length() > MANUAL_OVERRIDE_DELTA
 	if GameState.approach_state != "HOLDING" and moved:
+		_abort_align("MANUAL CONTROL")
 		_abort_cut("MANUAL CONTROL")
 		_set_approach("HOLDING")
 		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
@@ -149,14 +208,20 @@ func toggle_approach() -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
 	if GameState.approach_state == "HOLDING":
+		# The approach now flies to a specific member, so it needs a destination.
+		if GameState.get_member(GameState.selected_member_id).is_empty():
+			GameState.post_comms("OPS", "APPROACH INHIBITED — SELECT A CUT TARGET FIRST")
+			return
 		if _manual_thrust.z > APPROACH_ARM_THROTTLE_MAX:
 			GameState.post_comms("OPS",
 					"APPROACH INHIBITED — THROTTLE PAST %d%%, EASE BACK TO ARM"
 					% int(APPROACH_ARM_THROTTLE_MAX * 100.0))
 			return
 		_set_approach("APPROACHING")
-		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH WRECK")
+		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH %s"
+				% GameState.get_member(GameState.selected_member_id)["name"])
 	else:
+		_abort_align("APPROACH BROKEN")
 		_abort_cut("APPROACH BROKEN")
 		_set_approach("HOLDING")
 		GameState.post_comms("OPS", "STATION-KEEPING RELEASED — HOLDING")
@@ -170,8 +235,16 @@ func toggle_throttle_cmd_mode() -> void:
 	GameState.post_comms("OPS", "THROTTLE — %s COMMAND" % ThrottleCmdMode.keys()[_throttle_cmd_mode])
 
 
+## The cutter trigger (ops_cut / CUT button) is context-sensitive: from a matched
+## member it opens the pre-cut alignment mini-game; pressed again while ALIGNING it
+## commits the lock at its current quality (an early-out speed/cleanliness trade).
 func request_cut() -> void:
-	if GameState.run_phase != "ON_SITE" or GameState.wreck["cutting_id"] != -1:
+	if GameState.run_phase != "ON_SITE":
+		return
+	if GameState.align_state == "ALIGNING":
+		_commit_align()
+		return
+	if GameState.wreck["cutting_id"] != -1:
 		return
 	var member := GameState.get_member(GameState.selected_member_id)
 	if member.is_empty() or member["cut"] or member["destroyed"]:
@@ -183,10 +256,67 @@ func request_cut() -> void:
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		GameState.post_comms("OPS", "CUT ABORT — CUTTER UNPOWERED (RAISE CUTTER ALLOCATION)")
 		return
+	_begin_align(member)
+
+
+## InputRouter, every frame while ALIGNING: the pilot's aim from the flight
+## pitch/yaw axes, oriented so the reticle tracks the nose (x = screen-right,
+## y = screen-down), each -1..1.
+func set_align_input(aim: Vector2) -> void:
+	_align_input = aim
+
+
+## MFD/touch intent: bail out of the alignment mini-game without cutting.
+func cancel_align() -> void:
+	_abort_align("CANCELLED")
+
+
+## Open the alignment mini-game on the matched member. The reticle starts centred;
+## the seam target starts wherever the member's baked seam currently projects (and
+## keeps moving with the tumble) so there's a real, moving alignment to hold.
+func _begin_align(member: Dictionary) -> void:
+	_align_input = Vector2.ZERO
+	GameState.align = {
+		"reticle": Vector2.ZERO,
+		"target": _seam_offset(member),
+		"lock": 0.0,
+		"slip": 0.0,
+		"quality": 0.0,
+	}
+	GameState.align_state = "ALIGNING"
+	GameState.align_changed.emit("ALIGNING")
+	GameState.post_comms("SALVAGE", "ALIGN CUTTING HEAD — %s (LOAD %s)" % [
+		member["name"], load_class(member)])
+
+
+## Bank the current alignment quality and hand off to the real cut.
+func _commit_align() -> void:
+	var member := GameState.get_member(GameState.selected_member_id)
+	if member.is_empty():
+		_abort_align("NO TARGET")
+		return
+	var quality: float = clampf(GameState.align.get("quality", 0.0), 0.0, 1.0)
+	GameState.align_state = "IDLE"
+	GameState.align = {}
+	GameState.align_changed.emit("IDLE")
+	_begin_cut(member, quality)
+
+
+func _begin_cut(member: Dictionary, quality: float) -> void:
 	GameState.wreck["cutting_id"] = member["id"]
 	GameState.wreck["cut_progress"] = 0.0
-	GameState.post_comms("SALVAGE", "CUTTING %s — LOAD %s" % [
-		member["name"], load_class(member)])
+	GameState.wreck["align_quality"] = quality
+	GameState.post_comms("SALVAGE", "CUTTING %s — ALIGN %d%% — LOAD %s" % [
+		member["name"], roundi(quality * 100.0), load_class(member)])
+
+
+func _abort_align(reason: String) -> void:
+	if GameState.align_state != "ALIGNING":
+		return
+	GameState.align_state = "IDLE"
+	GameState.align = {}
+	GameState.align_changed.emit("IDLE")
+	GameState.post_comms("SALVAGE", "ALIGNMENT LOST — %s" % reason)
 
 
 ## --- Queries (read-only, safe for displays) -------------------------------
@@ -250,6 +380,7 @@ func rival_strip_member() -> Dictionary:
 
 ## ThreatSystem: the frame lets go. Uncut members are destroyed with it.
 func trigger_collapse() -> void:
+	_abort_align("STRUCTURAL COLLAPSE")
 	_abort_cut("STRUCTURAL COLLAPSE")
 	for member: Dictionary in GameState.wreck["members"]:
 		if not member["cut"]:
@@ -270,6 +401,7 @@ func trigger_collapse() -> void:
 func abort_approach_on_collision() -> void:
 	if GameState.approach_state == "HOLDING":
 		return
+	_abort_align("PATH OBSTRUCTED")
 	_abort_cut("PATH OBSTRUCTED")
 	_set_approach("HOLDING")
 	GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
@@ -279,6 +411,7 @@ func abort_approach_on_collision() -> void:
 ## meaning away from the wreck and shouldn't leak "MATCHED" into the station
 ## visit or trip a spurious autopilot-disengage when the stick moves.
 func reset_approach() -> void:
+	_abort_align("APPROACH BROKEN")
 	_set_approach("HOLDING")
 
 
@@ -308,12 +441,31 @@ func reset_site() -> void:
 		"members": members,
 		"cutting_id": -1,
 		"cut_progress": 0.0,
+		"align_quality": 1.0,
+		"tumble_omega": _random_tumble(),
 	}
 	GameState.selected_member_id = -1
+	GameState.align_state = "IDLE"
+	GameState.align = {}
 	_risk_base = 0.1 + _rng.randf_range(0.0, 0.08)
 	_set_risk(_risk_base)
 	_set_approach("HOLDING")
 	GameState.site_reset.emit()
+
+
+## Roll this site's derelict tumble: a random spin axis and a rate (rad/s), mostly
+## in the normal band but occasionally barely-turning. Returns ω = axis * rate;
+## Wreck.gd spins the frame about it and feed-forwards v = ω × r per member.
+func _random_tumble() -> Vector3:
+	var axis := Vector3(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0),
+			_rng.randf_range(-1.0, 1.0))
+	axis = axis.normalized() if axis.length() > 0.01 else Vector3.UP
+	var rate: float
+	if _rng.randf() < TUMBLE_STABLE_CHANCE:
+		rate = _rng.randf_range(TUMBLE_STABLE_MIN, TUMBLE_STABLE_MAX)
+	else:
+		rate = _rng.randf_range(TUMBLE_RATE_MIN, TUMBLE_RATE_MAX)
+	return axis * rate
 
 
 ## --- Per-frame simulation --------------------------------------------------
@@ -324,6 +476,7 @@ func _process(delta: float) -> void:
 		return
 	_update_scan(delta)
 	_update_approach(delta)
+	_update_align(delta)
 	_update_cut(delta)
 	# Risk relaxes toward the ratcheted baseline (residual stress settling).
 	var relaxed: float = lerpf(GameState.structural_risk, _risk_base,
@@ -358,35 +511,38 @@ func _update_approach(delta: float) -> void:
 	if GameState.approach_state == "HOLDING":
 		_update_manual_flight(delta)
 		return
-	var wreck_pos: Vector3 = GameState.wreck["position"]
+	# Fly to the *selected* member: its baked world centroid (published into the
+	# graph by Wreck.gd) is the park target, so the ship stations off that member
+	# specifically. Fall back to the wreck centre when the member carries no baked
+	# geometry (headless with no 3D scene).
+	var member := GameState.get_member(GameState.selected_member_id)
+	var target_pos: Vector3 = member.get("center", GameState.wreck["position"])
 	var origin: Vector3 = transform.origin
-	var to_center: Vector3 = wreck_pos - origin
+	var to_center: Vector3 = target_pos - origin
 	var center_dist := to_center.length()
 	var approach_dir := to_center / center_dist if center_dist > 0.001 else -transform.basis.z
-	# Distance we may still close before parking. Prefer the true gap to the
-	# wreck's surface (its tight per-member hulls) so we park a fixed clearance
-	# off the facing structure from any angle; fall back to a centre-based
-	# standoff when no wreck hull is registered (headless with no 3D scene).
-	var ship_a: Vector3 = origin + transform.basis * GameState.ship_def.collision_a
-	var ship_b: Vector3 = origin + transform.basis * GameState.ship_def.collision_b
-	var surface: float = CollisionSystem.wreck_surface_distance(ship_a, ship_b)
-	var remaining: float
-	if surface < INF:
-		remaining = (surface - _ship_radius()) - STANDOFF_GAP
-	else:
-		remaining = center_dist - (CUT_RANGE - 4.0)
+	# Park a fixed clearance off the member: its radius, the ship's reach, and the
+	# standoff gap. member.radius is 0 when unbaked, leaving a centre-based standoff.
+	var member_radius: float = member.get("radius", 0.0)
+	var remaining: float = center_dist - (member_radius + _ship_radius() + STANDOFF_GAP)
 	# Closing speed profile: proportional braking, capped by ship performance
 	# scaled by THRUST allocation (starve the channel and the burn crawls).
 	var speed: float = clampf(remaining * 0.4, 0.0,
 			GameState.ship_def.approach_speed * maxf(GameState.power("THRUST"), 0.05))
-	var velocity: Vector3 = approach_dir * speed if remaining > 0.01 else Vector3.ZERO
+	# The member orbits the wreck centre as the frame tumbles; feed-forward its
+	# orbital velocity so the ship holds station on it (without this the pure-closing
+	# controller lags a moving standoff and never settles inside MATCH_SLACK). The
+	# closing term still shrinks to zero at the park point, so the MATCHED gate trips.
+	var member_vel: Vector3 = member.get("vel", Vector3.ZERO)
+	var closing: Vector3 = approach_dir * speed if remaining > 0.01 else Vector3.ZERO
+	var velocity: Vector3 = member_vel + closing
 	transform.origin += velocity * delta
 	ship["transform"] = transform
 	ship["velocity"] = velocity
 	if GameState.approach_state == "APPROACHING" \
 			and remaining <= MATCH_SLACK and speed < 0.6:
 		_set_approach("MATCHED")
-		GameState.post_comms("OPS", "VELOCITY MATCHED — HOLDING AT CUTTING STANDOFF")
+		GameState.post_comms("OPS", "VELOCITY MATCHED — STANDOFF ON %s" % member["name"])
 
 
 ## Newtonian-lite manual flight (Phase 5): rate-controlled attitude, thruster
@@ -440,6 +596,62 @@ func _apply_throttle_axis(transform: Transform3D, velocity: Vector3, accel: floa
 	return velocity + forward_dir * (new_fwd_speed - fwd_speed)
 
 
+## The 2-axis crosshair mini-game (see the ALIGN_* consts). Drifts the seam target,
+## steers the reticle from the pilot's aim, and accumulates lock/slip. Same
+## interlocks as an active cut — lose the match or cutter power and it's off.
+func _update_align(delta: float) -> void:
+	if GameState.align_state != "ALIGNING":
+		return
+	if GameState.approach_state != "MATCHED":
+		_abort_align("RANGE OPEN")
+		return
+	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
+		_abort_align("CUTTER POWER LOST")
+		return
+	var align: Dictionary = GameState.align
+	var member := GameState.get_member(GameState.selected_member_id)
+	# The seam is a fixed point on the member; it moves in view only because the
+	# derelict tumbles, so the drift you fight has a visible cause on the hull.
+	align["target"] = _seam_offset(member)
+	# Steer the reticle from the pilot's aim.
+	align["reticle"] = (Vector2(align["reticle"])
+			+ _align_input * ALIGN_RETICLE_RATE * delta).clampf(-1.0, 1.0)
+	var err: float = Vector2(align["reticle"]).distance_to(align["target"])
+	if err <= ALIGN_LOCK_RADIUS:
+		align["lock"] = minf(float(align["lock"]) + ALIGN_LOCK_RATE * delta, 1.0)
+		# Weight quality by how centred the hold is (1 at the bullseye, 0 at the edge).
+		var closeness := 1.0 - err / ALIGN_LOCK_RADIUS
+		align["quality"] = maxf(float(align["quality"]), float(align["lock"]) * closeness)
+		align["slip"] = maxf(float(align["slip"]) - ALIGN_SLIP_RECOVER * delta, 0.0)
+	else:
+		align["lock"] = maxf(float(align["lock"]) - ALIGN_LOCK_BLEED * delta, 0.0)
+		if err >= ALIGN_SLIP_RADIUS:
+			align["slip"] = minf(float(align["slip"]) + ALIGN_SLIP_RATE * delta, 1.0)
+		else:
+			align["slip"] = maxf(float(align["slip"]) - ALIGN_SLIP_RECOVER * delta, 0.0)
+	if float(align["slip"]) >= 1.0:
+		_abort_align("TORCH SLIPPED")
+		_set_risk(minf(GameState.structural_risk + ALIGN_BOTCH_RISK, 1.0))
+		return
+	if float(align["lock"]) >= 1.0:
+		_commit_align()
+
+
+## The member's cut seam as a point in the -1..1 align field: the seam's offset
+## from the member centroid (both baked world points that ride the tumble),
+## projected onto the ship's right/up axes and normalized by the member's reach.
+## As the derelict rotates this offset swings, so the target tracks the visible
+## spin. Zero when the member carries no baked geometry (headless): a static seam.
+func _seam_offset(member: Dictionary) -> Vector2:
+	if not (member.has("seam") and member.has("center")):
+		return Vector2.ZERO
+	var offset: Vector3 = member["seam"] - member["center"]
+	var basis: Basis = (GameState.local_ship()["transform"] as Transform3D).basis
+	var span: float = maxf(float(member.get("radius", 1.0)), 0.5) * ALIGN_SEAM_SPAN
+	# +x is screen-right, +y is screen-down, matching the reticle's convention.
+	return Vector2(offset.dot(basis.x), -offset.dot(basis.y)) / span
+
+
 func _update_cut(delta: float) -> void:
 	var wreck: Dictionary = GameState.wreck
 	if wreck["cutting_id"] == -1:
@@ -450,17 +662,26 @@ func _update_cut(delta: float) -> void:
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		_abort_cut("CUTTER POWER LOST")
 		return
+	# Alignment quality throttles the cut: a clean lock cuts near full rate, a sloppy
+	# one crawls at ALIGN_RATE_MIN.
+	var quality: float = clampf(float(wreck.get("align_quality", 1.0)), 0.0, 1.0)
 	wreck["cut_progress"] = minf(wreck["cut_progress"]
-			+ delta * GameState.ship_def.cut_rate * GameState.power("CUTTER"), 1.0)
+			+ delta * GameState.ship_def.cut_rate * GameState.power("CUTTER")
+			* lerpf(ALIGN_RATE_MIN, 1.0, quality), 1.0)
 	if wreck["cut_progress"] >= 1.0:
 		_complete_cut(GameState.get_member(wreck["cutting_id"]))
 
 
 func _complete_cut(member: Dictionary) -> void:
+	# Alignment quality (banked at commit) softens the risk spike and preserves
+	# yield; a ragged cut spikes harder and loses salvage. Reset to 1.0 after so a
+	# later non-aligned sever (rival/collapse) doesn't inherit this cut's score.
+	var quality: float = clampf(float(GameState.wreck.get("align_quality", 1.0)), 0.0, 1.0)
 	GameState.wreck["cutting_id"] = -1
 	GameState.wreck["cut_progress"] = 0.0
+	GameState.wreck["align_quality"] = 1.0
 	member["cut"] = true
-	var spike := _apply_cut_stress(member)
+	var spike := _apply_cut_stress(member, lerpf(ALIGN_RISK_MAX, ALIGN_RISK_MIN, quality))
 	GameState.wreck_member_cut.emit(member["id"])
 	if GameState.selected_member_id == member["id"]:
 		GameState.selected_member_id = -1
@@ -468,13 +689,15 @@ func _complete_cut(member: Dictionary) -> void:
 	GameState.post_comms("SALVAGE", "%s SEVERED — FRAME STRESS %s" % [
 		member["name"],
 		"SPIKING" if spike > 0.12 else ("SHIFTING" if spike > 0.05 else "STEADY")])
-	CargoSystem.stow_salvage(member["name"], member["good"], member["qty"])
+	var yield_qty: float = snappedf(member["qty"] * lerpf(ALIGN_YIELD_MIN, 1.0, quality), 0.1)
+	CargoSystem.stow_salvage(member["name"], member["good"], yield_qty)
 
 
-## Severing consequences shared by our cuts and the rival's: risk spikes by
-## the member's predicted amount and the resting baseline ratchets up.
-func _apply_cut_stress(member: Dictionary) -> float:
-	var spike := predicted_spike(member)
+## Severing consequences shared by our cuts and the rival's: risk spikes by the
+## member's predicted amount (scaled by `risk_mult` — alignment quality for our
+## cuts, 1.0 for the rival's) and the resting baseline ratchets up.
+func _apply_cut_stress(member: Dictionary, risk_mult := 1.0) -> float:
+	var spike := predicted_spike(member) * risk_mult
 	_risk_base = minf(_risk_base + member["load"] * 0.09, 0.9)
 	_set_risk(minf(GameState.structural_risk + spike, 1.0))
 	return spike
@@ -497,6 +720,8 @@ func _set_approach(state: String) -> void:
 	if GameState.approach_state == state:
 		return
 	GameState.approach_state = state
+	# A match belongs to the member we approached; anything else clears it.
+	GameState.matched_member_id = GameState.selected_member_id if state == "MATCHED" else -1
 	GameState.approach_changed.emit(state)
 
 

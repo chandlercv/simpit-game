@@ -65,7 +65,10 @@ func _run() -> void:
 			"flight assist damps drift (%.2f -> %.2f m/s)" % [
 				drift, ship["velocity"].length()])
 
-	# Stick input disengages the approach autopilot.
+	# Stick input disengages the approach autopilot. The approach now flies to a
+	# selected member, so pick one (and mark the wreck scanned) before arming.
+	GameState.wreck["scanned"] = true
+	SalvageSystem.select_member(GameState.wreck["members"][0]["id"])
 	SalvageSystem.toggle_approach()
 	_check(GameState.approach_state == "APPROACHING", "autopilot engages")
 	Input.action_press("thrust_forward")
