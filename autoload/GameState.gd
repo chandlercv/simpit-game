@@ -44,6 +44,8 @@ signal wreck_members_lost
 signal hull_impact(section: String, amount: float)
 signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
+## Pre-cut alignment mini-game phase changed (SalvageSystem), one of ALIGN_STATES.
+signal align_changed(state: String)
 @warning_ignore_restore("unused_signal")
 
 ## Godot's convention for the local/server peer. GameState.ships is keyed by
@@ -92,6 +94,11 @@ const RUN_PHASES: Array[String] = ["ON_SITE", "TRANSIT", "DOCKED"]
 ## Approach states (SalvageSystem): HOLDING (free drift), APPROACHING
 ## (closing/matching), MATCHED (inside cutting range, velocity matched).
 const APPROACH_STATES: Array[String] = ["HOLDING", "APPROACHING", "MATCHED"]
+
+## Pre-cut alignment phases (SalvageSystem): IDLE (not aligning), ALIGNING (the
+## crosshair mini-game is live). A committed alignment hands straight to the
+## existing cutting_id path, so no persistent third state is needed.
+const ALIGN_STATES: Array[String] = ["IDLE", "ALIGNING"]
 
 ## Own-ship stats, authored as a Resource (plan Phase 4 convention).
 var ship_def: ShipDefinition = load("res://data/ships/kestrel.tres")
@@ -149,6 +156,21 @@ var selected_member_id: int = -1
 
 ## SalvageSystem approach/match-velocity state, one of APPROACH_STATES.
 var approach_state: String = "HOLDING"
+
+## Which member the current MATCHED belongs to, -1 when not matched. The approach
+## autopilot now flies to and parks off the *selected* member, so a match is tied
+## to that one member; picking a different target drops the match and forces a
+## reposition (SalvageSystem.select_member / _set_approach).
+var matched_member_id: int = -1
+
+## Pre-cut alignment phase, one of ALIGN_STATES (owned by SalvageSystem).
+var align_state: String = "IDLE"
+
+## Alignment mini-game state, owned/mutated by SalvageSystem while align_state is
+## ALIGNING. Replication-friendly: { "reticle": Vector2 (-1..1, player aim),
+## "target": Vector2 (-1..1, drifting seam point), "lock": float 0..1,
+## "slip": float 0..1, "quality": float 0..1 }.
+var align: Dictionary = {}
 
 ## Current run phase, one of RUN_PHASES.
 var run_phase: String = "ON_SITE"

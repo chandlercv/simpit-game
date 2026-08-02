@@ -38,16 +38,10 @@ func _run() -> void:
 	_check(await _wait_until(func() -> bool: return GameState.wreck["scanned"], 20.0),
 			"structural scan completes in STRUCT mode")
 
-	# 2. Approach: match velocity into cutting range.
-	SalvageSystem.toggle_approach()
-	_check(await _wait_until(
-			func() -> bool: return GameState.approach_state == "MATCHED", 60.0),
-			"approach reaches MATCHED inside cutting range")
-	_check(SalvageSystem.wreck_distance() <= SalvageSystem.CUT_RANGE,
-			"matched inside CUT_RANGE")
-
-	# 3. Extract 3 members: cosmetic first, most load-bearing second — the
-	# risk impact must differ visibly by load (the plan's core mechanic).
+	# 2. Extract 3 members: cosmetic first, most load-bearing second — the
+	# risk impact must differ visibly by load (the plan's core mechanic). The
+	# approach now flies to the *selected* member and the cut is alignment-gated,
+	# so _cut() picks the target, re-arms the approach, and commits the alignment.
 	GameState.set_power("CUTTER", 1.0)
 	var low := _pick_member(false)
 	var risk_before_low: float = GameState.structural_risk
@@ -125,7 +119,18 @@ func _cut(member: Dictionary) -> int:
 	if member.is_empty():
 		_check(false, "member available to cut (none left uncut)")
 		return -1
+	# Per-member approach: pick the target, then fly to it and match. Selecting a
+	# new target drops any prior match, so this re-arms the approach each time.
 	SalvageSystem.select_member(member["id"])
+	SalvageSystem.toggle_approach()
+	var matched := await _wait_until(
+			func() -> bool: return GameState.approach_state == "MATCHED", 60.0)
+	_check(matched, "approach matches on %s" % member["name"])
+	_check(SalvageSystem.wreck_distance() <= SalvageSystem.CUT_RANGE,
+			"matched inside CUT_RANGE")
+	# The cut is alignment-gated: the first trigger opens the mini-game, the second
+	# commits it (here at whatever quality has built — the smoke isn't testing aim).
+	SalvageSystem.request_cut()
 	SalvageSystem.request_cut()
 	var done := await _wait_until(
 			func() -> bool: return member["cut"], 30.0)

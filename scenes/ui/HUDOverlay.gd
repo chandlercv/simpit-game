@@ -84,6 +84,8 @@ func _update_readouts() -> void:
 func _draw() -> void:
 	_draw_reticle()
 	_draw_velocity_vector()
+	_draw_target_member()
+	_draw_align()
 	_draw_ops_state()
 	if camera == null:
 		return
@@ -127,6 +129,13 @@ func _draw_ops_state() -> void:
 		draw_string(font, Vector2(0, c.y + 70), banner,
 				HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, HUD_COLOR)
 		return
+	if GameState.align_state == "ALIGNING" and not GameState.align.is_empty():
+		var member := GameState.get_member(GameState.selected_member_id)
+		draw_string(font, Vector2(0, c.y + 70),
+				"ALIGNING %s — LOCK %d%%" % [member.get("name", "TARGET"),
+					roundi(float(GameState.align["lock"]) * 100.0)],
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, HUD_COLOR)
+		return
 	var cutting_id: int = GameState.wreck.get("cutting_id", -1)
 	if cutting_id != -1:
 		var member := GameState.get_member(cutting_id)
@@ -134,6 +143,130 @@ func _draw_ops_state() -> void:
 				"CUTTING %s — %d%%" % [member["name"],
 					roundi(GameState.wreck["cut_progress"] * 100.0)],
 				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, THREAT_COLOR)
+
+
+## Pre-cut alignment crosshair, anchored over the member you're cutting so the
+## drifting seam ⊕ sits on the actual hull in view (not floating in screen-space).
+## Steering the pilot reticle ✛ onto the seam reads as lining the cutting head up
+## with a point on the member (the torch beam itself is drawn in 3D from the ship's
+## wing — see CuttingBeam.gd). Coords are the align dict's -1..1 mapped to a field
+## around that anchor.
+func _draw_align() -> void:
+	if GameState.align_state != "ALIGNING" or GameState.align.is_empty():
+		return
+	var align: Dictionary = GameState.align
+	var field := 120.0
+	var center := _align_field_center(field)
+	var tol: float = SalvageSystem.ALIGN_LOCK_RADIUS * field
+	var target := center + Vector2(align["target"]) * field
+	var reticle := center + Vector2(align["reticle"]) * field
+	var lock := float(align["lock"])
+	var slip := float(align["slip"])
+	var err: float = Vector2(align["reticle"]).distance_to(align["target"])
+	var on: bool = err <= SalvageSystem.ALIGN_LOCK_RADIUS
+	# Field boundary, and the lock-progress ring that fills as you hold on-seam.
+	draw_arc(center, field, 0.0, TAU, 64, Color(HUD_COLOR, 0.3), 1.0, true)
+	if lock > 0.0:
+		draw_arc(center, field, -PI / 2.0, -PI / 2.0 + TAU * lock, 64,
+				Color(HUD_COLOR, 0.9), 2.5, true)
+	# Seam target ⊕ with its tolerance ring; greens up while the reticle is inside.
+	var tgt_col := Color(0.45, 1.0, 0.55, 0.9) if on else Color(HUD_COLOR, 0.8)
+	draw_arc(target, tol, 0.0, TAU, 32, tgt_col, 1.5, true)
+	draw_line(target - Vector2(9, 0), target + Vector2(9, 0), tgt_col, 1.5)
+	draw_line(target - Vector2(0, 9), target + Vector2(0, 9), tgt_col, 1.5)
+	# Pilot reticle ✛ (rotated cross so it reads apart from the target).
+	var rc := Color(1.0, 0.9, 0.4, 0.95)
+	for d: Vector2 in [Vector2(1, 1), Vector2(1, -1)]:
+		draw_line(reticle - d * 8.0, reticle + d * 8.0, rc, 2.0)
+	# Slip warning as the torch wanders toward a hard-fail.
+	if slip > 0.35:
+		var a := 0.4 + 0.6 * sin(_time * TAU * 3.0)
+		draw_string(ThemeDB.fallback_font, center + Vector2(-26, -field - 12),
+				"SLIP", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(THREAT_COLOR, a))
+
+
+## Anchor the alignment field on the selected member's on-screen position, so the
+## seam sits on the actual hull you're cutting. Clamped to keep the field on-screen,
+## and falls back to the nose reticle if the member has no projectable centre
+## (headless / behind the camera).
+func _align_field_center(field: float) -> Vector2:
+	var member := GameState.get_member(GameState.selected_member_id)
+	if camera != null and member.has("center") and not camera.is_position_behind(member["center"]):
+		var pad := field + 16.0
+		return camera.unproject_position(member["center"]).clamp(
+				Vector2(pad, pad), size - Vector2(pad, pad))
+	return _nose_center()
+
+
+## Marks the selected cut target on its world-space centroid (published into the
+## graph by Wreck.gd), so the pilot can see which member they picked and fly to it.
+## In view: a diamond + name + range, greening to a FIRE-TO-ALIGN cue once MATCHED
+## on it. Out of frame: an edge arrow pointing the way to turn to bring it into
+## view. Nothing to draw before scan (no member is selectable) or headless (no
+## baked centre) — hence the has("center") guard.
+func _draw_target_member() -> void:
+	if camera == null or GameState.run_phase != "ON_SITE":
+		return
+	# While aligning, the crosshair field itself sits on the member (see _draw_align),
+	# so the separate marker would just clutter the same spot.
+	if GameState.align_state == "ALIGNING":
+		return
+	var member := GameState.get_member(GameState.selected_member_id)
+	if member.is_empty() or member.get("cut", false) or member.get("destroyed", false):
+		return
+	if not member.has("center"):
+		return
+	# During the cut, mark the seam the beam actually bites (a real hull vertex) —
+	# a member's centroid can sit in empty space (hollow corridors / ring spine).
+	# Before the cut, the centroid is the right locator to fly the approach to.
+	var cutting_here: bool = GameState.wreck.get("cutting_id", -1) == member["id"]
+	var pos: Vector3 = member["seam"] if (cutting_here and member.has("seam")) else member["center"]
+	var font := ThemeDB.fallback_font
+	var matched: bool = GameState.approach_state == "MATCHED" \
+			and GameState.matched_member_id == member["id"]
+	var color := Color(0.5, 1.0, 0.6, 0.95) if matched else Color(1.0, 0.85, 0.4, 0.9)
+	var dist := roundi(camera.global_position.distance_to(pos))
+	var frame := Rect2(Vector2.ZERO, size)
+	# In front and inside the frame: full marker. Otherwise an edge arrow.
+	if not camera.is_position_behind(pos):
+		var screen := camera.unproject_position(pos)
+		if frame.has_point(screen):
+			_draw_diamond(screen, 11.0, color, 2.0)
+			draw_string(font, screen + Vector2(16, 5), "%s — %d M" % [member["name"], dist],
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+			# Prompt the cut only once you're MATCHED and not already aligning/cutting.
+			if matched and GameState.align_state != "ALIGNING" \
+					and GameState.wreck.get("cutting_id", -1) == -1:
+				draw_string(font, screen + Vector2(16, 23), "MATCHED — FIRE TO ALIGN",
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 13, color)
+			return
+	# Off-screen: point an arrow the short way round to the target. Behind the
+	# camera the perspective mapping inverts, so flip the screen direction there.
+	var b := camera.global_transform.basis
+	var dir := pos - camera.global_position
+	var v := Vector2(dir.dot(b.x), -dir.dot(b.y))
+	if dir.dot(-b.z) < 0.0:
+		v = -v
+	v = v.normalized() if v.length() > 0.001 else Vector2.DOWN
+	var edge := (size / 2.0 + v * size.length()).clamp(
+			Vector2(EDGE_MARGIN + 16.0, EDGE_MARGIN + 16.0),
+			size - Vector2(EDGE_MARGIN + 16.0, EDGE_MARGIN + 16.0))
+	_draw_arrowhead(edge, v, 12.0, color)
+	draw_string(font, edge - Vector2(30, 16), "%s  %d M" % [member["name"], dist],
+			HORIZONTAL_ALIGNMENT_CENTER, 60, 12, color)
+
+
+func _draw_diamond(c: Vector2, r: float, color: Color, width: float) -> void:
+	draw_polyline(PackedVector2Array([
+			c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r),
+			c + Vector2(-r, 0), c + Vector2(0, -r)]), color, width, true)
+
+
+func _draw_arrowhead(tip: Vector2, dir: Vector2, r: float, color: Color) -> void:
+	var d := dir.normalized()
+	var n := Vector2(-d.y, d.x)
+	draw_colored_polygon(PackedVector2Array([
+			tip, tip - d * r * 1.7 + n * r * 0.8, tip - d * r * 1.7 - n * r * 0.8]), color)
 
 
 ## Screen point for a world-space direction from the camera eyepoint, clamped

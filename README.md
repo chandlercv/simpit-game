@@ -31,7 +31,7 @@ with its own input stream.
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
 | **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **MARKET** (prices + comms), **CONTACTS** (lock list). | Touch/mouse: tap MENU to jump straight to any page, then operate it. Every command is also HOTAS-mappable. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **MARKET** (prices + comms), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live and hands the screen back after. | Touch/mouse: tap MENU to jump straight to any page, then operate it. Every command is also HOTAS-mappable. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP** — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -57,6 +57,28 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   elevation of the view); a tracked contact gets corner brackets with its name and
   range, plus a pulsing threat frame and **PROXIMITY** warning when it's a close
   hostile.
+- **Cut-target marker** — once you've picked a cut target it gets a diamond `◆`
+  with its name and range, pinned to that member on the wreck so you can see which
+  part you're going for and turn to face it. When the member is off-screen the
+  diamond becomes an **edge arrow** pointing the short way round to it. It's amber
+  while you're closing in and greens to **MATCHED — FIRE TO ALIGN** the moment the
+  approach matches on that member — your cue the cutter trigger will now open the
+  alignment step.
+- **Alignment crosshair** — only while you're lining up a cut (see the gameplay
+  loop). It's anchored **over the member you're cutting** (where its diamond was),
+  so the seam target `⊕` sits on the actual hull. The seam is a fixed point on the
+  member, so it drifts only because the **derelict is tumbling** — you're tracking a
+  real spot on a spinning wreck, not a random wander. Steer your torch reticle `✛`
+  (with pitch/yaw) onto the seam and hold it inside the tolerance ring to fill the
+  lock arc; the seam greens up on-seam, flashes **SLIP** when the torch wanders toward
+  a fail, and the banner reads **ALIGNING … — LOCK NN%**. The **cutting beam** itself
+  is drawn in 3D — a torch laser from the ship's **right wing** to where you're aiming
+  (see below). The bigger version of the crosshair instrument is the MFD **ALIGN** page.
+- **Cutting beam** — a torch beam fired from the Kestrel's **right wing** to the cut
+  point on the wreck, shown in the camera feed. While aligning it's a thin targeting
+  beam that walks onto the seam as you line up; once the cut commits it thickens into
+  a hot, flickering cutting beam with an impact glow on the hull until the member
+  severs.
 
 ---
 
@@ -69,23 +91,46 @@ frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
    raise **SENSORS** power on the **POWER** page, and close inside 300 u. A full
    structural scan takes ~5 s at 100% SENSORS and reveals the wreck's member
    graph (which parts carry frame stress); read it on the Tactical **SCOPE**.
-2. **Approach & match velocity.** Trigger the approach autopilot. It flies you
-   to a standoff just inside cutting range (14 u) and matches the wreck's
-   velocity → state goes `HOLDING` → `APPROACHING` → `MATCHED`.
-   *The throttle must be eased back under ~40% to arm the autopilot, and any
-   real stick/throttle input while it's flying hands control back to you.*
-3. **Pick a cut target.** Tap a member in the **SALVAGE** list on an MFD (or
+2. **Pick a cut target.** Tap a member in the **SALVAGE** list on an MFD (or
    cycle it with a mapped control). Each row shows the member's load class and
    the risk spike cutting it would cause; the Tactical **SCOPE** plots the same
-   graph so you can read the wreck while you pick.
+   graph so you can read the wreck while you pick. **Pick before you approach —
+   the autopilot flies to the member you've selected.** A diamond `◆` (or an edge
+   arrow when it's off-screen) marks that member on the Main HUD so you can see
+   where it is and turn to face it.
+3. **Approach & match velocity on that member.** Trigger the approach autopilot.
+   The **derelict is slowly tumbling** (each claim spins on its own random axis and
+   rate — some barely turn, some drift faster), so the member is orbiting the
+   wreck's centre; the autopilot flies you to a standoff off the **selected member**
+   and holds station on it as it moves → state goes `HOLDING` → `APPROACHING` →
+   `MATCHED`. The autopilot only translates — it won't turn you, and it can't match
+   the wreck's *spin* — so watch the cut-target marker and glance/steer to keep the
+   member in view. The marker greens to **MATCHED — FIRE TO ALIGN** once you match
+   on it. The match belongs to that member: **select a different target and you
+   drop back to `HOLDING` and must re-arm the approach to reposition** onto the new
+   one.
+   *The throttle must be eased back under ~40% to arm the autopilot, and any
+   real stick/throttle input while it's flying hands control back to you.*
 4. **Power the cutter.** Raise the **CUTTER** power channel to at least 0.2 on
    an MFD **POWER** page.
-5. **Cut.** With the approach `MATCHED`, fire the cutter. The member severs over
-   time and its salvage is stowed in the hold.
-6. **Watch structural risk.** Cutting load-bearing members spikes risk and
+5. **Align the cutting head.** With the approach `MATCHED`, fire the cutter to
+   open the alignment mini-game (it does **not** cut yet). The seam target `⊕` is a
+   real point on the member, so it drifts across your view **because the wreck is
+   tumbling** — since you matched the wreck's drift but not its spin, holding the
+   cut takes hands-on tracking. Steer your torch reticle `✛` — with **pitch/yaw** —
+   onto the seam and hold it inside the tolerance ring to fill the **lock**. Watch
+   it on the Main HUD crosshair or the MFD **ALIGN** page. Let the torch wander too
+   far and the **slip** meter fills and the alignment aborts (no cut).
+6. **Commit the cut.** The lock auto-commits at full, or press the cutter again to
+   commit early at the current quality. The cutting beam from the ship's **right
+   wing** bites into the member, which severs over time, and its salvage is stowed.
+   **Alignment quality is the payoff:** a clean lock cuts faster, spikes structural
+   risk less, and preserves more yield; a sloppy one crawls, spikes harder, and
+   loses salvage.
+7. **Watch structural risk.** Cutting load-bearing members spikes risk and
    ratchets the resting baseline up; cosmetic panels barely move it. If the
    frame collapses, every uncut member is lost.
-7. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
+8. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
    the claim), sell your hold at that faction's prices, then depart back to the
    claim for a fresh wreck.
 
@@ -136,10 +181,10 @@ playable at a desk out of the box; you only open the remapper to change somethin
 
 | Control | Action |
 | --- | --- |
-| Stick **left / right** (axis 0) | Yaw left / right |
-| Stick **forward / back** (axis 1) | Pitch down / up (pull back = nose up) |
+| Stick **left / right** (axis 0) | Yaw left / right — *aims the torch left/right during pre-cut alignment* |
+| Stick **forward / back** (axis 1) | Pitch down / up (pull back = nose up) — *aims the torch up/down during alignment* |
 | Stick **twist** (axis 2) | Roll left / right |
-| **Trigger** (button 0) | **Fire cutter** (`ops_cut`) |
+| **Trigger** (button 0) | **Fire cutter** (`ops_cut`) — from a matched target this **opens the alignment mini-game**, then **commits** the lock (auto-commits at full). |
 | **POV hat** | **Glance** the hull camera — hold a direction to look that way, release to recenter. Read over raw HID to dodge the stick's always-held selector button. |
 
 > Buttons 14–16 are the stick's selector-position bank (one is always held) —
@@ -151,7 +196,7 @@ playable at a desk out of the box; you only open the remapper to change somethin
 | --- | --- |
 | **Throttle lever** (axis 2) | Forward/back command. Idle near the top; push forward to command more speed (a target % of max speed by default — see **Manual flight throttle** above). Folds into the ship's forward/back command and must sit under ~40% travel to arm the approach autopilot. |
 | **POV hat** (buttons 19–22) | **Strafe & vertical thrust** — hat left/right strafes left/right, hat up/down thrusts up/down. Lateral and vertical translation without touching the stick. |
-| **Button 7** (Fire E) | **Toggle approach / match-velocity** (`ops_approach`) |
+| **Button 7** (Fire E) | **Toggle approach / match-velocity** (`ops_approach`) — needs a cut target selected first; the autopilot flies to that member. |
 
 > This throttle reports its hat as plain buttons 19–22 (not the DPAD), clear of
 > the reserved selector bank. Buttons 23–25 are reserved selector-bank buttons.
@@ -196,8 +241,8 @@ defaults:
 | **W / S** | Thrust forward / back | | **I / K** | Pitch up / down |
 | **A / D** | Strafe left / right | | **J / L** | Yaw left / right |
 | **R / F** | Thrust up / down | | **Q / E** | Roll left / right |
-| **Arrow keys** | Glance camera | | **V** | Toggle approach |
-| **C** | Fire cutter | | **M** | Cycle sensor mode |
+| **Arrow keys** | Glance camera | | **V** | Toggle approach (needs a target) |
+| **C** | Fire cutter / align + commit | | **M** | Cycle sensor mode |
 | **, / .** | Prev / next cut target | | **N** | Cycle locked contact |
 | **G / H** | MFD-A / MFD-B → MENU | | **T** | Toggle Tactical SCOPE / CHART |
 | **]** | Cycle external camera | | **1 / 2 / 3 / 4** | Camera REAR / SIDE / CHASE / TOP |
@@ -205,6 +250,10 @@ defaults:
 MFD paging, cargo, market, and the power-channel axes ship **unbound** on the
 keyboard — bind them in the remapper if you want keys for them. Every default
 here is also HOTAS-bindable, and a key + a HOTAS bind can coexist on one function.
+
+During the pre-cut alignment mini-game the **pitch/yaw keys** (I / K, J / L) aim
+the cutting head instead of flying the ship, so you steer the torch reticle onto
+the seam with the same keys, then press **C** to commit.
 
 The only fixed keys — not rebindable, since F7 must stay fixed to open the
 remapper at all:
@@ -378,6 +427,7 @@ disabled but the rest still works.
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
 | `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close]`). |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
+| `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |

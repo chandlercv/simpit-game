@@ -371,6 +371,18 @@ func _process(_delta: float) -> void:
 		Input.get_axis("yaw_right", "yaw_left") + _hid_axis_amount("yaw_right", "yaw_left"),
 		Input.get_axis("roll_right", "roll_left") + _hid_axis_amount("roll_right", "roll_left"))
 	rot = rot.clampf(-1.0, 1.0)
+	# While the pre-cut alignment mini-game is live, pitch/yaw aim the cutting head
+	# instead of flying the ship. Route them to the crosshair and zero those two
+	# components before set_manual_flight, so aiming doesn't trip the manual-override
+	# that disengages the match (strafe/throttle/roll still bail out as usual).
+	# Negate both so the reticle tracks the ship's nose, not against it: yaw-right
+	# moves the aim screen-right, pitch-up moves it screen-up — matching how the same
+	# stick deflection swings the nose in normal flight. (rot.y is +yaw-left, rot.x is
+	# +pitch-up; the reticle's +x is screen-right and +y is screen-down.)
+	if GameState.align_state == "ALIGNING":
+		SalvageSystem.set_align_input(Vector2(-rot.y, -rot.x))
+		rot.x = 0.0
+		rot.y = 0.0
 	SalvageSystem.set_manual_flight(thrust, rot)
 	if Input.is_action_just_pressed("ops_approach"):
 		SalvageSystem.toggle_approach()

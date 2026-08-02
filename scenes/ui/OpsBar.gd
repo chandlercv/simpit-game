@@ -19,6 +19,7 @@ func _ready() -> void:
 	_cut_button.pressed.connect(SalvageSystem.request_cut)
 	GameState.run_phase_changed.connect(func(_p: String) -> void: _update())
 	GameState.approach_changed.connect(func(_s: String) -> void: _update())
+	GameState.align_changed.connect(func(_s: String) -> void: _update())
 	GameState.selected_member_changed.connect(func(_id: int) -> void: _update())
 	GameState.site_reset.connect(_update)
 	# Cut progress ticks up continuously with no dedicated signal, so the
@@ -42,6 +43,11 @@ func _update() -> void:
 			_approach_button.text = "APPROACHING — ABORT"
 		"MATCHED":
 			_approach_button.text = "MATCHED — RELEASE"
+	if GameState.align_state == "ALIGNING" and not GameState.align.is_empty():
+		# Same trigger commits the lock at its current quality — keep it live.
+		_cut_button.text = "ALIGN %d%% — COMMIT" % roundi(float(GameState.align["lock"]) * 100.0)
+		_cut_button.disabled = false
+		return
 	var cutting_id: int = GameState.wreck["cutting_id"]
 	if cutting_id != -1:
 		_cut_button.text = "CUTTING %d%%" % roundi(GameState.wreck["cut_progress"] * 100.0)
