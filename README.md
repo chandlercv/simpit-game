@@ -10,14 +10,16 @@ a HOTAS, a Saitek switch panel, and touch/mouse on the secondary screens.
 > Status: Phases 1–5 complete and hardware-verified. Engine: Godot 4.7
 > (Forward+). Main scene: `scenes/boot/Boot.tscn`.
 
-![Main hull-camera view: a derelict frigate at cutting range framed by the thin
-flight HUD — a centre nose reticle, drift brackets, VEL/HDG/EL readouts,
-a locked-target box on the frigate, and a flagged UNSTABLE DEBRIS hazard.](assets/docs/main_view.png)
+![Main hull-camera view: a derelict frigate — one continuous hull with a flared
+engine bell, radiator fins, and a sensor mast — at cutting range, framed by the
+thin flight HUD: a centre nose reticle, drift brackets, VEL/HDG/EL readouts, and a
+locked-target box on the frigate.](assets/docs/main_view.png)
 
-*The Main display — an external hull-camera feed of the wreck at cutting range,
-with the thin flight HUD: nose reticle, drift brackets,
-velocity/heading/elevation readouts, a locked-target box on the derelict frigate,
-and a flagged UNSTABLE DEBRIS hazard.*
+*The Main display — an external hull-camera feed of the wreck at cutting range. The
+derelict reads as a single hulled frigate (engine bell aft, radiator fins, dorsal
+sensor mast) that the cutter carves into removable sections, under the thin flight
+HUD: nose reticle, drift brackets, velocity/heading/elevation readouts, and a
+locked-target box on the derelict frigate.*
 
 ---
 
@@ -161,6 +163,18 @@ locked and the master override owns it, but the physical channel switches still
 register — the mix comes back matching the panel's current switch positions when
 the master returns (touch-slider edits made while locked are ignored). Running
 dark this way also halves the ship's visibility to
+passive scanners — the claim-holder's patrol has to close to half its usual range
+before it can fine you (a quarter if both masters are off).
+
+Each channel can be driven from the switch panel (see the switch table below):
+FUEL PUMP→THRUST, AVIONICS→SENSORS, DE-ICE→CUTTER, PITOT HEAT→LIFE. The first
+three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
+full (100%) on / low off. Any channel can also be set to any value on the tablet
+sliders. The two master electrical switches override the whole mix: **MASTER ALT
+off** rigs for escape (THRUST 100% and LIFE 100%, cutter and sensors to 0);
+**MASTER BAT off** kills everything. While either master is off the mix is locked
+(switches and sliders do nothing) and comes back exactly as it was when the
+master returns. Running dark this way also halves the ship's visibility to
 passive scanners — the claim-holder's patrol has to close to half its usual range
 before it can fine you (a quarter if both masters are off).
 
@@ -426,6 +440,7 @@ disabled but the rest still works.
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
 | `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close]`). |
+| `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
