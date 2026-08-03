@@ -166,17 +166,6 @@ dark this way also halves the ship's visibility to
 passive scanners — the claim-holder's patrol has to close to half its usual range
 before it can fine you (a quarter if both masters are off).
 
-Each channel can be driven from the switch panel (see the switch table below):
-FUEL PUMP→THRUST, AVIONICS→SENSORS, DE-ICE→CUTTER, PITOT HEAT→LIFE. The first
-three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
-full (100%) on / low off. Any channel can also be set to any value on the tablet
-sliders. The two master electrical switches override the whole mix: **MASTER ALT
-off** rigs for escape (THRUST 100% and LIFE 100%, cutter and sensors to 0);
-**MASTER BAT off** kills everything. While either master is off the mix is locked
-(switches and sliders do nothing) and comes back exactly as it was when the
-master returns. Running dark this way also halves the ship's visibility to
-passive scanners — the claim-holder's patrol has to close to half its usual range
-before it can fine you (a quarter if both masters are off).
 
 ---
 
