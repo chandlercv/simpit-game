@@ -75,19 +75,32 @@ func _ready() -> void:
 ## Shared by the two halves of a salvage run: ALIGN while lining up a cut, and
 ## SCOOP while the cargo hatch is open to collect (opening the hatch is a
 ## deliberate "I'm going to collect now", so it's the right trigger).
+##
+## Overlapping mini-games nest: opening the hatch mid-alignment stacks SCOOP on
+## top of ALIGN, and ending either one falls back to the other if it's still
+## live, only reaching the pre-mini-game page once none are. Restoring is skipped
+## when the player has since paged away by hand — their choice outranks ours.
 func _auto_page(page: String, active: bool) -> void:
 	if unit_id != "A":
 		return
 	if active:
-		# Guard against re-capturing our own page if the trigger repeats.
-		if _current != page:
-			_page_before_auto = _current
+		# Only the first live mini-game captures the page to come back to;
+		# a repeated trigger must not re-capture over it.
+		if not _auto_pages.has(page):
+			if _auto_pages.is_empty():
+				_page_before_auto = _current
+			_auto_pages.append(page)
 		show_page(page)
-	elif _current == page:
-		if _page_before_auto == "":
-			go_home()
-		else:
-			show_page(_page_before_auto)
+		return
+	_auto_pages.erase(page)
+	if _current != page:
+		return
+	if not _auto_pages.is_empty():
+		show_page(_auto_pages[_auto_pages.size() - 1])
+	elif _page_before_auto == "":
+		go_home()
+	else:
+		show_page(_page_before_auto)
 
 
 func _build() -> void:

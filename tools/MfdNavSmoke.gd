@@ -68,6 +68,8 @@ func _run() -> void:
 	unit.go_home()
 	_check(not unit._menu_button.visible, "the MENU button hides on the home grid itself")
 
+	await _check_auto_pages()
+
 	if _failures.is_empty():
 		print("MFD NAV SMOKE: ALL CHECKS PASSED")
 		get_tree().quit(0)
@@ -76,6 +78,67 @@ func _run() -> void:
 			printerr("FAIL: " + failure)
 		printerr("MFD NAV SMOKE: %d CHECK(S) FAILED" % _failures.size())
 		get_tree().quit(1)
+
+
+## The primary MFD surfaces a mini-game's page while that mini-game runs, then
+## hands the screen back. The two mini-games overlap (the hatch opens mid-cut for
+## the collect half of a run) and can end in either order, so what's checked here
+## is the unwind: an ending mini-game falls back to one still live, and only the
+## last one out restores the page the player had before any of it started.
+func _check_auto_pages() -> void:
+	var unit := MfdUnit.new()
+	unit.unit_id = "A"   # Only the primary unit auto-switches.
+	add_child(unit)
+	await get_tree().process_frame
+
+	# Nested, ending innermost-last: the hatch outlives the alignment it opened
+	# during, so the abort must leave SCOOP up and the hatch restore POWER.
+	unit.show_page("POWER")
+	GameState.align_changed.emit("ALIGNING")
+	_check(unit.current_page() == "ALIGN", "alignment auto-opens the ALIGN page")
+	GameState.set_cargo_hatch(true)
+	_check(unit.current_page() == "SCOOP", "opening the hatch auto-opens the SCOOP page")
+	GameState.align_changed.emit("IDLE")
+	_check(unit.current_page() == "SCOOP",
+			"an alignment ending under an open hatch leaves SCOOP up")
+	GameState.set_cargo_hatch(false)
+	_check(unit.current_page() == "POWER",
+			"closing the hatch restores the page from before the mini-games")
+
+	# Nested, ending innermost-first: the alignment is still live when the hatch
+	# closes, so the screen falls back to ALIGN, not all the way to POWER.
+	unit.show_page("POWER")
+	GameState.align_changed.emit("ALIGNING")
+	GameState.set_cargo_hatch(true)
+	GameState.set_cargo_hatch(false)
+	_check(unit.current_page() == "ALIGN",
+			"closing the hatch mid-alignment falls back to the live ALIGN page")
+	GameState.align_changed.emit("IDLE")
+	_check(unit.current_page() == "POWER",
+			"the last mini-game out restores the page from before the mini-games")
+
+	# A repeated trigger must not re-capture the page to come back to.
+	unit.show_page("MARKET")
+	GameState.align_changed.emit("ALIGNING")
+	GameState.align_changed.emit("ALIGNING")
+	GameState.align_changed.emit("IDLE")
+	_check(unit.current_page() == "MARKET",
+			"a repeated mini-game trigger doesn't lose the page to come back to")
+
+	# Paging by hand outranks the restore — the player asked for that page.
+	GameState.set_cargo_hatch(true)
+	unit.show_page("CONTACTS")
+	GameState.set_cargo_hatch(false)
+	_check(unit.current_page() == "CONTACTS",
+			"a mini-game ending doesn't yank the player off a page they chose")
+
+	# The MENU home is a valid page to come back to.
+	unit.go_home()
+	GameState.set_cargo_hatch(true)
+	GameState.set_cargo_hatch(false)
+	_check(unit.current_page() == "", "a mini-game opened from the MENU home returns to it")
+
+	unit.queue_free()
 
 
 func _check(condition: bool, label: String) -> void:
