@@ -117,6 +117,17 @@ func _check_auto_pages() -> void:
 	_check(unit.current_page() == "POWER",
 			"the last mini-game out restores the page from before the mini-games")
 
+	# A mini-game taking over a page the player chose by hand mid-run must come
+	# back to *that* page, not the one from before the run started.
+	unit.show_page("POWER")
+	GameState.align_changed.emit("ALIGNING")
+	unit.show_page("MARKET")
+	GameState.set_cargo_hatch(true)
+	GameState.set_cargo_hatch(false)
+	GameState.align_changed.emit("IDLE")
+	_check(unit.current_page() == "MARKET",
+			"a mini-game restores the page the player chose during an earlier one")
+
 	# A repeated trigger must not re-capture the page to come back to.
 	unit.show_page("MARKET")
 	GameState.align_changed.emit("ALIGNING")

@@ -124,6 +124,17 @@ func collect_for_rival(id: int) -> void:
 ## --- Queries (read-only, safe for displays) --------------------------------
 
 
+## Whether the collection loop is actually running. _process pauses off-site,
+## and docking does NOT remove pieces that were still adrift — they stay frozen
+## in GameState.salvage_pieces until the next site reset clears them on arrival
+## back at the claim. Instruments must ask this before drawing a rendezvous:
+## collection_status happily keeps evaluating a frozen piece, and live range,
+## drift and gate readings for something you cannot reach (or even see, having
+## left the claim) are worse than showing nothing.
+func is_collecting() -> bool:
+	return GameState.run_phase == "ON_SITE"
+
+
 ## The adrift piece closest to the ship, {} when nothing is adrift. The scoop
 ## takes whichever piece meets the gates, so the instruments (the MFD SCOOP
 ## page) work off this one — the piece you're realistically flying.

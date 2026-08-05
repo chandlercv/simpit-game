@@ -266,7 +266,9 @@ func _draw_target_member() -> void:
 ## progress ring, plus a live relative-speed readout once the hatch is open —
 ## the number the pilot is actually flying to zero out to collect.
 func _draw_salvage_pieces() -> void:
-	if camera == null or GameState.run_phase != "ON_SITE":
+	# Off the claim, pieces left adrift are frozen but still listed
+	# (DriftSystem.is_collecting) — no markers or gate cues for those.
+	if camera == null or not DriftSystem.is_collecting():
 		return
 	var frame := Rect2(Vector2.ZERO, size)
 	var font := ThemeDB.fallback_font

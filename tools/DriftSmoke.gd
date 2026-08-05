@@ -8,6 +8,8 @@ extends Node
 ##  - the four collection gates (hatch, range, relative speed, forward cone)
 ##    are all required together, and holding all four stows the piece;
 ##  - the cargo hatch interlocks the cutter and departure/jump while open;
+##  - leaving the claim with salvage adrift freezes those pieces and reads as
+##    suspended collection, and the jump back clears them;
 ##  - the rival runs the same sever-then-retrieve loop, and pieces are
 ##    free-for-all so the player can beat it to one.
 ##
@@ -203,6 +205,37 @@ func _run() -> void:
 	_check(GameState.get_salvage_piece(piece2_id).is_empty(),
 			"pieces are free-for-all — the player can scoop one the rival cut")
 	GameState.set_cargo_hatch(false)
+
+	# --- Off-site: leaving the claim with salvage still adrift pauses the drift
+	# sim but does NOT remove the pieces, so the instruments must stop treating
+	# them as a live rendezvous (is_collecting) — they're frozen and unreachable
+	# until the jump back clears them. ---
+	SalvageSystem.reset_site()
+	var left_member := {"id": 996, "name": "LEFT BEHIND", "good": "HULL ALLOY",
+		"node": "PanelA", "center": Vector3(0, 0, -30), "seam": Vector3(0, 0.5, -30),
+		"radius": 1.0, "vel": Vector3(0, 0, -1)}
+	var left_id := DriftSystem.spawn_piece(left_member, 1.0)
+	_check(DriftSystem.is_collecting(), "collection is live while on site")
+	MarketSystem.request_dock(0)
+	var docked := await _wait_until(
+			func() -> bool: return GameState.run_phase == "DOCKED", 20.0)
+	_check(docked, "docking with a piece adrift completes")
+	_check(not GameState.get_salvage_piece(left_id).is_empty(),
+			"docking leaves the still-adrift piece in the world (it is not collected)")
+	_check(not DriftSystem.is_collecting(),
+			"...but collection reads as suspended off site, so instruments stop flying it")
+	var frozen_at: Vector3 = (GameState.get_salvage_piece(left_id)["transform"] as Transform3D).origin
+	await _wait(1.0)
+	_check((GameState.get_salvage_piece(left_id)["transform"] as Transform3D).origin
+			.distance_to(frozen_at) < 0.001,
+			"the abandoned piece is frozen off site rather than drifting on")
+	MarketSystem.request_undock()
+	var back := await _wait_until(
+			func() -> bool: return GameState.run_phase == "ON_SITE", 20.0)
+	_check(back, "the jump back to the claim completes")
+	_check(GameState.get_salvage_piece(left_id).is_empty(),
+			"arriving at a fresh claim clears the piece left behind")
+	_check(DriftSystem.is_collecting(), "collection is live again on site")
 
 	# --- A detached piece must sit where its section actually was. Needs the
 	# real 3D scene: every member wrapper in Wreck.tscn sits at the WRECK's own

@@ -81,13 +81,22 @@ func _refresh() -> void:
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
+	# Off the claim (transit/docked) DriftSystem is paused but any pieces still
+	# adrift stay in the world list, so the gate evaluation below would keep
+	# reporting range, drift and gates for frozen salvage that can't be flown to.
+	# Say what's actually true instead.
+	if not DriftSystem.is_collecting():
+		var adrift := GameState.salvage_pieces.size()
+		var detail := "SCOOP WORKS ON SITE ONLY"
+		if adrift > 0:
+			detail = "%d PIECE%s LEFT ADRIFT AT THE CLAIM" % [
+				adrift, "" if adrift == 1 else "S"]
+		_draw_notice(font, "COLLECTION SUSPENDED", detail)
+		return
+
 	var piece := DriftSystem.nearest_piece()
 	if piece.is_empty():
-		var mid := (size.y - FOOTER_H) / 2.0
-		draw_string(font, Vector2(0, mid), "NO SALVAGE ADRIFT",
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, Color(accent, 0.6))
-		draw_string(font, Vector2(0, mid + 24), "CUT A MEMBER FREE TO COLLECT IT",
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, 12, Color(accent, 0.4))
+		_draw_notice(font, "NO SALVAGE ADRIFT", "CUT A MEMBER FREE TO COLLECT IT")
 		return
 
 	var st := DriftSystem.collection_status(piece)
@@ -155,6 +164,16 @@ func _draw() -> void:
 
 	_draw_meter(font, Vector2(8, y + 82.0), size.x - 16.0, "SCOOP",
 			float(st["scoop"]), GOOD if st["gated"] else Color(accent, 0.6))
+
+
+## The page's "nothing to fly right now" state: a centred headline over the
+## reason, in place of the cone field / checklist.
+func _draw_notice(font: Font, title: String, detail: String) -> void:
+	var mid := (size.y - FOOTER_H) / 2.0
+	draw_string(font, Vector2(0, mid), title, HORIZONTAL_ALIGNMENT_CENTER, size.x,
+			18, Color(accent, 0.6))
+	draw_string(font, Vector2(0, mid + 24), detail, HORIZONTAL_ALIGNMENT_CENTER,
+			size.x, 12, Color(accent, 0.4))
 
 
 ## One checklist row: name, live value against its limit, and a pass mark.

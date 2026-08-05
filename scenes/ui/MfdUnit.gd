@@ -40,8 +40,8 @@ const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "SCOOP",
 
 ## "" == the MENU home; otherwise one of PAGES.
 var _current := ""
-## Page that was up before the *first* mini-game auto-opened its instrument page,
-## restored once every mini-game has ended (primary unit only). "" = MENU home.
+## Last non-mini-game page a mini-game took the screen away from, restored once
+## every mini-game has ended (primary unit only). "" = MENU home.
 var _page_before_auto := ""
 ## Mini-game pages currently auto-displayed, oldest first. Mini-games can overlap
 ## (open the hatch mid-alignment), and they don't have to end in the order they
@@ -84,11 +84,15 @@ func _auto_page(page: String, active: bool) -> void:
 	if unit_id != "A":
 		return
 	if active:
-		# Only the first live mini-game captures the page to come back to;
-		# a repeated trigger must not re-capture over it.
+		# Capture the page to come back to whenever a mini-game takes over one
+		# the player is really on: the first one, and any later one that
+		# interrupts a page they've since chosen by hand. A page that is itself
+		# a live mini-game is never captured — that would restore one of our own
+		# pages — which is also what stops a repeated trigger (already showing
+		# its own page) from re-capturing over the real fallback.
+		if not _auto_pages.has(_current):
+			_page_before_auto = _current
 		if not _auto_pages.has(page):
-			if _auto_pages.is_empty():
-				_page_before_auto = _current
 			_auto_pages.append(page)
 		show_page(page)
 		return

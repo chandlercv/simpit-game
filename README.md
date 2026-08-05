@@ -166,7 +166,11 @@ frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
    frame collapses, every uncut member is lost.
 9. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
    the claim — the cargo hatch must be secured first), sell your hold at that
-   faction's prices, then depart back to the claim for a fresh wreck.
+   faction's prices, then depart back to the claim for a fresh wreck. **Anything
+   still adrift when you leave is abandoned** — you jump back to a fresh wreck,
+   not to the pieces you left floating — so scoop before you depart. Away from the
+   claim the `SCOOP` page stops flying the rendezvous and reads **COLLECTION
+   SUSPENDED**, counting what you left behind.
 
 **Power budget:** four channels — **THRUST, CUTTER, SENSORS, LIFE** — each
 0..1. The reactor can't run everything at full; the MFD **POWER** page header
