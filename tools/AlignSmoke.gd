@@ -17,6 +17,13 @@ var _failures: Array[String] = []
 func _ready() -> void:
 	Engine.time_scale = 10.0
 	InputRouter.set_process(false)
+	# InputRouter.set_process(false) only stops InputRouter's OWN _process — its
+	# raw-HID children (SwitchPanelBridge etc.) keep polling real connected
+	# hardware regardless. On a dev box with a live switch panel, a physical
+	# COWL switch left ON would otherwise flip GameState.cargo_hatch_open mid-test
+	# and abort a forced cut/alignment out from under these checks.
+	for child in InputRouter.get_children():
+		child.set_process(false)
 	_run.call_deferred()
 
 
@@ -128,7 +135,7 @@ func _drive_align(on_target: bool, timeout: float) -> bool:
 
 ## Drive a cut of `id` to completion at a forced alignment `quality`, exercising
 ## the real _update_cut/_complete_cut scaling. Returns {time, ratio} where ratio
-## is stowed qty / the member's base qty.
+## is the severed piece's (DriftSystem) quality-scaled qty / the member's base qty.
 func _timed_cut(id: int, quality: float) -> Dictionary:
 	_setup_matched(id)
 	var base: float = float(GameState.get_member(id)["qty"])
@@ -140,8 +147,8 @@ func _timed_cut(id: int, quality: float) -> Dictionary:
 	while GameState.wreck["cutting_id"] != -1 and elapsed < 12.0:
 		await get_tree().process_frame
 		elapsed += get_process_delta_time()
-	var stowed := _stowed_qty(member_name)
-	return {"time": elapsed, "ratio": (stowed / base) if base > 0.0 else 0.0}
+	var yield_qty := _piece_qty(member_name)
+	return {"time": elapsed, "ratio": (yield_qty / base) if base > 0.0 else 0.0}
 
 
 func _wait_cut_done(timeout: float) -> void:
@@ -173,12 +180,14 @@ func _richest_ids(n: int) -> Array[int]:
 	return out
 
 
-func _stowed_qty(member_name: String) -> float:
-	var total := 0.0
-	for item: Dictionary in GameState.local_ship()["cargo"]:
-		if item["name"] == member_name:
-			total += float(item["qty"])
-	return total
+## The severed member now detaches as a drifting piece (DriftSystem) instead of
+## stowing straight into the hold — read its already quality-scaled qty off
+## that piece rather than the cargo list.
+func _piece_qty(member_name: String) -> float:
+	for piece: Dictionary in GameState.salvage_pieces:
+		if piece["name"] == member_name:
+			return float(piece["qty"])
+	return 0.0
 
 
 func _check(condition: bool, label: String) -> void:

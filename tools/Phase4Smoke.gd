@@ -1,8 +1,9 @@
 extends Node
 ## Headless end-to-end check of the Phase 4 gameplay loop (plan "Done when"):
-## jump in, scan (structural graph), approach, extract 3 items with visibly
-## different risk impact by load, manage cargo (jettison), dock, sell, jump
-## back to a fresh site.
+## jump in, scan (structural graph), approach, cut and collect 3 items (each
+## a real drifting piece scooped through the cargo hatch — see DriftSystem)
+## with visibly different risk impact by load, manage cargo (jettison), dock,
+## sell, jump back to a fresh site.
 ##
 ##   godot --headless res://tools/Phase4Smoke.tscn
 ##
@@ -17,6 +18,14 @@ var _risk_at_cut := {}
 
 func _ready() -> void:
 	Engine.time_scale = 20.0
+	InputRouter.set_process(false)
+	# InputRouter.set_process(false) only stops InputRouter's OWN _process — its
+	# raw-HID children (SwitchPanelBridge etc.) keep polling real connected
+	# hardware regardless. On a dev box with a live switch panel, a physical
+	# COWL switch left ON would otherwise flip GameState.cargo_hatch_open mid-test
+	# and abort a cut out from under _collect_piece.
+	for child in InputRouter.get_children():
+		child.set_process(false)
 	GameState.wreck_member_cut.connect(
 			func(id: int) -> void: _risk_at_cut[id] = GameState.structural_risk)
 	_run.call_deferred()
@@ -135,7 +144,44 @@ func _cut(member: Dictionary) -> int:
 	var done := await _wait_until(
 			func() -> bool: return member["cut"], 30.0)
 	_check(done, "cut of %s completes" % member["name"])
+	# The severed yield is now a drifting piece (DriftSystem), not an instant
+	# stow — fly alongside it and scoop it through the cargo hatch.
+	var collected := await _collect_piece(member["name"], 8.0)
+	_check(collected, "%s collected through the cargo hatch" % member["name"])
 	return member["id"]
+
+
+## Simulates flying the piece down: opens the hatch and, every frame, parks the
+## ship a hair off the piece (nose-on, velocity matched) — the three DriftSystem
+## collection gates besides range — until its scoop meter fills and it's stowed,
+## or this times out.
+func _collect_piece(member_name: String, timeout: float) -> bool:
+	# Hand control back from the (now-stale, member-cut) approach autopilot to
+	# manual flight so it doesn't fight this positioning every frame.
+	GameState.approach_state = "HOLDING"
+	GameState.set_cargo_hatch(true)
+	var elapsed := 0.0
+	while elapsed < timeout:
+		var piece := _find_piece(member_name)
+		if piece.is_empty():
+			break
+		var piece_pos: Vector3 = (piece["transform"] as Transform3D).origin
+		var piece_vel: Vector3 = piece["velocity"]
+		var ship: Dictionary = GameState.local_ship()
+		var offset := Vector3(0, 0, 1.0)
+		ship["transform"] = Transform3D(Basis.looking_at(offset.normalized()), piece_pos - offset)
+		ship["velocity"] = piece_vel
+		await get_tree().process_frame
+		elapsed += get_process_delta_time()
+	GameState.set_cargo_hatch(false)
+	return _find_piece(member_name).is_empty()
+
+
+func _find_piece(member_name: String) -> Dictionary:
+	for piece: Dictionary in GameState.salvage_pieces:
+		if piece["name"] == member_name:
+			return piece
+	return {}
 
 
 func _wait_until(predicate: Callable, timeout_game_s: float) -> bool:

@@ -26,6 +26,7 @@ CargoSystem="*res://systems/CargoSystem.gd"
 MarketSystem="*res://systems/MarketSystem.gd"
 SalvageSystem="*res://systems/SalvageSystem.gd"
 ThreatSystem="*res://systems/ThreatSystem.gd"
+DriftSystem="*res://systems/DriftSystem.gd"
 CollisionSystem="*res://systems/CollisionSystem.gd"
 
 [display]
@@ -107,6 +108,10 @@ ops_cut={
 "events": []
 }
 throttle_cmd_toggle={
+"deadzone": 0.2,
+"events": []
+}
+cargo_hatch_open={
 "deadzone": 0.2,
 "events": []
 }

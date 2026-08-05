@@ -241,6 +241,9 @@ func toggle_throttle_cmd_mode() -> void:
 func request_cut() -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
+	if GameState.cargo_hatch_open:
+		GameState.post_comms("OPS", "CUT ABORT — SECURE CARGO HATCH FIRST")
+		return
 	if GameState.align_state == "ALIGNING":
 		_commit_align()
 		return
@@ -358,8 +361,15 @@ func register_wreck_position(position: Vector3) -> void:
 	GameState.wreck["position"] = position
 
 
-## ThreatSystem: rival salvager severs a member and keeps the yield. Same
-## physics as our own cut — the frame doesn't care whose torch it was.
+## ThreatSystem: rival salvager severs a member. Same physics as our own cut —
+## the frame doesn't care whose torch it was — and full yield (the rival skips
+## the alignment mini-game entirely). Detaches a drifting piece just like a
+## player cut; ThreatSystem then has to physically close on it and hold long
+## enough to claim it (DriftSystem.collect_for_rival) — the same two-phase
+## sever-then-retrieve loop the player runs, and because pieces are
+## free-for-all either side can beat the other to one. Returns {} if nothing
+## is left to strip, else {name, id, piece_id} for ThreatSystem's comms line
+## and chase target.
 func rival_strip_member() -> Dictionary:
 	var candidates: Array[Dictionary] = []
 	for member: Dictionary in GameState.wreck["members"]:
@@ -375,7 +385,8 @@ func rival_strip_member() -> Dictionary:
 	if GameState.selected_member_id == member["id"]:
 		GameState.selected_member_id = -1
 		GameState.selected_member_changed.emit(-1)
-	return member
+	var piece_id: int = DriftSystem.spawn_piece(member, member["qty"])
+	return {"name": member["name"], "id": member["id"], "piece_id": piece_id}
 
 
 ## ThreatSystem: the frame lets go. Uncut members are destroyed with it.
@@ -608,6 +619,9 @@ func _update_align(delta: float) -> void:
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		_abort_align("CUTTER POWER LOST")
 		return
+	if GameState.cargo_hatch_open:
+		_abort_align("CARGO HATCH OPEN")
+		return
 	var align: Dictionary = GameState.align
 	var member := GameState.get_member(GameState.selected_member_id)
 	# The seam is a fixed point on the member; it moves in view only because the
@@ -662,6 +676,9 @@ func _update_cut(delta: float) -> void:
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		_abort_cut("CUTTER POWER LOST")
 		return
+	if GameState.cargo_hatch_open:
+		_abort_cut("CARGO HATCH OPEN")
+		return
 	# Alignment quality throttles the cut: a clean lock cuts near full rate, a sloppy
 	# one crawls at ALIGN_RATE_MIN.
 	var quality: float = clampf(float(wreck.get("align_quality", 1.0)), 0.0, 1.0)
@@ -689,8 +706,11 @@ func _complete_cut(member: Dictionary) -> void:
 	GameState.post_comms("SALVAGE", "%s SEVERED — FRAME STRESS %s" % [
 		member["name"],
 		"SPIKING" if spike > 0.12 else ("SHIFTING" if spike > 0.05 else "STEADY")])
+	# The yield no longer teleports into the hold: it's now a physical, drifting
+	# piece (DriftSystem) the pilot has to fly down and scoop through the cargo
+	# hatch — CargoSystem.stow_salvage only fires on that collection.
 	var yield_qty: float = snappedf(member["qty"] * lerpf(ALIGN_YIELD_MIN, 1.0, quality), 0.1)
-	CargoSystem.stow_salvage(member["name"], member["good"], yield_qty)
+	DriftSystem.spawn_piece(member, yield_qty)
 
 
 ## Severing consequences shared by our cuts and the rival's: risk spikes by the

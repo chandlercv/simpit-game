@@ -39,6 +39,11 @@ const WRECK_RADIUS := 4.0
 const IMPACT_SPEED_FLOOR := 1.5
 ## Fraction of the inward velocity returned as a bounce.
 const RESTITUTION := 0.3
+## Nominal ship mass for the ship-vs-movable-body impulse below — heavy enough
+## that a light salvage piece/debris chunk takes a believable kick without the
+## ship itself needing a real mass in its own bounce (that formula, above,
+## deliberately stays as before: infinite-mass-target shorthand).
+const SHIP_MASS := 500.0
 ## Hull integrity lost per m/s of closing speed above the floor.
 const DAMAGE_PER_SPEED := 0.03
 const MAX_IMPACT_DAMAGE := 0.6
@@ -80,6 +85,7 @@ func _process(delta: float) -> void:
 		origin += normal * float(contact["depth"])  # push out of penetration
 		if closing > 0.0:
 			velocity += normal * closing * (1.0 + RESTITUTION)  # reflect inward part
+			_impart_body_velocity(body, normal, closing)
 		moved = true
 		_apply_impact(body, xform, normal, closing)
 	if moved:
@@ -91,6 +97,7 @@ func _process(delta: float) -> void:
 		# straight back in and grind, so hand control back to the pilot.
 		if GameState.approach_state != "HOLDING":
 			SalvageSystem.abort_approach_on_collision()
+	_resolve_movable_pairs()
 
 
 ## Union of solid bodies this frame. Everything solid — the wreck's per-member
@@ -104,11 +111,15 @@ func _collidables() -> Array[Dictionary]:
 	for obstacle: Dictionary in GameState.obstacles:
 		var pos: Vector3 = obstacle["position"]
 		# `a`/`b`/`radius` double as the broadphase bounding sphere; `hull`, when
-		# present, is the tight convex point cloud the GJK test uses.
+		# present, is the tight convex point cloud the GJK test uses. `mass` > 0
+		# marks the body movable (a drifting salvage piece or a knocked debris
+		# chunk); `src` is the live obstacle dict so a ship impact can write an
+		# impulse straight into its "vel" for the owning system to integrate.
 		bodies.append({
 			"key": "o%d" % obstacle["id"], "name": obstacle["name"],
 			"a": pos, "b": pos, "radius": obstacle["radius"],
 			"hull": obstacle.get("hull", PackedVector3Array()),
+			"mass": obstacle.get("mass", 0.0), "src": obstacle,
 		})
 	for contact: Dictionary in GameState.contacts:
 		if contact.get("radius", 0.0) > 0.0:
@@ -172,6 +183,65 @@ func _apply_impact(body: Dictionary, xform: Transform3D, normal: Vector3,
 	GameState.hull_impact.emit(section, dmg)
 	GameState.post_comms("SYSTEM", "COLLISION — %s IMPACT, %s HULL -%d%%" % [
 		body["name"], section, roundi(dmg * 100.0)])
+
+
+## Kick a movable body (a drifting salvage piece, a knocked debris chunk) on
+## ship contact. The ship's own bounce above deliberately keeps its old
+## infinite-target-mass shorthand regardless of what it hit; this is the
+## separate, additive reaction on the body's side, scaled down as its mass
+## approaches the ship's nominal SHIP_MASS so a heavy body barely moves.
+func _impart_body_velocity(body: Dictionary, normal: Vector3, closing: float) -> void:
+	var mass: float = body.get("mass", 0.0)
+	if mass <= 0.0:
+		return
+	var src: Dictionary = body["src"]
+	var frac := SHIP_MASS / (SHIP_MASS + mass)
+	src["vel"] = (src.get("vel", Vector3.ZERO) as Vector3) \
+			- normal * closing * (1.0 + RESTITUTION) * frac
+
+
+## Movable bodies (salvage pieces, knocked debris) can also knock each other —
+## a sphere-sphere pass over just that subset, separate from the ship-vs-body
+## test above (which still uses the tight hull/capsule test where a hull is
+## present). Kept to spheres: these bodies are constantly translating, so
+## baking/re-transforming a hull for this pass isn't worth it.
+func _resolve_movable_pairs() -> void:
+	var movable: Array[Dictionary] = []
+	for obstacle: Dictionary in GameState.obstacles:
+		if float(obstacle.get("mass", 0.0)) > 0.0:
+			movable.append(obstacle)
+	for i in movable.size():
+		for j in range(i + 1, movable.size()):
+			_resolve_pair(movable[i], movable[j])
+
+
+## Standard impulse-based sphere response: separate along the contact normal
+## (split by inverse mass, so the lighter body gives way more) and exchange the
+## closing part of their relative velocity, damped by RESTITUTION. `a`/`b` are
+## the live obstacle dicts (Dictionaries are references), written in place.
+func _resolve_pair(a: Dictionary, b: Dictionary) -> void:
+	var pos_a: Vector3 = a["position"]
+	var pos_b: Vector3 = b["position"]
+	var min_sep: float = float(a["radius"]) + float(b["radius"])
+	var sep: Vector3 = pos_a - pos_b
+	var dist := sep.length()
+	if dist >= min_sep:
+		return
+	var normal := sep.normalized() if dist > 0.0001 else Vector3.UP
+	var inv_a := 1.0 / float(a["mass"])
+	var inv_b := 1.0 / float(b["mass"])
+	var total_inv := inv_a + inv_b
+	var pen := min_sep - dist
+	a["position"] = pos_a + normal * pen * (inv_a / total_inv)
+	b["position"] = pos_b - normal * pen * (inv_b / total_inv)
+	var vel_a: Vector3 = a.get("vel", Vector3.ZERO)
+	var vel_b: Vector3 = b.get("vel", Vector3.ZERO)
+	var rel := (vel_a - vel_b).dot(normal)
+	if rel >= 0.0:
+		return  # already separating
+	var j := -(1.0 + RESTITUTION) * rel / total_inv
+	a["vel"] = vel_a + normal * (j * inv_a)
+	b["vel"] = vel_b - normal * (j * inv_b)
 
 
 ## Which hull section faced the impact: transform the toward-body direction into

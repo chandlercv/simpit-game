@@ -7,6 +7,11 @@ extends Node3D
 ## proximity/threat treatment has something real to react to.
 const THREAT_CHUNK := "ChunkThreat"
 
+## A knocked chunk (CollisionSystem writes its obstacle's "vel" on impact) drifts
+## instead of snapping back, then bleeds this fraction of its speed per second so
+## it settles into a new resting drift rather than sailing off indefinitely.
+const DRIFT_DAMPING := 0.15
+
 @onready var _debris: Node3D = $Debris
 
 var _spins: Array[Vector3] = []
@@ -36,8 +41,14 @@ func _ready() -> void:
 		var chunk3d: Node3D = chunk
 		var body := _mesh_body(chunk3d)
 		if body["radius"] > 0.0:
+			# Movable (mass > 0): a ship ram or a drifting salvage piece can knock
+			# a chunk now (CollisionSystem), same density assumption (mass ∝ r³)
+			# DriftSystem uses for salvage pieces so the two kinds trade momentum
+			# proportionately.
+			var mass: float = body["radius"] * body["radius"] * body["radius"]
 			var id: int = GameState.register_obstacle(
-					chunk3d.name, body["center"], body["radius"], body["hull_world"])
+					chunk3d.name, body["center"], body["radius"], body["hull_world"],
+					false, mass)
 			_obstacle_ids.append(id)
 			_bodies.append({
 				"obstacle": GameState.get_obstacle(id),
@@ -67,13 +78,19 @@ func _process(delta: float) -> void:
 	# and "position" updates the body CollisionSystem tests this frame. The
 	# bounding radius is rotation-invariant, so it stays as registered.
 	for body: Dictionary in _bodies:
+		var obstacle: Dictionary = body["obstacle"]
+		# A knock (CollisionSystem impulse into obstacle["vel"]) actually moves the
+		# chunk here, then bleeds off — otherwise chunks only ever rotate in place.
+		var vel: Vector3 = obstacle.get("vel", Vector3.ZERO)
+		if vel.length_squared() > 0.0001:
+			(body["chunk"] as Node3D).global_position += vel * delta
+			obstacle["vel"] = vel * exp(-DRIFT_DAMPING * delta)
 		var xform: Transform3D = (body["chunk"] as Node3D).global_transform
 		var hull_local: PackedVector3Array = body["hull_local"]
 		var world := PackedVector3Array()
 		world.resize(hull_local.size())
 		for i in hull_local.size():
 			world[i] = xform * hull_local[i]
-		var obstacle: Dictionary = body["obstacle"]
 		obstacle["hull"] = world
 		obstacle["position"] = xform * body["local_center"]
 

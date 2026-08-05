@@ -4,9 +4,11 @@ class_name MfdUnit
 ## time. Two of these sit side by side in MfdWindow (each independently paged).
 ##
 ## Navigation is a home menu, not a cycle: the MENU grid taps straight to any
-## page, and the bezel MENU button returns home — so no tabbing through pages you
-## don't want. Mapped controls (InputRouter, Phase 5) call go_home() and
-## page_step() to give the HOTAS the same reach.
+## page, and the bezel MENU button returns home from anywhere — so reaching a
+## page is one hop, never tabbing through pages you don't want. page_step() is
+## there for a HOTAS rocker and wraps through the PAGES alone; the MENU home is
+## not in that cycle, so paging can't strand you on it. Mapped controls
+## (InputRouter, Phase 5) call go_home() and page_step() for the same reach.
 ##
 ## Every page is an existing reusable widget (PowerSliders, InventoryGrid,
 ## MarketPanel+CommsLog, SalvagePanel, ContactList) — this unit only hosts and
@@ -20,9 +22,13 @@ const CommsLogScene := preload("res://scenes/ui/CommsLog.tscn")
 const ContactListScript := preload("res://scenes/ui/ContactList.gd")
 const SalvagePanelScript := preload("res://scenes/ui/SalvagePanel.gd")
 const AlignPanelScript := preload("res://scenes/ui/AlignPanel.gd")
+const ScoopPanelScript := preload("res://scenes/ui/ScoopPanel.gd")
 
 ## Page order (also the menu grid order). Empty string = the MENU home.
-const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "MARKET", "CONTACTS"]
+## ALIGN and SCOOP sit together: they're the two halves of a salvage run (cut
+## the member free, then go collect it).
+const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "SCOOP",
+		"MARKET", "CONTACTS"]
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 @export var background: Color = Color(0.012, 0.038, 0.038)
@@ -34,9 +40,14 @@ const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "MARKET", "C
 
 ## "" == the MENU home; otherwise one of PAGES.
 var _current := ""
-## Page that was up when alignment auto-opened the ALIGN page, restored after
-## (primary unit only). "" means the MENU home was showing.
-var _page_before_align := ""
+## Last non-mini-game page a mini-game took the screen away from, restored once
+## every mini-game has ended (primary unit only). "" = MENU home.
+var _page_before_auto := ""
+## Mini-game pages currently auto-displayed, oldest first. Mini-games can overlap
+## (open the hatch mid-alignment), and they don't have to end in the order they
+## started, so this is a set-with-order rather than a plain "previous page":
+## whichever auto page is still live when another ends is what we fall back to.
+var _auto_pages: Array[String] = []
 var _pages: Dictionary = {}   # page name -> Control
 var _menu: Control
 var _content: MarginContainer
@@ -52,23 +63,48 @@ func _ready() -> void:
 		show_page(default_page.to_upper())
 	else:
 		go_home()
-	GameState.align_changed.connect(_on_align_changed)
+	GameState.align_changed.connect(
+			func(state: String) -> void: _auto_page("ALIGN", state == "ALIGNING"))
+	GameState.cargo_hatch_changed.connect(
+			func(open: bool) -> void: _auto_page("SCOOP", open))
 
 
-## Surface the alignment mini-game on the primary MFD the moment it opens, then
-## hand the screen back to whatever was up once it commits or aborts. Only unit A
-## auto-switches, so the other MFD stays free for power/cargo during the cut.
-func _on_align_changed(state: String) -> void:
+## Surface a mini-game's instrument page on the primary MFD while that mini-game
+## is live, then hand the screen back to whatever was up when it ends. Only unit
+## A auto-switches, so the other MFD stays free for power/cargo throughout.
+## Shared by the two halves of a salvage run: ALIGN while lining up a cut, and
+## SCOOP while the cargo hatch is open to collect (opening the hatch is a
+## deliberate "I'm going to collect now", so it's the right trigger).
+##
+## Overlapping mini-games nest: opening the hatch mid-alignment stacks SCOOP on
+## top of ALIGN, and ending either one falls back to the other if it's still
+## live, only reaching the pre-mini-game page once none are. Restoring is skipped
+## when the player has since paged away by hand — their choice outranks ours.
+func _auto_page(page: String, active: bool) -> void:
 	if unit_id != "A":
 		return
-	if state == "ALIGNING":
-		_page_before_align = _current
-		show_page("ALIGN")
-	elif _current == "ALIGN":
-		if _page_before_align == "":
-			go_home()
-		else:
-			show_page(_page_before_align)
+	if active:
+		# Capture the page to come back to whenever a mini-game takes over one
+		# the player is really on: the first one, and any later one that
+		# interrupts a page they've since chosen by hand. A page that is itself
+		# a live mini-game is never captured — that would restore one of our own
+		# pages — which is also what stops a repeated trigger (already showing
+		# its own page) from re-capturing over the real fallback.
+		if not _auto_pages.has(_current):
+			_page_before_auto = _current
+		if not _auto_pages.has(page):
+			_auto_pages.append(page)
+		show_page(page)
+		return
+	_auto_pages.erase(page)
+	if _current != page:
+		return
+	if not _auto_pages.is_empty():
+		show_page(_auto_pages[_auto_pages.size() - 1])
+	elif _page_before_auto == "":
+		go_home()
+	else:
+		show_page(_page_before_auto)
 
 
 func _build() -> void:
@@ -146,6 +182,10 @@ func _build_page(page: String) -> Control:
 			var align := AlignPanelScript.new()
 			align.accent = accent
 			return align
+		"SCOOP":
+			var scoop := ScoopPanelScript.new()
+			scoop.accent = accent
+			return scoop
 		"MARKET":
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 8)
@@ -195,14 +235,15 @@ func show_page(page: String) -> void:
 	_title.text = page
 
 
-## Step through pages (mapped page-next/prev). From the MENU home, +1 opens the
-## first page and −1 the last; stepping past the ends returns to the MENU.
+## Step through the pages (mapped page-next/prev), wrapping at both ends. The
+## MENU home is deliberately NOT in this cycle: it's reached by its own bezel
+## button / mapped MFD-menu action, from which you tap straight to the page you
+## want. Paging therefore stays on the working pages and can never dump you onto
+## the menu mid-cycle. From the MENU home (nothing paged yet) +1 opens the first
+## page and −1 the last, so a rocker still gets you in.
 func page_step(delta: int) -> void:
 	if _current == "":
 		show_page(PAGES[0] if delta >= 0 else PAGES[PAGES.size() - 1])
 		return
-	var idx := PAGES.find(_current) + delta
-	if idx < 0 or idx >= PAGES.size():
-		go_home()
-	else:
-		show_page(PAGES[idx])
+	var step := 1 if delta >= 0 else -1
+	show_page(PAGES[(PAGES.find(_current) + step + PAGES.size()) % PAGES.size()])

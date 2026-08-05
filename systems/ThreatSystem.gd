@@ -10,6 +10,12 @@ const RIVAL_SPEED := 6.0
 const RIVAL_SPAWN_RANGE := 180.0
 const RIVAL_WORK_RANGE := 20.0
 const RIVAL_STRIP_INTERVAL := 25.0
+## Runs the same sever-then-retrieve loop the player does (skipping only the
+## alignment mini-game): how close it needs to close on its own severed piece,
+## and how long it holds there, to claim it (DriftSystem.collect_for_rival).
+## Pieces are free-for-all, so a slow rival can lose one to the player.
+const RIVAL_COLLECT_RANGE := 6.0
+const RIVAL_COLLECT_TIME := 2.0
 ## Collision radius for the rival/patrol ships (they're solid to ram into).
 const SHIP_CONTACT_RADIUS := 4.0
 
@@ -30,10 +36,18 @@ const COLLAPSE_DAMAGE_RANGE := 25.0
 
 var _rng := RandomNumberGenerator.new()
 
+## The rival's own APPROACH -> CUT -> COLLECT loop (back to CUT until the frame
+## is stripped) -> DEPART, mirroring the player's approach/align/cut/scoop loop
+## minus the alignment mini-game.
+enum RivalState { APPROACH, CUT, COLLECT, DEPART }
+
 var _rival_timer := 0.0
 var _rival_contact_id := -1
-var _rival_departing := false
+var _rival_state: RivalState = RivalState.APPROACH
 var _strip_timer := 0.0
+## The piece the rival just cut and is closing on, -1 when not in COLLECT.
+var _rival_piece_id := -1
+var _rival_collect_timer := 0.0
 
 var _patrol_timer := 0.0
 var _patrol_contact_id := -1
@@ -57,7 +71,9 @@ func reset_run() -> void:
 		GameState.remove_contact(_patrol_contact_id)
 	_rival_contact_id = -1
 	_patrol_contact_id = -1
-	_rival_departing = false
+	_rival_state = RivalState.APPROACH
+	_rival_piece_id = -1
+	_rival_collect_timer = 0.0
 	_rival_timer = _rng.randf_range(RIVAL_SPAWN_MIN, RIVAL_SPAWN_MAX)
 	_strip_timer = RIVAL_STRIP_INTERVAL
 	_patrol_timer = _rng.randf_range(PATROL_WINDOW_MIN, PATROL_WINDOW_MAX)
@@ -79,12 +95,13 @@ func _update_rival(delta: float) -> void:
 	var wreck_pos: Vector3 = GameState.wreck["position"]
 	if _rival_contact_id == -1:
 		_rival_timer -= delta
-		if _rival_timer <= 0.0 and not _rival_departing:
+		if _rival_timer <= 0.0:
 			var bearing := _rng.randf_range(0.0, TAU)
 			var spawn := wreck_pos + Vector3(cos(bearing), _rng.randf_range(-0.2, 0.2),
 					sin(bearing)) * RIVAL_SPAWN_RANGE
 			_rival_contact_id = GameState.register_contact(
 					"RIVAL CUTTER", spawn, true, SHIP_CONTACT_RADIUS)
+			_rival_state = RivalState.APPROACH
 			GameState.post_comms("SENSORS",
 					"NEW CONTACT — RIVAL CUTTER CLOSING ON THE WRECK")
 		return
@@ -92,33 +109,89 @@ func _update_rival(delta: float) -> void:
 	if contact.is_empty():
 		_rival_contact_id = -1
 		return
-	if _rival_departing:
-		# Burn away from the wreck; drop off the scope once clear.
-		var away: Vector3 = (contact["position"] - wreck_pos).normalized()
-		contact["position"] += away * RIVAL_SPEED * 2.0 * delta
-		if contact["position"].distance_to(wreck_pos) > PATROL_SPAWN_RANGE:
-			GameState.remove_contact(_rival_contact_id)
-			_rival_contact_id = -1
-			_rival_departing = false
-			# Re-arm the spawn window so a fresh rival doesn't appear next frame.
-			_rival_timer = _rng.randf_range(RIVAL_SPAWN_MIN, RIVAL_SPAWN_MAX)
-		return
+	match _rival_state:
+		RivalState.APPROACH:
+			_update_rival_approach(contact, wreck_pos, delta)
+		RivalState.CUT:
+			_update_rival_cut(contact, wreck_pos, delta)
+		RivalState.COLLECT:
+			_update_rival_collect(contact, delta)
+		RivalState.DEPART:
+			_update_rival_depart(contact, wreck_pos, delta)
+
+
+## Close on the wreck; once in reach, start the cutting cadence.
+func _update_rival_approach(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
 	var to_wreck: Vector3 = wreck_pos - contact["position"]
 	if to_wreck.length() > RIVAL_WORK_RANGE:
 		contact["position"] += to_wreck.normalized() * RIVAL_SPEED * delta
 		return
-	# On the wreck: strip a member every interval until nothing is left.
+	_strip_timer = RIVAL_STRIP_INTERVAL
+	_rival_state = RivalState.CUT
+
+
+## Station-keep on the wreck; every RIVAL_STRIP_INTERVAL it severs a member —
+## same physics/yield SalvageSystem gives our own cuts, no crosshair for the
+## rival — then has to go physically retrieve that piece (COLLECT) before it
+## can start the next one. Nothing left to strip: burn for home.
+func _update_rival_cut(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
+	var to_wreck: Vector3 = wreck_pos - contact["position"]
+	if to_wreck.length() > RIVAL_WORK_RANGE:
+		_rival_state = RivalState.APPROACH
+		return
 	_strip_timer -= delta
 	if _strip_timer > 0.0:
 		return
-	_strip_timer = RIVAL_STRIP_INTERVAL
-	var member := SalvageSystem.rival_strip_member()
-	if member.is_empty():
-		_rival_departing = true
+	var result := SalvageSystem.rival_strip_member()
+	if result.is_empty():
+		_rival_state = RivalState.DEPART
 		GameState.post_comms("SENSORS", "RIVAL CUTTER BURNING OUT OF THE VOLUME")
-	else:
-		GameState.post_comms("SALVAGE",
-				"RIVAL CUTTER FLARE — %s STRIPPED BY RIVAL" % member["name"])
+		return
+	GameState.post_comms("SALVAGE",
+			"RIVAL CUTTER FLARE — %s STRIPPED BY RIVAL" % result["name"])
+	_rival_piece_id = result["piece_id"]
+	_rival_collect_timer = 0.0
+	_rival_state = RivalState.COLLECT
+
+
+## Close on the piece it just cut and hold within RIVAL_COLLECT_RANGE for
+## RIVAL_COLLECT_TIME to claim it. Pieces are free-for-all — if the player
+## scoops it first, the piece vanishes out from under the rival and it just
+## resumes cutting the next member instead.
+func _update_rival_collect(contact: Dictionary, delta: float) -> void:
+	var piece := GameState.get_salvage_piece(_rival_piece_id)
+	if piece.is_empty():
+		_rival_piece_id = -1
+		_strip_timer = RIVAL_STRIP_INTERVAL
+		_rival_state = RivalState.CUT
+		return
+	var pos: Vector3 = (piece["transform"] as Transform3D).origin
+	var to_piece: Vector3 = pos - contact["position"]
+	var dist := to_piece.length()
+	if dist > RIVAL_COLLECT_RANGE:
+		contact["position"] += to_piece.normalized() * RIVAL_SPEED * delta
+		_rival_collect_timer = 0.0
+		return
+	_rival_collect_timer += delta
+	if _rival_collect_timer < RIVAL_COLLECT_TIME:
+		return
+	DriftSystem.collect_for_rival(_rival_piece_id)
+	GameState.post_comms("SALVAGE", "RIVAL CUTTER RECOVERED ITS SALVAGE")
+	_rival_piece_id = -1
+	_strip_timer = RIVAL_STRIP_INTERVAL
+	_rival_state = RivalState.CUT
+
+
+## Burn away from the wreck; drop off the scope once clear and re-arm the spawn
+## window for a future rival.
+func _update_rival_depart(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
+	var away: Vector3 = (contact["position"] - wreck_pos).normalized()
+	contact["position"] += away * RIVAL_SPEED * 2.0 * delta
+	if contact["position"].distance_to(wreck_pos) > PATROL_SPAWN_RANGE:
+		GameState.remove_contact(_rival_contact_id)
+		_rival_contact_id = -1
+		_rival_state = RivalState.APPROACH
+		_rival_timer = _rng.randf_range(RIVAL_SPAWN_MIN, RIVAL_SPAWN_MAX)
 
 
 func _update_patrol(delta: float) -> void:

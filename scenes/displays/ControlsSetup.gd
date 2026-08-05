@@ -43,6 +43,7 @@ const BUTTON_TARGETS := [
 	{"label": "Throttle Cmd Mode", "action": "throttle_cmd_toggle", "group": "THROTTLE"},
 	{"label": "Approach", "action": "ops_approach", "group": "OPS"},
 	{"label": "Cut", "action": "ops_cut", "group": "OPS"},
+	{"label": "Open Cargo Hatch", "action": "cargo_hatch_open", "group": "OPS"},
 	{"label": "Cycle Contact", "action": "contact_cycle", "group": "OPS"},
 	{"label": "Tactical SCOPE/CHART", "action": "tactical_view_cycle", "group": "TACTICAL"},
 	{"label": "Tactical → Scope", "action": "tactical_scope", "group": "TACTICAL"},

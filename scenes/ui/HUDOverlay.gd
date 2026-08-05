@@ -19,6 +19,10 @@ var camera: Camera3D
 
 const HUD_COLOR := Color(0.75, 0.88, 0.95, 0.85)
 const THREAT_COLOR := Color(1.0, 0.35, 0.25, 0.9)
+## Adrift salvage piece markers — amber, greening up (same green as a matched
+## cut target) while its scoop meter is actively filling.
+const SALVAGE_COLOR := Color(1.0, 0.7, 0.25, 0.9)
+const SALVAGE_LOCKED_COLOR := Color(0.5, 1.0, 0.6, 0.95)
 
 ## Threat contacts closer than this (meters) get the proximity warning.
 const PROXIMITY_RANGE := 25.0
@@ -85,8 +89,10 @@ func _draw() -> void:
 	_draw_reticle()
 	_draw_velocity_vector()
 	_draw_target_member()
+	_draw_salvage_pieces()
 	_draw_align()
 	_draw_ops_state()
+	_draw_hatch_indicator()
 	if camera == null:
 		return
 	var frame := Rect2(Vector2.ZERO, size)
@@ -143,6 +149,17 @@ func _draw_ops_state() -> void:
 				"CUTTING %s — %d%%" % [member["name"],
 					roundi(GameState.wreck["cut_progress"] * 100.0)],
 				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, THREAT_COLOR)
+
+
+## Persistent reminder that the cutter and jump/dock are both interlocked off
+## right now (SalvageSystem.request_cut, MarketSystem) — pulses so an open
+## hatch left open by accident still catches the eye.
+func _draw_hatch_indicator() -> void:
+	if not GameState.cargo_hatch_open:
+		return
+	var a := 0.55 + 0.45 * sin(_time * TAU * 1.2)
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 28), "CARGO HATCH OPEN",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(SALVAGE_COLOR, a))
 
 
 ## Pre-cut alignment crosshair, anchored over the member you're cutting so the
@@ -240,20 +257,66 @@ func _draw_target_member() -> void:
 				draw_string(font, screen + Vector2(16, 23), "MATCHED — FIRE TO ALIGN",
 						HORIZONTAL_ALIGNMENT_LEFT, -1, 13, color)
 			return
-	# Off-screen: point an arrow the short way round to the target. Behind the
-	# camera the perspective mapping inverts, so flip the screen direction there.
-	var b := camera.global_transform.basis
-	var dir := pos - camera.global_position
-	var v := Vector2(dir.dot(b.x), -dir.dot(b.y))
-	if dir.dot(-b.z) < 0.0:
-		v = -v
-	v = v.normalized() if v.length() > 0.001 else Vector2.DOWN
-	var edge := (size / 2.0 + v * size.length()).clamp(
-			Vector2(EDGE_MARGIN + 16.0, EDGE_MARGIN + 16.0),
-			size - Vector2(EDGE_MARGIN + 16.0, EDGE_MARGIN + 16.0))
-	_draw_arrowhead(edge, v, 12.0, color)
-	draw_string(font, edge - Vector2(30, 16), "%s  %d M" % [member["name"], dist],
-			HORIZONTAL_ALIGNMENT_CENTER, 60, 12, color)
+	# Off-screen: point an arrow the short way round to the target.
+	_draw_offscreen_marker(pos, "%s  %d M" % [member["name"], dist], color)
+
+
+## Adrift salvage pieces (DriftSystem): a diamond + name + range like the cut
+## target marker, greening up while the scoop meter is filling and gaining a
+## progress ring, plus a live relative-speed readout once the hatch is open —
+## the number the pilot is actually flying to zero out to collect.
+func _draw_salvage_pieces() -> void:
+	# Off the claim, pieces left adrift are frozen but still listed
+	# (DriftSystem.is_collecting) — no markers or gate cues for those.
+	if camera == null or not DriftSystem.is_collecting():
+		return
+	var frame := Rect2(Vector2.ZERO, size)
+	var font := ThemeDB.fallback_font
+	for piece: Dictionary in GameState.salvage_pieces:
+		var pos: Vector3 = (piece["transform"] as Transform3D).origin
+		# The same evaluation the scoop itself runs (and the MFD SCOOP page
+		# draws), so the cue here can't disagree with either.
+		var st := DriftSystem.collection_status(piece)
+		var scoop: float = st["scoop"]
+		var color := SALVAGE_LOCKED_COLOR if scoop > 0.0 else SALVAGE_COLOR
+		var label := "%s — %d M" % [piece["name"], roundi(float(st["range"]))]
+		if camera.is_position_behind(pos):
+			_draw_offscreen_marker(pos, label, color)
+			continue
+		var screen := camera.unproject_position(pos)
+		if not frame.has_point(screen):
+			_draw_offscreen_marker(pos, label, color)
+			continue
+		_draw_diamond(screen, 9.0, color, 1.5)
+		draw_string(font, screen + Vector2(14, 5), label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, color)
+		# Once the hatch is open, name the gate that's actually blocking the
+		# scoop rather than just printing a number — the SCOOP page has the full
+		# instrument, this is the glance version.
+		if GameState.cargo_hatch_open:
+			draw_string(font, screen + Vector2(14, 21), _scoop_cue(st),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
+		if scoop > 0.0:
+			_draw_scoop_ring(screen, 16.0, scoop, color)
+
+
+## The one thing to fix right now to get this piece aboard, worst gate first:
+## get in range, then point at it, then kill the relative drift.
+func _scoop_cue(st: Dictionary) -> String:
+	if not st["in_range"]:
+		return "CLOSE IN — %.0f M" % maxf(float(st["gap"]), 0.0)
+	if not st["in_cone"]:
+		return "OFF-AXIS %d°" % roundi(float(st["off_axis"]))
+	if not st["speed_ok"]:
+		return "MATCH SPEED — REL %.1f M/S" % st["rel_speed"]
+	return "SCOOPING"
+
+
+## Progress ring for a piece's scoop meter — same visual idiom as the
+## alignment mini-game's lock ring (_draw_align), so "holding something
+## steady fills a ring" reads as one consistent HUD language.
+func _draw_scoop_ring(center: Vector2, radius: float, progress: float, color: Color) -> void:
+	draw_arc(center, radius, -PI / 2.0, -PI / 2.0 + TAU * progress, 32, color, 2.0, true)
 
 
 func _draw_diamond(c: Vector2, r: float, color: Color, width: float) -> void:
@@ -267,6 +330,26 @@ func _draw_arrowhead(tip: Vector2, dir: Vector2, r: float, color: Color) -> void
 	var n := Vector2(-d.y, d.x)
 	draw_colored_polygon(PackedVector2Array([
 			tip, tip - d * r * 1.7 + n * r * 0.8, tip - d * r * 1.7 - n * r * 0.8]), color)
+
+
+## Off-screen indicator shared by the target-member and salvage-piece markers:
+## an edge arrow pointing the short way round toward `pos`, with a label. Behind
+## the camera the perspective mapping inverts, so the screen direction flips
+## there — same math _draw_target_member used inline before this was factored
+## out for the salvage-piece markers to share.
+func _draw_offscreen_marker(pos: Vector3, label: String, color: Color) -> void:
+	var b := camera.global_transform.basis
+	var dir := pos - camera.global_position
+	var v := Vector2(dir.dot(b.x), -dir.dot(b.y))
+	if dir.dot(-b.z) < 0.0:
+		v = -v
+	v = v.normalized() if v.length() > 0.001 else Vector2.DOWN
+	var edge := (size / 2.0 + v * size.length()).clamp(
+			Vector2(EDGE_MARGIN + 16.0, EDGE_MARGIN + 16.0),
+			size - Vector2(EDGE_MARGIN + 16.0, EDGE_MARGIN + 16.0))
+	_draw_arrowhead(edge, v, 12.0, color)
+	draw_string(ThemeDB.fallback_font, edge - Vector2(30, 16), label,
+			HORIZONTAL_ALIGNMENT_CENTER, 60, 12, color)
 
 
 ## Screen point for a world-space direction from the camera eyepoint, clamped
