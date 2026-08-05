@@ -40,9 +40,14 @@ const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "SCOOP",
 
 ## "" == the MENU home; otherwise one of PAGES.
 var _current := ""
-## Page that was up when a mini-game auto-opened its instrument page, restored
-## when that mini-game ends (primary unit only). "" means the MENU home.
+## Page that was up before the *first* mini-game auto-opened its instrument page,
+## restored once every mini-game has ended (primary unit only). "" = MENU home.
 var _page_before_auto := ""
+## Mini-game pages currently auto-displayed, oldest first. Mini-games can overlap
+## (open the hatch mid-alignment), and they don't have to end in the order they
+## started, so this is a set-with-order rather than a plain "previous page":
+## whichever auto page is still live when another ends is what we fall back to.
+var _auto_pages: Array[String] = []
 var _pages: Dictionary = {}   # page name -> Control
 var _menu: Control
 var _content: MarginContainer

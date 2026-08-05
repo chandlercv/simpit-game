@@ -204,6 +204,51 @@ func _run() -> void:
 			"pieces are free-for-all — the player can scoop one the rival cut")
 	GameState.set_cargo_hatch(false)
 
+	# --- A detached piece must sit where its section actually was. Needs the
+	# real 3D scene: every member wrapper in Wreck.tscn sits at the WRECK's own
+	# origin (build_hull.py bakes each section's placement into its mesh data),
+	# so posing a piece from its node transform silently drops every collectible
+	# at the middle of the derelict — metres from its own visible mesh, and out
+	# of the scoop's range and cone. Regression guard for exactly that. ---
+	var world: Node3D = load("res://scenes/world/DebrisField.tscn").instantiate()
+	add_child(world)
+	SalvageSystem.reset_site()
+	for _i in 6:
+		await get_tree().process_frame
+	var wreck: Node3D = world.get_node("Wreck")
+	var wreck_origin: Vector3 = wreck.global_position
+	# The member sitting farthest from the hull centre — the worst case, and the
+	# one a player feels first (the engine bell / sensor mast).
+	var outlier: Dictionary = {}
+	var outlier_lever := -1.0
+	for m: Dictionary in GameState.wreck["members"]:
+		if not m.has("center"):
+			continue
+		var lever: float = (m["center"] as Vector3).distance_to(wreck_origin)
+		if lever > outlier_lever:
+			outlier_lever = lever
+			outlier = m
+	_check(outlier_lever > 2.0,
+			"an outlying member exists to test with (%s, %.1f m off the hull centre)" % [
+				outlier.get("name", "?"), outlier_lever])
+	var centroid: Vector3 = outlier["center"]
+	var source_pose: Transform3D = (wreck.get_node(outlier["node"]) as Node3D).global_transform
+	# spawn_piece -> salvage_piece_spawned -> SalvagePieces._on_spawned all run
+	# synchronously, so the pose under test is settled by the time this returns.
+	var placed_id := DriftSystem.spawn_piece(outlier, 1.0)
+	var placed: Vector3 = (GameState.get_salvage_piece(placed_id)["transform"] as Transform3D).origin
+	_check(placed.distance_to(centroid) < 0.01,
+			"a detached piece's real position stays on its member centroid (%.2f m off)"
+					% placed.distance_to(centroid))
+	_check(placed.distance_to(wreck_origin) > 2.0,
+			"...and is NOT snapped to the derelict's origin (%.2f m clear of it)"
+					% placed.distance_to(wreck_origin))
+	# The other half: the visual still renders where the section was, so what you
+	# see and what the scoop measures are the same object.
+	var entry: Dictionary = (world.get_node("SalvagePieces") as Node)._visuals[placed_id]
+	_check((entry["node"] as Node3D).global_transform.origin.distance_to(source_pose.origin) < 0.01,
+			"the drift visual still renders exactly where the section was")
+
 	if _failures.is_empty():
 		print("DRIFT SMOKE: ALL CHECKS PASSED")
 		get_tree().quit(0)

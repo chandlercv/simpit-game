@@ -161,7 +161,11 @@ func collection_status(piece: Dictionary) -> Dictionary:
 	var to_piece: Vector3 = pos - xform.origin
 	var dist := to_piece.length()
 	var los := to_piece / dist if dist > 0.0001 else -xform.basis.z
-	var gap := dist - _ship_radius() - float(piece["radius"])
+	# Hull-to-surface, measured off the ship's REACH (the far end of its
+	# collision capsule), not just the capsule's radius: the Kestrel is
+	# elongated, so radius-only overstated the real clearance by ~1.2 m and the
+	# SCOOP page read "in range" while the nose was already nearly touching.
+	var gap := dist - CollisionSystem.ship_reach() - float(piece["radius"])
 	var rel: Vector3 = (piece["velocity"] as Vector3) - (ship.get("velocity", Vector3.ZERO) as Vector3)
 	var rel_speed := rel.length()
 	var inv := xform.basis.inverse()
@@ -270,8 +274,5 @@ func _random_tumble() -> Vector3:
 	return axis * _rng.randf_range(TUMBLE_RATE_MIN, TUMBLE_RATE_MAX)
 
 
-## Baked capsule radius, or the fallback sphere radius for an unbaked ship def
-## — mirrors SalvageSystem/CollisionSystem's own copies of this fallback.
-func _ship_radius() -> float:
-	var r: float = GameState.ship_def.collision_radius
-	return r if r > 0.0 else 2.5
+## The ship's extent comes from CollisionSystem.ship_reach() (see
+## collection_status), so there's no local copy of the capsule fallback here.
