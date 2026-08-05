@@ -33,7 +33,7 @@ with its own input stream.
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
 | **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **MARKET** (prices + comms), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live and hands the screen back after. | Touch/mouse: tap MENU to jump straight to any page, then operate it. Every command is also HOTAS-mappable. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live and **SCOOP** while the cargo hatch is open, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP** — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -81,6 +81,21 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   beam that walks onto the seam as you line up; once the cut commits it thickens into
   a hot, flickering cutting beam with an impact glow on the hull until the member
   severs.
+- **Adrift salvage markers** — a severed member doesn't stow itself: it becomes a
+  real, drifting piece with its own diamond `◆` (amber), name, and range, plus an
+  edge arrow when it's off-screen — same idiom as the cut-target marker, and it's
+  free-for-all (the rival can beat you to a piece, and you can beat it to one it
+  cut). Once the **cargo hatch** is open a live **REL SPD** readout appears under
+  the marker — the number you're flying to zero out — and holding the four
+  collection gates (hatch open, in range, relative speed nulled, piece inside the
+  hatch's forward cone) fills a **scoop ring** around the marker, which greens as it
+  fills and stows the piece on completion. The cue under the marker names the one
+  gate still blocking you — **CLOSE IN**, **OFF-AXIS nn°**, **MATCH SPEED**, then
+  **SCOOPING** — so a stalled scoop always tells you what to fix. The full
+  instrument version is the MFD **SCOOP** page.
+- **Cargo hatch indicator** — a pulsing **CARGO HATCH OPEN** reminder, top-right,
+  whenever the hatch is open — your cue that the cutter and dock/jump are both
+  interlocked off until you secure it.
 
 ---
 
@@ -125,16 +140,33 @@ frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
    far and the **slip** meter fills and the alignment aborts (no cut).
 6. **Commit the cut.** The lock auto-commits at full, or press the cutter again to
    commit early at the current quality. The cutting beam from the ship's **right
-   wing** bites into the member, which severs over time, and its salvage is stowed.
-   **Alignment quality is the payoff:** a clean lock cuts faster, spikes structural
-   risk less, and preserves more yield; a sloppy one crawls, spikes harder, and
-   loses salvage.
-7. **Watch structural risk.** Cutting load-bearing members spikes risk and
+   wing** bites into the member, which severs over time — and **detaches as a real,
+   drifting piece** (picking up the wreck's own tumble plus a parting kick from the
+   torch), not a stow. **Alignment quality is the payoff:** a clean lock cuts
+   faster, spikes structural risk less, and leaves the piece carrying more yield;
+   a sloppy one crawls, spikes harder, and loses salvage.
+7. **Collect the piece.** Open the **cargo hatch** — a keybind (`cargo_hatch_open`,
+   default **B**) or the switch panel's **COWL** switch — then fly alongside the
+   drifting piece: close to scoop range, null your relative speed against it, and
+   keep it inside the hatch's forward cone. Hold all four and the scoop fills and
+   stows it. **Fly this on the MFD `SCOOP` page**, which the primary MFD opens for
+   you the moment the hatch does: its **cone field** puts the piece's marker where
+   it actually sits off your nose, so pitching/yawing the marker into the tolerance
+   ring *is* the aiming task (an edge arrow points the way round when it's off the
+   field); the **drift arrow** off the marker shows which way and how fast the piece
+   is sliding relative to you, so you thrust along it to null the drift; and the
+   **gate checklist** shows each gate's live value against its limit, so a scoop
+   that won't fill always names the gate holding it up. **The hatch is a real
+   trade-off: it blocks firing the cutter and blocks docking/jumping while open**,
+   so you open it only to collect, then secure it to keep working. Adrift pieces are
+   **free-for-all** — the rival cutter runs the same sever-then-retrieve loop (minus
+   the alignment step), and whoever reaches a piece first keeps it, including yours.
+8. **Watch structural risk.** Cutting load-bearing members spikes risk and
    ratchets the resting baseline up; cosmetic panels barely move it. If the
    frame collapses, every uncut member is lost.
-8. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
-   the claim), sell your hold at that faction's prices, then depart back to the
-   claim for a fresh wreck.
+9. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
+   the claim — the cargo hatch must be secured first), sell your hold at that
+   faction's prices, then depart back to the claim for a fresh wreck.
 
 **Power budget:** four channels — **THRUST, CUTTER, SENSORS, LIFE** — each
 0..1. The reactor can't run everything at full; the MFD **POWER** page header
@@ -218,6 +250,7 @@ the comms log, but only these are wired to gameplay today:
 | **AVIONICS** | SENSORS power: On = high, Off = low. |
 | **DE-ICE** | CUTTER power: On = high, Off = low. |
 | **PITOT HEAT** | LIFE power: On = 100% (life support runs full), Off = low (20%). |
+| **COWL** | Open/close the cargo hatch — On = open (required to scoop an adrift salvage piece); Off = secured (required to fire the cutter or dock/jump). Same intent as the `cargo_hatch_open` keybind. |
 | **NAV** | Ship nav lights on/off. |
 | **LANDING** | Ship landing light on/off. |
 
@@ -227,9 +260,9 @@ key) can still set any value in between (until the next switch flip). MASTER ALT
 lock the live mix on every surface, though physical switch positions still
 register for when power returns.
 
-The remaining switches — COWL, PANEL, BEACON, STROBE, TAXI, the 5-position
-magneto (OFF/R/L/BOTH/START), and the GEAR UP/DOWN lever — are decoded and logged
-but have no gameplay effect yet.
+The remaining switches — PANEL, BEACON, STROBE, TAXI, the 5-position magneto
+(OFF/R/L/BOTH/START), and the GEAR UP/DOWN lever — are decoded and logged but
+have no gameplay effect yet.
 
 ### Keyboard (default mapping — overridable in the remapper)
 
@@ -249,6 +282,7 @@ defaults:
 | **, / .** | Prev / next cut target | | **N** | Cycle locked contact |
 | **G / H** | MFD-A / MFD-B → MENU | | **T** | Toggle Tactical SCOPE / CHART |
 | **]** | Cycle external camera | | **1 / 2 / 3 / 4** | Camera REAR / SIDE / CHASE / TOP |
+| **B** | Open/close cargo hatch | | | |
 
 MFD paging, cargo, market, and the power-channel axes ship **unbound** on the
 keyboard — bind them in the remapper if you want keys for them. Every default
@@ -433,8 +467,10 @@ disabled but the rest still works.
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
+| `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
+| `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
 | `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |
 | `AxisKeyNormalizeSmoke.tscn` | Headless smoke for the remapper's axis-key normalization: a saved axis/nub spec listed in the swapped (REV-encoded) order folds back to its row's canonical key with reverse set, so it stays visible on its row instead of vanishing under a phantom key. |

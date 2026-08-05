@@ -46,6 +46,13 @@ signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
 ## Pre-cut alignment mini-game phase changed (SalvageSystem), one of ALIGN_STATES.
 signal align_changed(state: String)
+## DriftSystem: an adrift salvage piece's lifecycle. Views (SalvagePieces, HUD)
+## key their per-piece state off the id these carry.
+signal salvage_pieces_changed
+signal salvage_piece_spawned(id: int)
+signal salvage_piece_removed(id: int)
+## Cargo hatch position changed (GameState.set_cargo_hatch/toggle_cargo_hatch).
+signal cargo_hatch_changed(open: bool)
 @warning_ignore_restore("unused_signal")
 
 ## Godot's convention for the local/server peer. GameState.ships is keyed by
@@ -172,6 +179,17 @@ var align_state: String = "IDLE"
 ## "slip": float 0..1, "quality": float 0..1 }.
 var align: Dictionary = {}
 
+## Adrift salvage pieces cut free of the wreck, owned by DriftSystem. Each:
+## { "id": int, "member_id": int, "name": String, "good": String, "qty": float
+##   (already quality-scaled), "transform": Transform3D, "velocity": Vector3,
+##   "omega": Vector3, "radius": float, "obstacle_id": int, "contact_id": int,
+##   "scoop": float 0..1, "node": String (Wreck.tscn child name, for the visual) }.
+var salvage_pieces: Array[Dictionary] = []
+
+## Cargo hatch position, owned by GameState (DriftSystem gates collection on it;
+## SalvageSystem/MarketSystem interlock cutting and jump/dock while it's open).
+var cargo_hatch_open: bool = false
+
 ## Current run phase, one of RUN_PHASES.
 var run_phase: String = "ON_SITE"
 
@@ -285,8 +303,13 @@ func remove_contact(id: int) -> void:
 ## live dict from get_obstacle(). `is_wreck` tags the derelict's own members so
 ## the approach autopilot can measure distance to the wreck surface
 ## (CollisionSystem.wreck_surface_distance) apart from stray debris.
+## `mass` > 0 marks the body MOVABLE: CollisionSystem may write its `vel` field
+## on impact (ship or another movable body knocking it) instead of treating it
+## as an immovable wall. The owner (DriftSystem for salvage pieces, DebrisField
+## for chunks) integrates position from `vel` each frame; a mass-0 body (the
+## wreck's own members) never gets pushed.
 func register_obstacle(obstacle_name: String, position: Vector3, radius: float,
-		hull := PackedVector3Array(), is_wreck := false) -> int:
+		hull := PackedVector3Array(), is_wreck := false, mass := 0.0) -> int:
 	var id := _next_contact_id
 	_next_contact_id += 1
 	obstacles.append({
@@ -296,6 +319,8 @@ func register_obstacle(obstacle_name: String, position: Vector3, radius: float,
 		"radius": radius,
 		"hull": hull,
 		"wreck": is_wreck,
+		"mass": mass,
+		"vel": Vector3.ZERO,
 	})
 	return id
 
@@ -330,6 +355,47 @@ func get_member(id: int) -> Dictionary:
 		if member["id"] == id:
 			return member
 	return {}
+
+
+## DriftSystem: register a freshly severed piece and fan out its arrival. The
+## returned dict is the live entry (Dictionaries are references) so DriftSystem
+## can keep writing "transform"/"velocity"/"scoop" into it in place.
+func add_salvage_piece(piece: Dictionary) -> void:
+	salvage_pieces.append(piece)
+	salvage_pieces_changed.emit()
+	salvage_piece_spawned.emit(piece["id"])
+
+
+## DriftSystem: a piece was stowed (player) or claimed (rival) — drop it.
+func remove_salvage_piece(id: int) -> void:
+	for i in salvage_pieces.size():
+		if salvage_pieces[i]["id"] == id:
+			salvage_pieces.remove_at(i)
+			salvage_pieces_changed.emit()
+			salvage_piece_removed.emit(id)
+			return
+
+
+func get_salvage_piece(id: int) -> Dictionary:
+	for piece: Dictionary in salvage_pieces:
+		if piece["id"] == id:
+			return piece
+	return {}
+
+
+## Cargo-hatch intent (keybind / COWL switch): must be closed to fire the
+## cutter or jump/dock (SalvageSystem.request_cut, MarketSystem) and open to
+## scoop an adrift piece (DriftSystem).
+func set_cargo_hatch(open: bool) -> void:
+	if open == cargo_hatch_open:
+		return
+	cargo_hatch_open = open
+	cargo_hatch_changed.emit(open)
+	post_comms("OPS", "CARGO HATCH %s" % ("OPEN" if open else "SECURED"))
+
+
+func toggle_cargo_hatch() -> void:
+	set_cargo_hatch(not cargo_hatch_open)
 
 
 func set_tracked_contact(id: int) -> void:

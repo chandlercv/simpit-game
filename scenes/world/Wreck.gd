@@ -80,6 +80,13 @@ func _sync_members() -> void:
 		_apply_member(member)
 
 
+## SalvagePieces: the member's own mesh subtree in this scene, so a freshly
+## severed piece can duplicate it as a free-floating drift visual instead of
+## rebuilding geometry from scratch. null if the node doesn't exist (headless).
+func member_visual(node_name: String) -> Node3D:
+	return get_node(node_name) if has_node(node_name) else null
+
+
 ## Bring one member's 3D visibility and its collision body in line with the
 ## graph: an intact member is shown and solid; a cut/collapsed one vanishes and
 ## stops colliding (so the ship can fly through the gap it left).

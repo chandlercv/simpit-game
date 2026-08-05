@@ -1,6 +1,7 @@
-[gd_scene load_steps=22 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/DebrisField.gd" id="1_field"]
+[ext_resource type="Script" path="res://scenes/world/SalvagePieces.gd" id="13_salvage_pieces"]
 [ext_resource type="PackedScene" path="res://scenes/world/Wreck.tscn" id="2_wreck"]
 [ext_resource type="PackedScene" path="res://scenes/world/Ship.tscn" id="3_ship"]
 [ext_resource type="Shader" path="res://scenes/world/space_sky.gdshader" id="4_sky"]
@@ -108,6 +109,9 @@ mesh = SubResource("giant_mesh")
 [node name="Wreck" parent="." instance=ExtResource("2_wreck")]
 position = Vector3(0, 0, -40)
 rotation = Vector3(0.05, 0.4, 0.1)
+
+[node name="SalvagePieces" type="Node3D" parent="."]
+script = ExtResource("13_salvage_pieces")
 
 [node name="Ship" parent="." instance=ExtResource("3_ship")]
 

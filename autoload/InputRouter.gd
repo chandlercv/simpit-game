@@ -102,6 +102,7 @@ const BUILTIN_PROFILES := [
 			{"key": KEY_DOWN, "action": "glance_down"},
 			{"key": KEY_V, "action": "ops_approach"},
 			{"key": KEY_C, "action": "ops_cut"},
+			{"key": KEY_B, "action": "cargo_hatch_open"},
 			{"key": KEY_M, "action": "sensor_mode_cycle"},
 			{"key": KEY_COMMA, "action": "salvage_prev"},
 			{"key": KEY_PERIOD, "action": "salvage_next"},
@@ -388,6 +389,8 @@ func _process(_delta: float) -> void:
 		SalvageSystem.toggle_approach()
 	if Input.is_action_just_pressed("ops_cut"):
 		SalvageSystem.request_cut()
+	if Input.is_action_just_pressed("cargo_hatch_open"):
+		GameState.toggle_cargo_hatch()
 	if Input.is_action_just_pressed("throttle_cmd_toggle"):
 		SalvageSystem.toggle_throttle_cmd_mode()
 	_process_panel_commands()

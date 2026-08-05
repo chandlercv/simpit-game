@@ -81,6 +81,9 @@ func request_dock(faction_index: int) -> void:
 	if GameState.wreck["cutting_id"] != -1:
 		GameState.post_comms("OPS", "DEPARTURE HELD — CUTTER ACTIVE")
 		return
+	if GameState.cargo_hatch_open:
+		GameState.post_comms("OPS", "DEPARTURE HELD — SECURE CARGO HATCH FIRST")
+		return
 	var faction_name: String = GameState.market_factions[faction_index]
 	_set_phase("TRANSIT")
 	GameState.post_comms("OPS", "DEPARTURE BURN — BOUND FOR %s STATION" % faction_name)
@@ -113,6 +116,9 @@ func sell_hold() -> void:
 
 func request_undock() -> void:
 	if GameState.run_phase != "DOCKED":
+		return
+	if GameState.cargo_hatch_open:
+		GameState.post_comms("OPS", "DEPARTURE HELD — SECURE CARGO HATCH FIRST")
 		return
 	GameState.docked_faction = -1
 	_set_phase("TRANSIT")
