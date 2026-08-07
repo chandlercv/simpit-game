@@ -20,6 +20,10 @@ signal power_changed
 ## Passive-scanner visibility multiplier changed (master electrical switches).
 signal signature_changed(value: float)
 signal comms_posted(entry: Dictionary)
+## Title-card scenario selection changed (one of SCENARIOS' ids).
+signal scenario_changed(id: String)
+## The chosen scenario was committed by the title card's LAUNCH — the run starts.
+signal scenario_launched(id: String)
 
 ## Phase 4 signals, emitted by systems/*.gd (declared here so any display can
 ## subscribe without knowing which system drives them).
@@ -107,6 +111,27 @@ const APPROACH_STATES: Array[String] = ["HOLDING", "APPROACHING", "MATCHED"]
 ## existing cutting_id path, so no persistent third state is needed.
 const ALIGN_STATES: Array[String] = ["IDLE", "ALIGNING"]
 
+## Runs offered on the launch title card (scenes/displays/TitleCard.gd), in the
+## order they're listed there. Scenarios are DATA, not code: a second run is an
+## entry here (plus whatever world/system setup it asks for), not another branch
+## in the launch UI. Only the demo run exists today.
+##   "id"       — stable key stored in `scenario`
+##   "name"     — button label
+##   "subtitle" — one-line framing under the name
+##   "blurb"    — what the player is signing up for
+const SCENARIOS: Array[Dictionary] = [
+	{
+		"id": "demo",
+		"name": "DEMO RUN",
+		"subtitle": "Freehold claim · derelict frigate",
+		"blurb": "The sandbox the game ships with: one tumbling frigate on a "
+			+ "Freehold claim, a rival cutter working the same hull, and a patrol "
+			+ "that fines you for running dark too close. Scan it, cut a member "
+			+ "free, scoop the piece before the rival does, then dock and sell the "
+			+ "hold. Nothing is on a timer.",
+	},
+]
+
 ## Own-ship stats, authored as a Resource (plan Phase 4 convention).
 var ship_def: ShipDefinition = load("res://data/ships/kestrel.tres")
 
@@ -190,6 +215,15 @@ var salvage_pieces: Array[Dictionary] = []
 ## SalvageSystem/MarketSystem interlock cutting and jump/dock while it's open).
 var cargo_hatch_open: bool = false
 
+## Scenario picked on the title card, one of SCENARIOS' ids.
+var scenario: String = SCENARIOS[0]["id"]
+
+## False until the title card's LAUNCH commits the scenario. WindowManager reads
+## it to decide between showing the card and building the display windows; while
+## it's false the card holds the scene tree paused, so the world a scenario sets
+## up isn't already running behind the launch screen.
+var scenario_started: bool = false
+
 ## Current run phase, one of RUN_PHASES.
 var run_phase: String = "ON_SITE"
 
@@ -259,6 +293,34 @@ func _ready() -> void:
 
 func local_ship() -> Dictionary:
 	return ships[LOCAL_PEER_ID]
+
+
+## The SCENARIOS entry for an id, {} if there's no such scenario.
+func scenario_def(id: String) -> Dictionary:
+	for entry: Dictionary in SCENARIOS:
+		if entry["id"] == id:
+			return entry
+	return {}
+
+
+## Title-card intent: pick which run to fly. Unknown ids are ignored, so a stale
+## saved/typed id can't leave the card pointing at nothing.
+func set_scenario(id: String) -> void:
+	if id == scenario or scenario_def(id).is_empty():
+		return
+	scenario = id
+	scenario_changed.emit(id)
+
+
+## Title-card intent: commit the chosen scenario — the run starts. WindowManager
+## then places the display windows and unpauses the tree. Idempotent, so a second
+## LAUNCH (or a stray Enter) can't restart a run that's already going.
+func launch_scenario() -> void:
+	if scenario_started:
+		return
+	scenario_started = true
+	post_comms("SYSTEM", "SCENARIO %s — RUN START" % scenario_def(scenario).get("name", scenario))
+	scenario_launched.emit(scenario)
 
 
 ## World-scene setup, not gameplay mutation: world nodes (wreck, debris) call
