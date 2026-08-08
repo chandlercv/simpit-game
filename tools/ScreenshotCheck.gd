@@ -2,17 +2,28 @@ extends Node
 ## Renders the main hull-camera view for a hundred frames and saves a PNG so
 ## graphics changes can be eyeballed without a full playtest:
 ##
-##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png>
+##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close] [title]
 ##
-## Defaults to user://main_view.png. Runs windowed (rendering needs a real
-## DisplayServer); WindowManager leaves tools scenes alone, so only the one
-## window flashes up.
+## Defaults to user://main_view.png. `close` parks the ship at cutting range;
+## `title` puts the launch title card over the view, the way it appears at boot.
+## Runs windowed (rendering needs a real DisplayServer); WindowManager leaves
+## tools scenes alone, so only the one window flashes up — and, for the same
+## reason, the title card here is built directly rather than by the launch flow.
+
+const TitleCardScript := preload("res://scenes/displays/TitleCard.gd")
 
 
 func _ready() -> void:
 	get_window().size = Vector2i(1720, 720)
 	var scene: PackedScene = load("res://scenes/displays/MainViewWindow.tscn")
 	add_child(scene.instantiate())
+	if OS.get_cmdline_user_args().has("title"):
+		var layer := CanvasLayer.new()
+		layer.layer = 15
+		add_child(layer)
+		var card: Control = TitleCardScript.new()
+		layer.add_child(card)
+		card.start()
 	_shoot.call_deferred()
 
 
@@ -22,9 +33,9 @@ func _shoot() -> void:
 	var rig := find_child("HullCameraRig", true, false)
 	if rig:
 		rig.set_process(false)
-	# Second user arg "close" parks the ship at cutting range so the working
-	# view can be judged, not just the arrival view.
-	if OS.get_cmdline_user_args().size() > 1 and OS.get_cmdline_user_args()[1] == "close":
+	# The "close" flag parks the ship at cutting range so the working view can be
+	# judged, not just the arrival view.
+	if OS.get_cmdline_user_args().has("close"):
 		var ship: Dictionary = GameState.local_ship()
 		var t: Transform3D = ship["transform"]
 		t.origin = Vector3(1.5, 0.5, -29.0)

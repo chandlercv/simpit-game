@@ -8,14 +8,21 @@ class_name DisplaySetup
 ## whose role buttons assign that role to that screen (DisplayConfig.set_role_screen);
 ## two or more roles on one screen become a tabbed host (a dimmed overlay on the
 ## Main screen). The mapping is pre-filled with DisplayConfig's suggestion, so the
-## common case is a single confirming click on START.
+## common case is a single confirming click.
 ##
-## Emits `confirmed` once the player commits; WindowManager then builds the real
-## display windows from the saved mapping.
+## Emits `confirmed` once the player commits; what happens next is WindowManager's
+## call — hand back to the title card, start the run, or just rebuild the layout
+## mid-run — which is why the confirm button's wording comes from there too.
 
 signal confirmed
 
 const OVERLAY_FRACTION := 0.62
+
+## Wording for the confirm button, and for the hint that tells you to press it.
+## Set by WindowManager before start(), because only it knows which of the three
+## things confirming will do — a button that always said "START" was a misnomer
+## in the two cases that don't start anything.
+var confirm_label := "DONE"
 
 var _overlays: Array[Window] = []
 var _assigned_labels: Dictionary = {}  # screen index -> Label
@@ -73,7 +80,7 @@ func _build_center(main_screen: int) -> void:
 		+ "to put it on that screen. Two or more roles on one screen share a\n" \
 		+ "tabbed panel (a dimmed overlay on the Main screen; F1/F2/F3 or the\n" \
 		+ "tabs switch between them). The suggestion below already works —\n" \
-		+ "press START to accept it, or reassign first."
+		+ ("press %s to accept it, or reassign first." % confirm_label)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 18)
 	hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
@@ -112,14 +119,14 @@ func _build_center(main_screen: int) -> void:
 		btn.pressed.connect(DisplayConfig.set_role_screen.bind(role, main_screen))
 		buttons.add_child(btn)
 
-	var start_btn := Button.new()
-	start_btn.text = "START"
-	start_btn.custom_minimum_size = Vector2(220, 64)
-	start_btn.focus_mode = Control.FOCUS_NONE
-	start_btn.pressed.connect(_confirm)
-	var start_center := CenterContainer.new()
-	start_center.add_child(start_btn)
-	vbox.add_child(start_center)
+	var confirm_btn := Button.new()
+	confirm_btn.text = confirm_label
+	confirm_btn.custom_minimum_size = Vector2(220, 64)
+	confirm_btn.focus_mode = Control.FOCUS_NONE
+	confirm_btn.pressed.connect(_confirm)
+	var confirm_center := CenterContainer.new()
+	confirm_center.add_child(confirm_btn)
+	vbox.add_child(confirm_center)
 
 
 func _build_overlay(screen: int) -> Window:

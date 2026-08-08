@@ -1,7 +1,14 @@
 extends Node
-## Owns the display layout: shows the setup chooser when needed, then spawns the
-## secondary native OS windows and positions every window on its configured
-## screen (requires embed_subwindows = off in project.godot).
+## Owns the launch flow and the display layout: shows the title card, then the
+## setup chooser when needed, then spawns the secondary native OS windows and
+## positions every window on its configured screen (requires embed_subwindows =
+## off in project.godot).
+##
+## Launch order at boot: title card (scenario + displays + controls, tree paused)
+## → display chooser if this monitor setup has never been assigned → windows
+## placed and the tree unpaused. The chooser is also a step you can take *from*
+## the card and come back from, so the card is hidden rather than freed while
+## it runs.
 ##
 ## Placement is data-driven from DisplayConfig.get_roles_for_screen():
 ##  - MAIN → the primary window, fullscreen on its screen.
@@ -20,16 +27,33 @@ const SECONDARY_SCENES: Dictionary = {
 
 const RoleTabHostScript := preload("res://scenes/displays/RoleTabHost.gd")
 const DisplaySetupScript := preload("res://scenes/displays/DisplaySetup.gd")
+const TitleCardScript := preload("res://scenes/displays/TitleCard.gd")
+
+## What the chooser's confirm button is called, per what confirming actually does
+## from where it was opened. One label for all three read as a lie in two of them:
+## coming back from the card's DISPLAYS step starts nothing, and neither does an
+## F6 re-assign mid-run.
+const CONFIRM_BACK := "BACK TO TITLE"
+const CONFIRM_LAUNCH := "LAUNCH"
+const CONFIRM_APPLY := "APPLY"
 
 var _windows: Array[Window] = []
 var _hosts: Array = []
 var _overlay_layer: CanvasLayer = null
 var _setup_ui: Node = null
+## The launch screen, alive (possibly hidden) until LAUNCH. Kept on its own layer
+## so _teardown() — which rebuilds the display layout — can't free it mid-launch.
+var _title_ui: Control = null
+var _title_layer: CanvasLayer = null
 
 
 func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	# The title card pauses the tree, and a paused node neither processes nor
+	# receives input — so the manager that has to un-pause it (and its F5/F6
+	# polling) must keep running.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	# Deferred so get_tree().current_scene is set and all autoloads are ready.
 	_setup.call_deferred()
 
@@ -64,18 +88,71 @@ func _setup() -> void:
 	# manage their own windows — don't spawn the game's windows under them.
 	if current and current.scene_file_path.begins_with("res://tools/"):
 		return
-	if DisplayConfig.needs_setup_prompt():
+	if not GameState.scenario_started:
+		_show_title()
+	elif DisplayConfig.needs_setup_prompt():
 		_show_setup()
 	else:
 		_place_all()
 
 
+# --- Title card ------------------------------------------------------------
+
+func _show_title() -> void:
+	_teardown()
+	_close_title()
+	# Nothing in the scenario runs until LAUNCH: a paused tree freezes the world
+	# (and the systems driving it) while leaving it rendered behind the card.
+	get_tree().paused = true
+	_title_layer = CanvasLayer.new()
+	# Below the setup chooser (20) and the remapper (25), both of which the card
+	# opens and both of which cover it while they're up.
+	_title_layer.layer = 15
+	_title_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_window().add_child(_title_layer)
+	_title_ui = TitleCardScript.new()
+	_title_ui.launched.connect(_on_title_launched)
+	_title_ui.display_setup_requested.connect(_show_setup)
+	_title_layer.add_child(_title_ui)
+	_title_ui.start()
+
+
+func _on_title_launched() -> void:
+	_close_title()
+	# An unconfigured monitor setup still gets the chooser, exactly as it did
+	# before the card existed — the card's DISPLAYS row warns that it will. This
+	# is the one path where confirming really does start the run.
+	if DisplayConfig.needs_setup_prompt():
+		_show_setup(CONFIRM_LAUNCH)
+	else:
+		_place_all()
+
+
+func _close_title() -> void:
+	if is_instance_valid(_title_ui):
+		_title_ui.queue_free()
+	_title_ui = null
+	if is_instance_valid(_title_layer):
+		_title_layer.queue_free()
+	_title_layer = null
+
+
 # --- Setup chooser ---------------------------------------------------------
 
-func _show_setup() -> void:
+## `confirm_label` defaults to the mid-run F6 case; _on_title_launched passes the
+## launching one. The title card's own DISPLAYS step arrives here through the
+## zero-arg signal, and is caught by the check below rather than by the caller.
+func _show_setup(confirm_label := CONFIRM_APPLY) -> void:
 	_teardown()
+	# Opened from the card (its DISPLAYS row, or F6 before launch): the card waits
+	# hidden underneath and comes back with the new assignment when the chooser
+	# confirms — so confirming here returns, it doesn't start anything.
+	if is_instance_valid(_title_ui):
+		confirm_label = CONFIRM_BACK
+		_title_ui.suspend()
 	var layer := _ensure_overlay_layer()
 	_setup_ui = DisplaySetupScript.new()
+	_setup_ui.confirm_label = confirm_label
 	_setup_ui.confirmed.connect(_on_setup_confirmed)
 	layer.add_child(_setup_ui)
 	_setup_ui.start()
@@ -85,6 +162,9 @@ func _on_setup_confirmed() -> void:
 	if is_instance_valid(_setup_ui):
 		_setup_ui.queue_free()
 	_setup_ui = null
+	if is_instance_valid(_title_ui):
+		_title_ui.resume()
+		return
 	_place_all()
 
 
@@ -92,6 +172,9 @@ func _on_setup_confirmed() -> void:
 
 func _place_all() -> void:
 	_teardown()
+	# The world runs once its displays are up: the title card and the chooser both
+	# hold the pause until here (a no-op on the mid-game F5 rebuild path).
+	get_tree().paused = false
 	_position_main_window()
 	var main_screen: int = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
 
@@ -190,6 +273,9 @@ func _ensure_overlay_layer() -> CanvasLayer:
 		return _overlay_layer
 	_overlay_layer = CanvasLayer.new()
 	_overlay_layer.layer = 20
+	# ALWAYS so the setup chooser still takes clicks while the title card holds
+	# the tree paused (a paused Control receives no input at all).
+	_overlay_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	get_window().add_child(_overlay_layer)
 	return _overlay_layer
 

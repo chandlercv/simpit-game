@@ -99,6 +99,31 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
 
 ---
 
+## The launch screen
+
+The game boots to a **title card** on the Main display (`scenes/displays/TitleCard.gd`),
+before any other window opens. It's the one place that gathers everything you set
+*before* flying, so a cold start is: read three lines, press **LAUNCH**.
+
+| On the card | What it does |
+| --- | --- |
+| **SCENARIO** | Which run to fly, with a blurb for the selected one. Today there is exactly one — **DEMO RUN**, the shipped sandbox (tumbling frigate on a Freehold claim, a rival cutter, a patrol). Scenarios are a data list (`GameState.SCENARIOS`), so a second run is a catalog entry, not new UI. |
+| **SET UP DISPLAYS  (F6)** | Opens the same **Display Setup** chooser described under *Simpit / multi-display setup*, as a step you come back from — confirm it and you're back on the card with the new assignment shown. The status line reads the live mapping (`3 screens  MAIN→0  TACTICAL→1 …`) and turns amber when this monitor setup has never been assigned. |
+| **SET UP CONTROLS  (F7)** | Opens the same in-game **remapper** described under *Remapping the controls*. The status line lists the sticks currently detected, or says you're on the keyboard mapping. |
+| **LAUNCH** | Starts the run: places the display windows and lets the world run. It's focused at boot, so **Enter** launches. If this monitor setup has never been assigned, the display chooser comes up first (the DISPLAYS line warns that it will), then the run starts. |
+| **QUIT** | Same as **Esc**. |
+
+**Nothing runs until you launch.** The scene tree is paused while the card is up,
+so the wreck, the rival and the clock are all frozen behind it — you're looking at
+a still of the world you're about to fly into, not one that started without you.
+The F6/F7 surfaces stay live while it's paused, and the secondary display windows
+don't open until **LAUNCH**, so plugging in a stick or re-assigning screens costs
+you nothing. The switch panel is the one thing deliberately held back: its bridge
+writes power and hatch state straight through, so it stays parked until the run
+starts and then syncs to whatever position every switch is physically in.
+
+---
+
 ## Core gameplay loop
 
 You fly a salvage ship to a wreck, cut it apart for cargo without letting the
@@ -336,7 +361,9 @@ Bindings are **data, not code** — you don't edit GDScript to support a new sti
 or to move a key. Every device is matched by **GUID** (stable across replugs,
 unlike device index) and there are three layers, in precedence order:
 
-- **In-game remapper (easiest).** Press **F7** for *Configure Controls*. Each row
+- **In-game remapper (easiest).** Press **F7** for *Configure Controls* — or, at
+  boot, the launch screen's **SET UP CONTROLS** button, which opens the same
+  thing. Each row
   is a bindable function showing its current mapping; hit a bind button and work
   that control on **whichever device you want** — it auto-detects which
   stick/throttle it was, so a HOTAS split across two devices saves a profile for
@@ -416,11 +443,17 @@ screens it opens **one native OS window per monitor**; with fewer, displays that
 can't get their own screen share one via a **tabbed host** (`WindowManager`,
 `autoload/DisplayConfig.gd`). There is no split-screen or window-embedding.
 
-- **You choose the layout.** The first time a monitor setup with fewer screens
-  than displays is seen, the game shows an in-game **Display Setup** chooser: each
-  screen shows a card, and you tap a role (MAIN / TACTICAL / MFD / CAMERA) to
-  put it there. A sensible layout is pre-filled — press **START** to accept it, or
-  reassign first. The choice is saved **per monitor setup**
+- **You choose the layout.** The in-game **Display Setup** chooser is one of the
+  launch screen's two setup steps (**SET UP DISPLAYS**), and it also comes up on
+  its own at **LAUNCH** the first time a monitor setup with fewer screens than
+  displays is seen: each screen shows a card, and you tap a role (MAIN / TACTICAL
+  / MFD / CAMERA) to put it there. A sensible layout is pre-filled — accept it
+  with the confirm button, or reassign first. **That button says what it will
+  do**, since confirming means something different depending on where you opened
+  the chooser: **BACK TO TITLE** when it's the launch screen's DISPLAYS step,
+  **LAUNCH** when it came up at launch because this setup was never assigned, and
+  **APPLY** for an `F6` re-assign mid-run. The
+  choice is saved **per monitor setup**
   (`user://display_config.cfg`, keyed by screen count + geometry), so the same rig
   never asks twice, but a different arrangement asks again. Press **F6** anytime to
   re-open the chooser; **F5** re-detects monitors and rebuilds the layout (a known
@@ -450,7 +483,9 @@ can't get their own screen share one via a **tabbed host** (`WindowManager`,
 
 ## Running
 
-Open the project in **Godot 4.7** and run `scenes/boot/Boot.tscn`. The game runs
+Open the project in **Godot 4.7** and run `scenes/boot/Boot.tscn`. It opens on the
+**launch screen** (scenario + displays + controls, world paused — see **The launch
+screen** above); press **LAUNCH** to start the run. The game runs
 degraded-gracefully: with no HOTAS or switch panel it retries hardware in the
 background while you fly on the **default keyboard mapping** (mouse/touch on the
 secondary displays; rebind any key via **F7**), and with fewer than four
@@ -466,7 +501,7 @@ disabled but the rest still works.
 | --- | --- |
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
-| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close]`). |
+| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title]`) — `close` parks the ship at cutting range, `title` lays the launch title card over the view. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
@@ -474,6 +509,7 @@ disabled but the rest still works.
 | `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
+| `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
 | `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |

@@ -163,16 +163,36 @@ var _controls_ui: Control
 
 
 func _ready() -> void:
-	add_child(SwitchPanelBridgeScene.new())
+	# The launch title card pauses the tree, and a paused node stops processing —
+	# which would take the F7 hotkey (and the remapper's poll-based capture) down
+	# with it. Keep running; _process gates the gameplay intents on the pause
+	# instead, so nothing leaks into a scenario that hasn't launched.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	# ...but the raw-HID bridges must NOT inherit that. SwitchPanelBridge routes a
+	# panel toggle straight into GameState (masters, power channels, cargo hatch),
+	# so running it while the title card holds the world frozen would let a flicked
+	# switch rewrite state behind a scenario that hasn't started. They stay
+	# PAUSABLE; on unpause the first report re-syncs every switch anyway, since
+	# GameState.panel_switches has no entry yet to compare against.
+	_add_hardware_bridge(SwitchPanelBridgeScene.new())
 	_glance_bridge = HidGlanceBridgeScene.new()
-	add_child(_glance_bridge)
+	_add_hardware_bridge(_glance_bridge)
 	_mouse_bridge = X52MouseBridgeScene.new()
-	add_child(_mouse_bridge)
+	_add_hardware_bridge(_mouse_bridge)
 	Input.joy_connection_changed.connect(
 			func(_device: int, _connected: bool) -> void: _bind_hotas())
 	# A saved/edited user profile rebinds live, same path as a replug.
 	InputConfig.profiles_changed.connect(_bind_hotas)
 	_bind_hotas()
+
+
+## Parent a raw-HID bridge, pinning it to the pause state of the world it feeds
+## rather than to this router's ALWAYS (see _ready). Their polling is only ever
+## consumed by a running scenario — _process bails out while paused, and the
+## camera rig reading glance is paused itself — so no one loses a value here.
+func _add_hardware_bridge(bridge: Node) -> void:
+	bridge.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(bridge)
 
 
 ## Shipped defaults overlaid with the user's JSON profiles: a user entry with the
@@ -207,14 +227,26 @@ func profile_for_guid(guid: String) -> Dictionary:
 	return {}
 
 
-## Open/close the in-game remapper overlay on our own CanvasLayer (kept separate
-## from WindowManager's display-setup overlay so neither tears down the other).
+## Open/close the in-game remapper overlay (the F7 hotkey).
 func _toggle_controls_setup() -> void:
 	if is_instance_valid(_controls_ui):
 		_close_controls_setup()
 		return
+	open_controls_setup()
+
+
+## Raise the remapper overlay on our own CanvasLayer (kept separate from
+## WindowManager's display-setup overlay so neither tears down the other, and
+## above both it and the title card so it draws over whichever is up). Idempotent,
+## so the title card's CONTROLS button can't stack a second copy on the hotkey's.
+func open_controls_setup() -> void:
+	if is_instance_valid(_controls_ui):
+		return
 	_controls_layer = CanvasLayer.new()
 	_controls_layer.layer = 25
+	# ALWAYS so the remapper's capture polling and its buttons keep working while
+	# the title card holds the tree paused.
+	_controls_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	get_window().add_child(_controls_layer)
 	_controls_ui = ControlsSetupScene.new()
 	_controls_ui.closed.connect(_close_controls_setup)
@@ -362,6 +394,11 @@ func _process(_delta: float) -> void:
 	# has OS focus — same rationale as WindowManager's F5/F6 (see get_glance).
 	if DisplayServer.get_name() != "headless" and Input.is_action_just_pressed("configure_controls"):
 		_toggle_controls_setup()
+	# Paused means the launch title card is up and the scenario hasn't started:
+	# the remapper hotkey above still works (that's half of what the card offers),
+	# but no flight or ops intent may reach a world that isn't running yet.
+	if get_tree().paused:
+		return
 	var thrust := Vector3(
 		Input.get_axis("strafe_left", "strafe_right") + _hid_axis_amount("strafe_left", "strafe_right"),
 		Input.get_axis("thrust_down", "thrust_up") + _hid_axis_amount("thrust_down", "thrust_up"),
