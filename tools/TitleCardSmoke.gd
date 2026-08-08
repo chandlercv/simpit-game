@@ -103,6 +103,21 @@ func _test_card() -> void:
 	_check(card._display_status.text.contains("CAMERA→0"),
 			"reassigning a display refreshes the DISPLAYS row")
 
+	# A viewport smaller than the card must not strand its controls: a bare
+	# CenterContainer offsets the column off-screen with no way back to it. The
+	# headless viewport is 64×64, i.e. the extreme of that case.
+	var scroll := _find_scroll(card)
+	_check(scroll != null, "the card's column sits in a scroll for undersized viewports")
+	if scroll:
+		var view := card.get_viewport().get_visible_rect()
+		_check(scroll.get_v_scroll_bar().max_value > view.size.y,
+				"the undersized viewport really does overflow the card")
+		scroll.ensure_control_visible(card._launch_button)
+		await get_tree().process_frame
+		var launch_rect := Rect2(card._launch_button.global_position, card._launch_button.size)
+		_check(view.intersects(launch_rect),
+				"LAUNCH scrolls into view when the card overflows the screen")
+
 	# Stepping out to the display chooser and back keeps the same card.
 	card.suspend()
 	_check(not card.visible, "the card hides while a setup step is up")
@@ -110,6 +125,16 @@ func _test_card() -> void:
 	_check(card.visible and card._launch_button.has_focus(),
 			"the card comes back focused when the step confirms")
 	card.queue_free()
+
+
+func _find_scroll(node: Node) -> ScrollContainer:
+	if node is ScrollContainer:
+		return node
+	for child in node.get_children():
+		var found := _find_scroll(child)
+		if found:
+			return found
+	return null
 
 
 ## What the pause the card holds is worth: the router keeps running (its F7

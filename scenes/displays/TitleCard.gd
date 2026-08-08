@@ -77,9 +77,21 @@ func _build_ui() -> void:
 	bg.color = Color(0.02, 0.03, 0.05, 0.88)
 	add_child(bg)
 
+	# A CenterContainer alone centres the column at its own minimum size, so on a
+	# viewport smaller than the card it offsets NEGATIVELY and pushes LAUNCH/QUIT
+	# off-screen with no way to reach them (measured: below roughly 800×620). The
+	# scroll is purely that safety net — the centre fills it whenever there's room,
+	# so at any normal size the layout is identical and no scrollbar appears.
+	# follow_focus keeps Tab/arrow navigation inside the visible area when it does.
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroll.follow_focus = true
+	add_child(scroll)
+
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(center)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 20)
