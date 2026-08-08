@@ -29,6 +29,14 @@ const RoleTabHostScript := preload("res://scenes/displays/RoleTabHost.gd")
 const DisplaySetupScript := preload("res://scenes/displays/DisplaySetup.gd")
 const TitleCardScript := preload("res://scenes/displays/TitleCard.gd")
 
+## What the chooser's confirm button is called, per what confirming actually does
+## from where it was opened. One label for all three read as a lie in two of them:
+## coming back from the card's DISPLAYS step starts nothing, and neither does an
+## F6 re-assign mid-run.
+const CONFIRM_BACK := "BACK TO TITLE"
+const CONFIRM_LAUNCH := "LAUNCH"
+const CONFIRM_APPLY := "APPLY"
+
 var _windows: Array[Window] = []
 var _hosts: Array = []
 var _overlay_layer: CanvasLayer = null
@@ -112,9 +120,10 @@ func _show_title() -> void:
 func _on_title_launched() -> void:
 	_close_title()
 	# An unconfigured monitor setup still gets the chooser, exactly as it did
-	# before the card existed — the card's DISPLAYS row warns that it will.
+	# before the card existed — the card's DISPLAYS row warns that it will. This
+	# is the one path where confirming really does start the run.
 	if DisplayConfig.needs_setup_prompt():
-		_show_setup()
+		_show_setup(CONFIRM_LAUNCH)
 	else:
 		_place_all()
 
@@ -130,15 +139,20 @@ func _close_title() -> void:
 
 # --- Setup chooser ---------------------------------------------------------
 
-func _show_setup() -> void:
+## `confirm_label` defaults to the mid-run F6 case; _on_title_launched passes the
+## launching one. The title card's own DISPLAYS step arrives here through the
+## zero-arg signal, and is caught by the check below rather than by the caller.
+func _show_setup(confirm_label := CONFIRM_APPLY) -> void:
 	_teardown()
 	# Opened from the card (its DISPLAYS row, or F6 before launch): the card waits
 	# hidden underneath and comes back with the new assignment when the chooser
-	# confirms.
+	# confirms — so confirming here returns, it doesn't start anything.
 	if is_instance_valid(_title_ui):
+		confirm_label = CONFIRM_BACK
 		_title_ui.suspend()
 	var layer := _ensure_overlay_layer()
 	_setup_ui = DisplaySetupScript.new()
+	_setup_ui.confirm_label = confirm_label
 	_setup_ui.confirmed.connect(_on_setup_confirmed)
 	layer.add_child(_setup_ui)
 	_setup_ui.start()

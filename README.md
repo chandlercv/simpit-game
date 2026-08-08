@@ -447,9 +447,12 @@ can't get their own screen share one via a **tabbed host** (`WindowManager`,
   launch screen's two setup steps (**SET UP DISPLAYS**), and it also comes up on
   its own at **LAUNCH** the first time a monitor setup with fewer screens than
   displays is seen: each screen shows a card, and you tap a role (MAIN / TACTICAL
-  / MFD / CAMERA) to put it there. A sensible layout is pre-filled — press
-  **START** to accept it, or reassign first. Confirming hands you back to the
-  launch screen when you opened it from there, and otherwise starts the run. The
+  / MFD / CAMERA) to put it there. A sensible layout is pre-filled — accept it
+  with the confirm button, or reassign first. **That button says what it will
+  do**, since confirming means something different depending on where you opened
+  the chooser: **BACK TO TITLE** when it's the launch screen's DISPLAYS step,
+  **LAUNCH** when it came up at launch because this setup was never assigned, and
+  **APPLY** for an `F6` re-assign mid-run. The
   choice is saved **per monitor setup**
   (`user://display_config.cfg`, keyed by screen count + geometry), so the same rig
   never asks twice, but a different arrangement asks again. Press **F6** anytime to
