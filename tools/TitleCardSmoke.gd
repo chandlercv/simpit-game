@@ -31,6 +31,7 @@ func _run() -> void:
 	_test_catalog()
 	_test_selection()
 	await _test_card()
+	_test_frozen_world()
 	_test_launch()
 	_restore_cfg()
 
@@ -109,6 +110,31 @@ func _test_card() -> void:
 	_check(card.visible and card._launch_button.has_focus(),
 			"the card comes back focused when the step confirms")
 	card.queue_free()
+
+
+## What the pause the card holds is worth: the router keeps running (its F7
+## hotkey is half of what the card offers) but nothing it owns may touch the
+## world. The switch panel is the sharp edge — its bridge routes a physical
+## toggle straight into GameState — so it must not inherit that ALWAYS.
+func _test_frozen_world() -> void:
+	get_tree().paused = true
+	_check(InputRouter.can_process(), "the router still runs while the world is frozen")
+	var bridges_held := true
+	var checked := 0
+	for child in InputRouter.get_children():
+		if not child.has_method("_process"):
+			continue
+		checked += 1
+		if child.can_process():
+			bridges_held = false
+	_check(checked > 0, "the router owns hardware bridges to check")
+	_check(bridges_held, "no hardware bridge runs while the world is frozen")
+	get_tree().paused = false
+	var bridges_resume := true
+	for child in InputRouter.get_children():
+		if child.has_method("_process") and not child.can_process():
+			bridges_resume = false
+	_check(bridges_resume, "hardware bridges resume once the run starts")
 
 
 func _test_launch() -> void:

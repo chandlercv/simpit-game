@@ -118,7 +118,9 @@ so the wreck, the rival and the clock are all frozen behind it — you're lookin
 a still of the world you're about to fly into, not one that started without you.
 The F6/F7 surfaces stay live while it's paused, and the secondary display windows
 don't open until **LAUNCH**, so plugging in a stick or re-assigning screens costs
-you nothing.
+you nothing. The switch panel is the one thing deliberately held back: its bridge
+writes power and hatch state straight through, so it stays parked until the run
+starts and then syncs to whatever position every switch is physically in.
 
 ---
 
