@@ -33,7 +33,7 @@ with its own input stream.
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
 | **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live and **SCOOP** while the cargo hatch is open, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP** — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -96,6 +96,21 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
 - **Cargo hatch indicator** — a pulsing **CARGO HATCH OPEN** reminder, top-right,
   whenever the hatch is open — your cue that the cutter and dock/jump are both
   interlocked off until you secure it.
+- **Docking markers** — only while a station pattern is being flown. The next
+  gate gets a diamond `◆` with its name and range, and its **ring is drawn at the
+  size it actually subtends** from where you are, so it grows as you close and
+  "am I lined up?" becomes a question about a circle rather than a guess; an edge
+  arrow points the way round when it's off frame. The marker turns red the moment
+  you're outside the lane corridor or over the pattern speed. **ATC's standing
+  instruction** sits under the reticle (pulsing red while it's urgent), and the
+  **VEL** readout grows the limit you were given — `VEL 14.2 / 12 M/S` — going red
+  exactly when ATC starts counting toward a go-around. On final a **landing
+  ladder** reads altitude, sink rate (ambering, then reddening, as it passes what
+  the legs will take) and how far off the pad markings you are.
+- **Gear indicator** — under the hatch indicator whenever the gear isn't stowed:
+  **GEAR IN TRANSIT nn%** during its 3-second travel, then **GEAR DOWN**. Fly
+  faster than the gear is rated for with it out and it becomes a pulsing red
+  **GEAR OVERSPEED** — the legs are taking the load and wearing.
 
 ---
 
@@ -127,7 +142,8 @@ starts and then syncs to whatever position every switch is physically in.
 ## Core gameplay loop
 
 You fly a salvage ship to a wreck, cut it apart for cargo without letting the
-frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
+frame collapse on you, then fly a station's docking pattern and sell. On site
+(`ON_SITE` phase):
 
 1. **Scan the wreck.** On an MFD **SALVAGE** page set sensor mode to **STRUCT**,
    raise **SENSORS** power on the **POWER** page, and close inside 300 u. A full
@@ -189,13 +205,45 @@ frame collapse on you, then dock and sell. On site (`ON_SITE` phase):
 8. **Watch structural risk.** Cutting load-bearing members spikes risk and
    ratchets the resting baseline up; cosmetic panels barely move it. If the
    frame collapses, every uncut member is lost.
-9. **Dock and sell.** On an MFD **MARKET** page, dock at a faction (this leaves
-   the claim — the cargo hatch must be secured first), sell your hold at that
-   faction's prices, then depart back to the claim for a fresh wreck. **Anything
-   still adrift when you leave is abandoned** — you jump back to a fresh wreck,
-   not to the pieces you left floating — so scoop before you depart. Away from the
-   claim the `SCOOP` page stops flying the rendezvous and reads **COLLECTION
-   SUSPENDED**, counting what you left behind.
+9. **Fly the approach and land.** On an MFD **MARKET** page, dock at a faction
+   (this leaves the claim — the cargo hatch must be secured first). The transit
+   burn only gets you to the station's outer approach: **the berth is flown for**
+   (`APPROACH` phase). Work it on the MFD **DOCK** page, which the primary MFD
+   opens for you:
+   - **Hold at marker ALPHA.** Fly to the hold ring and *stop* (under 3 m/s).
+     ATC refuses a clearance while you're still moving, and sequences you behind
+     the station's traffic — a lane tug, a shuttle and a slow ore barge working
+     the same volume. They are solid: hitting one costs hull and your clearance.
+   - **Run the lane.** Cleared, you fly **BRAVO → CHARLIE → DELTA** in order,
+     *through* each ring, staying inside the leg's corridor (22 m, then 15 m
+     through the slot between two hab drums, then 10 m) and under the pattern
+     speed. Miss a ring, leave the corridor, or sit over the limit and you're
+     **sent around** to hold again.
+   - **Gear down before the final gate.** The landing gear (keyboard **X**, or
+     the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
+     you act on early — arriving at DELTA with it up is a go-around, as is an
+     open cargo hatch.
+   - **Land it.** Descend into the berth and put it on the pad: inside the deck
+     markings, wings level, under the sink rate the legs will take. The touchdown
+     is **scored** — a greaser earns standing with the faction, a hard arrival
+     costs hull, and anything worse bounces you back into the pattern.
+
+   Then sell your hold at that faction's prices. **Anything still adrift when you
+   leave the claim is abandoned** — you jump back to a fresh wreck, not to the
+   pieces you left floating — so scoop before you depart. Away from the claim the
+   `SCOOP` page stops flying the rendezvous and reads **COLLECTION SUSPENDED**,
+   counting what you left behind.
+
+   *Don't want the mini-game?* ATC will fly you in: **AUTO-BERTH** on the MARKET
+   or DOCK page books the berth for a handling fee and a hit to your standing —
+   deliberately a worse deal than flying it well, and refused once you're on
+   final.
+10. **Fly the departure.** Leaving is flown too. Undocking lifts you off the pad
+   into a departure hold; ATC sequences you out around the same traffic, and you
+   run the lane in reverse (**DELTA → CHARLIE → BRAVO → ALPHA**). The **gear stays
+   down until the berth bay is behind you**, and ATC won't release you for the jump
+   until it's stowed again. Break a rule on the way out and you get a reprimand
+   and a standing cost rather than a go-around — you're leaving either way.
 
 **Power budget:** four channels — **THRUST, CUTTER, SENSORS, LIFE** — each
 0..1. The reactor can't run everything at full; the MFD **POWER** page header
@@ -280,6 +328,7 @@ the comms log, but only these are wired to gameplay today:
 | **DE-ICE** | CUTTER power: On = high, Off = low. |
 | **PITOT HEAT** | LIFE power: On = 100% (life support runs full), Off = low (20%). |
 | **COWL** | Open/close the cargo hatch — On = open (required to scoop an adrift salvage piece); Off = secured (required to fire the cutter or dock/jump). Same intent as the `cargo_hatch_open` keybind. |
+| **GEAR UP / DOWN** | Raise/lower the landing gear. The gear then *travels* over 3 s — down and locked is what a landing needs, and what interlocks the cutter. Same intent as the `landing_gear` keybind. |
 | **NAV** | Ship nav lights on/off. |
 | **LANDING** | Ship landing light on/off. |
 
@@ -289,9 +338,8 @@ key) can still set any value in between (until the next switch flip). MASTER ALT
 lock the live mix on every surface, though physical switch positions still
 register for when power returns.
 
-The remaining switches — PANEL, BEACON, STROBE, TAXI, the 5-position magneto
-(OFF/R/L/BOTH/START), and the GEAR UP/DOWN lever — are decoded and logged but
-have no gameplay effect yet.
+The remaining switches — PANEL, BEACON, STROBE, TAXI and the 5-position magneto
+(OFF/R/L/BOTH/START) — are decoded and logged but have no gameplay effect yet.
 
 ### Keyboard (default mapping — overridable in the remapper)
 
@@ -311,7 +359,8 @@ defaults:
 | **, / .** | Prev / next cut target | | **N** | Cycle locked contact |
 | **G / H** | MFD-A / MFD-B → MENU | | **T** | Toggle Tactical SCOPE / CHART |
 | **]** | Cycle external camera | | **1 / 2 / 3 / 4** | Camera REAR / SIDE / CHASE / TOP |
-| **B** | Open/close cargo hatch | | | |
+| **B** | Open/close cargo hatch | | **X** | Landing gear up / down |
+| **Z** | Request clearance / acknowledge ATC | | | |
 
 MFD paging, cargo, market, and the power-channel axes ship **unbound** on the
 keyboard — bind them in the remapper if you want keys for them. Every default
@@ -503,10 +552,12 @@ disabled but the rest still works.
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
 | `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title]`) — `close` parks the ship at cutting range, `title` lays the launch title card over the view. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
+| `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
 | `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
+| `DockSmoke.tscn` | Headless smoke for the docking/landing mini-game (DockingSystem): the transit burn hands over to a flown approach; the hold gates a clearance on being stopped and on the lane being clear of traffic; markers must be flown through in order, and a miss, a corridor departure or sustained overspeed sends you around; the gear travels in real time, is required at the final gate and interlocks the cutter; a hot touchdown bounces and a clean one books the berth; auto-berth is a paid alternative inbound and refused on final; the departure is flown too; and the 3D station agrees with the lane data it is built from. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
 | `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
