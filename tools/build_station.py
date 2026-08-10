@@ -334,10 +334,16 @@ def build_drum_caps(name: str) -> bpy.types.Object:
     return _finalize(bm, name, trim_material())
 
 
-def build_berth_bay() -> bpy.types.Object:
-    """The well the ship descends into: four walls around the pad and a floor,
-    open at the top. The walls are what make the last 16 m genuinely tight."""
-    bm = bmesh.new()
+def build_berth_bay() -> list:
+    """The well the ship descends into: walls around the pad and a floor, open
+    at the top. The walls are what make the last 16 m genuinely tight.
+
+    ONE OBJECT PER WALL, deliberately. Station.gd bakes a convex hull per mesh,
+    and a bay is a concave shape — modelled as a single mesh its hull comes back
+    as a solid block with the landing pad inside it, so the descent is a
+    collision instead of a landing. Separate meshes keep the middle open.
+    """
+    out = []
     px, py, pz = PAD
     cy = py + BAY_HEIGHT / 2.0
     span = BAY_HALF * 2.0 + BAY_WALL
@@ -351,15 +357,22 @@ def build_berth_bay() -> bpy.types.Object:
         # one that matters most.
         check_box_clear("bay wall (%d,%d)" % (dx, dz), (wx, cy, wz),
                         (sx, BAY_HEIGHT, sz))
+        bm = bmesh.new()
         add_box(bm, wx, cy, wz, sx, BAY_HEIGHT, sz)
+        out.append(_finalize(bm, "BayWall%+d%+d" % (dx, dz), structure_material()))
     # A low lip across the mouth, so the berth still reads as enclosed from the
     # cockpit without reaching up into the approach corridor.
     lip_z = pz + BAY_HALF + BAY_WALL / 2.0
     check_box_clear("bay lip", (px, py + 1.0, lip_z), (span, 2.0, BAY_WALL))
+    bm = bmesh.new()
     add_box(bm, px, py + 1.0, lip_z, span, 2.0, BAY_WALL)
-    # Floor slab under the deck.
+    out.append(_finalize(bm, "BayLip", structure_material()))
+    # Floor slab under the deck. Its top face sits at the pad's own height, so a
+    # ship on its legs rests above it rather than in it.
+    bm = bmesh.new()
     add_box(bm, px, py - 1.0, pz, span + 2.0, 2.0, span + 2.0)
-    return _finalize(bm, "BerthBay", structure_material())
+    out.append(_finalize(bm, "BayFloor", structure_material()))
+    return out
 
 
 def build_pad_deck() -> bpy.types.Object:
@@ -451,10 +464,15 @@ def build_gear_leg() -> bpy.types.Object:
 # --- Export ---------------------------------------------------------------------
 
 
-def export(ob: bpy.types.Object, path: str) -> None:
+def export(parts, path: str) -> None:
+    """Write one or more objects into a single .glb. Multiple objects stay
+    SEPARATE meshes in the file, which is what keeps their convex hulls separate
+    in Godot — see build_berth_bay for why that matters."""
+    objects = parts if isinstance(parts, list) else [parts]
     bpy.ops.object.select_all(action="DESELECT")
-    ob.select_set(True)
-    bpy.context.view_layer.objects.active = ob
+    for ob in objects:
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
     bpy.ops.export_scene.gltf(
         filepath=path,
         export_format="GLB",
@@ -462,7 +480,8 @@ def export(ob: bpy.types.Object, path: str) -> None:
         export_yup=True,
         export_apply=True,
     )
-    print("wrote", path)
+    print("wrote %s (%d mesh%s)" % (path, len(objects),
+                                    "" if len(objects) == 1 else "es"))
 
 
 def main() -> None:

@@ -270,6 +270,55 @@ func _run() -> void:
 	var rings: Node3D = station.get_node("Gates")
 	_check(rings.get_child_count() == DockingSystem.GATES.size(),
 			"a gate ring exists per lane gate (%d)" % rings.get_child_count())
+
+	# The berth has to be FLYABLE, not just correctly placed. Convex hulls are
+	# baked per mesh, so any part modelled as one open shape (a bay is three
+	# walls and a floor) comes back as a solid block with the pad inside it —
+	# and then the descent is a collision, not a landing. Checked against the
+	# real registered hulls rather than the art.
+	# The station only registers its hulls while a pattern is live, so an
+	# approach has to be running or this measures an empty list and passes
+	# for the wrong reason.
+	MarketSystem.request_dock(0)
+	await _wait_until(func() -> bool: return GameState.run_phase == "APPROACH", 20.0)
+	await get_tree().process_frame
+	var deck: Vector3 = DockingSystem.pad_world() \
+			+ DockingSystem.pad_up() * DockingSystem.GEAR_HEIGHT
+	var station_bodies := 0
+	var blocking: Array[String] = []
+	for obstacle: Dictionary in GameState.obstacles:
+		if not String(obstacle["name"]).begins_with("STATION"):
+			continue
+		station_bodies += 1
+		if CollisionSystem.hull_distance(deck, deck, obstacle.get("hull",
+				PackedVector3Array())) <= 0.0:
+			blocking.append(String(obstacle["name"]))
+	_check(station_bodies > 0,
+			"the station registers collision hulls while a pattern is live (%d)"
+					% station_bodies)
+	_check(blocking.is_empty(),
+			"the berth is open down to the pad (blocked by: %s)" % (
+				", ".join(blocking) if not blocking.is_empty() else "nothing"))
+	# The pad itself must never be solid — you land on it, you don't bounce off it.
+	var pad_solid := false
+	for obstacle: Dictionary in GameState.obstacles:
+		var body_name := String(obstacle["name"])
+		pad_solid = pad_solid or body_name.contains("PADDECK") \
+				or body_name.contains("PADMARKINGS")
+	_check(not pad_solid, "the pad deck and its markings are not collision bodies")
+
+	# ...and the whole point of the above: a landing has to actually complete
+	# with the station's collision geometry in the world. Every touchdown check
+	# further up runs headless, with no station to hit — which is exactly how a
+	# bay whose convex hull swallowed its own pad got through them.
+	await _fly_to_final()
+	var contact_comms := GameState.comms.size()
+	_park_at(_just_above_deck(), Vector3(0, -1.0, 0))
+	var landed_for_real := await _wait_until(
+			func() -> bool: return GameState.run_phase == "DOCKED", 8.0)
+	_check(landed_for_real, "a landing completes with the station's hulls in the world")
+	_check(not _has_comms_since(contact_comms, "CONTACT"),
+			"...without the descent registering a hull contact")
 	var worst := 0.0
 	for i in DockingSystem.GATES.size():
 		var ring: Node3D = rings.get_child(i)

@@ -8,6 +8,8 @@ script = ExtResource("1_station")
 
 [node name="Structure" type="Node3D" parent="."]
 
+[node name="Decor" type="Node3D" parent="."]
+
 [node name="Gates" type="Node3D" parent="."]
 
 [node name="Traffic" type="Node3D" parent="."]

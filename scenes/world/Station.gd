@@ -30,6 +30,7 @@ const RING_NEAR := Color(1.0, 0.55, 0.15)
 const RING_FAR := Color(0.3, 0.75, 1.0)
 
 @onready var _structure: Node3D = $Structure
+@onready var _decor: Node3D = $Decor
 @onready var _rings: Node3D = $Gates
 
 var _ring_nodes: Array[MeshInstance3D] = []
@@ -70,14 +71,16 @@ func _drum_offset() -> float:
 	return 34.0
 
 
-func _add_part(file: String, at: Vector3) -> Node3D:
+## `solid` decides which parent the part lands under, and that is the ONLY thing
+## deciding whether it collides: _bake_hulls walks _structure and nothing else.
+func _add_part(file: String, at: Vector3, solid := true) -> Node3D:
 	var packed: PackedScene = load(STATION_DIR + file + ".glb")
 	if packed == null:
 		push_warning("Station: missing asset %s.glb — run tools/build_station.py" % file)
 		return null
 	var node: Node3D = packed.instantiate()
 	node.position = at
-	_structure.add_child(node)
+	(_structure if solid else _decor).add_child(node)
 	return node
 
 
@@ -113,9 +116,14 @@ func _ring_material(tint: Color) -> StandardMaterial3D:
 	return mat
 
 
+## The deck is landed ON, by DockingSystem's touchdown test, which judges gear,
+## sink rate, attitude and where on the markings you put it. Making it a
+## collision body too would just have the ship bounce off the thing it is trying
+## to arrive on — so the pad is decor, and the floor slab under it (part of the
+## bay) is what stops anything falling through.
 func _build_pad() -> void:
-	_add_part("pad_deck", Vector3.ZERO)
-	_add_part("pad_markings", Vector3.ZERO)
+	_add_part("pad_deck", Vector3.ZERO, false)
+	_add_part("pad_markings", Vector3.ZERO, false)
 
 
 ## Bake a convex hull per structural mesh, so clipping a hab drum on the way
