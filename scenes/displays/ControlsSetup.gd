@@ -45,6 +45,8 @@ const BUTTON_TARGETS := [
 	{"label": "Cut", "action": "ops_cut", "group": "OPS"},
 	{"label": "Open Cargo Hatch", "action": "cargo_hatch_open", "group": "OPS"},
 	{"label": "Cycle Contact", "action": "contact_cycle", "group": "OPS"},
+	{"label": "Landing Gear", "action": "landing_gear", "group": "DOCKING"},
+	{"label": "Request Clearance / Ack", "action": "dock_request", "group": "DOCKING"},
 	{"label": "Tactical SCOPE/CHART", "action": "tactical_view_cycle", "group": "TACTICAL"},
 	{"label": "Tactical → Scope", "action": "tactical_scope", "group": "TACTICAL"},
 	{"label": "Tactical → Chart", "action": "tactical_chart", "group": "TACTICAL"},

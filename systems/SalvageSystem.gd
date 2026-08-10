@@ -244,6 +244,12 @@ func request_cut() -> void:
 	if GameState.cargo_hatch_open:
 		GameState.post_comms("OPS", "CUT ABORT — SECURE CARGO HATCH FIRST")
 		return
+	# An extended leg sits in the torch's arc, so the gear interlocks the cutter
+	# the same way the hatch does — which is what gives the gear a cost at the
+	# claim as well as at the station.
+	if not GameState.gear_stowed():
+		GameState.post_comms("OPS", "CUT ABORT — STOW THE LANDING GEAR FIRST")
+		return
 	if GameState.align_state == "ALIGNING":
 		_commit_align()
 		return

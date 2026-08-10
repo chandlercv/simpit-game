@@ -103,6 +103,8 @@ const BUILTIN_PROFILES := [
 			{"key": KEY_V, "action": "ops_approach"},
 			{"key": KEY_C, "action": "ops_cut"},
 			{"key": KEY_B, "action": "cargo_hatch_open"},
+			{"key": KEY_X, "action": "landing_gear"},
+			{"key": KEY_Z, "action": "dock_request"},
 			{"key": KEY_M, "action": "sensor_mode_cycle"},
 			{"key": KEY_COMMA, "action": "salvage_prev"},
 			{"key": KEY_PERIOD, "action": "salvage_next"},
@@ -428,6 +430,10 @@ func _process(_delta: float) -> void:
 		SalvageSystem.request_cut()
 	if Input.is_action_just_pressed("cargo_hatch_open"):
 		GameState.toggle_cargo_hatch()
+	if Input.is_action_just_pressed("landing_gear"):
+		GameState.toggle_landing_gear()
+	if Input.is_action_just_pressed("dock_request"):
+		DockingSystem.request_clearance()
 	if Input.is_action_just_pressed("throttle_cmd_toggle"):
 		SalvageSystem.toggle_throttle_cmd_mode()
 	_process_panel_commands()

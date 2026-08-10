@@ -67,9 +67,21 @@ func _process(delta: float) -> void:
 func _update_readouts() -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
-	var vel_text := "VEL %5.1f M/S" % velocity.length()
+	var speed := velocity.length()
+	var vel_text := "VEL %5.1f M/S" % speed
 	if GameState.approach_state != "HOLDING":
 		vel_text += "  — %s" % GameState.approach_state
+	# In the pattern the speed you were given is an instruction, so the readout
+	# carries it — and goes red the moment you're over it, which is the same
+	# moment ATC starts counting toward a go-around.
+	var docking: Dictionary = DockingSystem.status()
+	if not docking.is_empty():
+		var limit: float = docking["speed_limit"]
+		vel_text = "VEL %5.1f / %.0f M/S" % [speed, limit]
+		_vel_label.add_theme_color_override("font_color",
+				HUD_COLOR if docking["speed_ok"] else THREAT_COLOR)
+	else:
+		_vel_label.remove_theme_color_override("font_color")
 	_vel_label.text = vel_text
 	if camera == null:
 		return
@@ -91,8 +103,10 @@ func _draw() -> void:
 	_draw_target_member()
 	_draw_salvage_pieces()
 	_draw_align()
+	_draw_docking()
 	_draw_ops_state()
 	_draw_hatch_indicator()
+	_draw_gear_indicator()
 	if camera == null:
 		return
 	var frame := Rect2(Vector2.ZERO, size)
@@ -151,6 +165,102 @@ func _draw_ops_state() -> void:
 				"CUTTING %s — %d%%" % [member["name"],
 					roundi(GameState.wreck["cut_progress"] * 100.0)],
 				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, THREAT_COLOR)
+
+
+## Docking: the next gate as a marker you fly at (edge arrow when it's off
+## frame, exactly like a tracked contact), ATC's standing instruction in the
+## same slot the align/cut banner uses, and on final a landing ladder.
+##
+## Everything comes from DockingSystem.status() — the same evaluation the rules
+## test — so the marker cannot point somewhere ATC isn't measuring.
+func _draw_docking() -> void:
+	var st: Dictionary = DockingSystem.status()
+	if st.is_empty() or camera == null:
+		return
+	var font := ThemeDB.fallback_font
+	var target: Vector3 = st["gate_position"]
+	var color := HUD_COLOR
+	if not bool(st["lane_ok"]) or not bool(st["speed_ok"]):
+		color = THREAT_COLOR
+	var label := "%s  %d M" % [st["gate_name"], roundi(float(st["range"]))]
+	if camera.is_position_behind(target):
+		_draw_offscreen_marker(target, label, color)
+	else:
+		var at := camera.unproject_position(target)
+		if Rect2(Vector2.ZERO, size).has_point(at):
+			_draw_diamond(at, 14.0, color, 2.0)
+			# The gate's ring at the size it actually subtends, so "am I lined up"
+			# is a question about this circle rather than a guess.
+			var subtend: float = _gate_screen_radius(target, float(st["gate_radius"]))
+			if subtend > 4.0:
+				draw_arc(at, subtend, 0.0, TAU, 48, Color(color, 0.55), 1.5, true)
+			draw_string(font, at + Vector2(18, 5), label,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+		else:
+			_draw_offscreen_marker(target, label, color)
+
+	var atc: Dictionary = st.get("atc", {})
+	if not atc.is_empty():
+		var c := size / 2.0
+		var atc_color := HUD_COLOR
+		if bool(atc.get("urgent", false)):
+			atc_color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))
+		draw_string(font, Vector2(0, c.y + 70), String(atc.get("text", "")),
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, atc_color)
+
+	if st["state"] == "FINAL":
+		_draw_landing_ladder(font, st)
+
+
+## Screen radius of a gate ring at its current range — the projection of a point
+## one ring-radius off the gate centre, so perspective is handled by the camera
+## rather than approximated here.
+func _gate_screen_radius(target: Vector3, radius: float) -> float:
+	if camera == null:
+		return 0.0
+	var edge: Vector3 = target + camera.global_transform.basis.x * radius
+	if camera.is_position_behind(edge):
+		return 0.0
+	return camera.unproject_position(target).distance_to(camera.unproject_position(edge))
+
+
+## The last 16 m: altitude, sink rate against what the legs will take, and how
+## far off the pad's markings you are. Sat under the reticle where the eye
+## already is on final.
+func _draw_landing_ladder(font: Font, st: Dictionary) -> void:
+	var c := size / 2.0
+	var descent: float = st["descent"]
+	var rate_color := HUD_COLOR
+	if descent > DockingSystem.HARD_RATE:
+		rate_color = THREAT_COLOR
+	elif descent > DockingSystem.FIRM_RATE:
+		rate_color = SALVAGE_COLOR
+	draw_string(font, Vector2(0, c.y + 96),
+			"ALT %.1f    SINK %.1f M/S    OFF %.1f M" % [
+				maxf(float(st["altitude"]), 0.0), descent, float(st["lateral"])],
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 15, rate_color)
+	if not bool(st["on_pad"]):
+		draw_string(font, Vector2(0, c.y + 116), "OFF THE PAD MARKINGS",
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, THREAT_COLOR)
+
+
+## Gear state, beside the cargo-hatch indicator. Shown whenever the gear isn't
+## stowed, because an extended leg is both a landing requirement and a thing
+## that wears out over GEAR_LIMIT_SPEED — either way the pilot needs to know.
+func _draw_gear_indicator() -> void:
+	if GameState.gear_stowed():
+		return
+	var font := ThemeDB.fallback_font
+	var locked := GameState.gear_locked_down()
+	var text := "GEAR DOWN" if locked else "GEAR IN TRANSIT %d%%" % roundi(
+			GameState.gear_position * 100.0)
+	var color := SALVAGE_LOCKED_COLOR if locked else SALVAGE_COLOR
+	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
+	if speed > GameState.GEAR_LIMIT_SPEED:
+		text = "GEAR OVERSPEED %d / %d" % [roundi(speed), roundi(GameState.GEAR_LIMIT_SPEED)]
+		color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))
+	draw_string(font, Vector2(size.x - 190, 48), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 
 
 ## Persistent reminder that the cutter and jump/dock are both interlocked off

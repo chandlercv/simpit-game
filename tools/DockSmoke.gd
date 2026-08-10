@@ -44,6 +44,18 @@ func _run() -> void:
 	# random too — pinned here so a failure is reproducible.
 	DockingSystem.set_traffic_seed(20260809)
 
+	# --- The gear interlocks the cutter (a leg sits in the torch's arc), which
+	# is what gives it a cost back at the claim and not just at the station.
+	# Checked here, on site, because that is the only phase the cutter runs in. ---
+	GameState.set_landing_gear(true)
+	await _wait_until(GameState.gear_locked_down, 8.0)
+	var cut_comms := GameState.comms.size()
+	SalvageSystem.request_cut()
+	_check(_has_comms_since(cut_comms, "STOW THE LANDING GEAR"),
+			"extended gear interlocks the cutter at the claim")
+	GameState.set_landing_gear(false)
+	await _wait_until(GameState.gear_stowed, 8.0)
+
 	# --- Handover: docking is flown now, so the burn ends on the approach. ---
 	MarketSystem.request_dock(0)
 	var handed := await _wait_until(
@@ -380,6 +392,13 @@ func _wait_until(predicate: Callable, timeout_seconds: float) -> bool:
 		await get_tree().process_frame
 		elapsed += get_process_delta_time()
 	return predicate.call()
+
+
+func _has_comms_since(from_index: int, substr: String) -> bool:
+	for i in range(from_index, GameState.comms.size()):
+		if String(GameState.comms[i]["text"]).contains(substr):
+			return true
+	return false
 
 
 func _has_comms(substr: String) -> bool:
