@@ -178,6 +178,14 @@ var _advised: Dictionary = {}
 var _reprimand_cool := 0.0
 
 
+## Fix the traffic phasing so a run is reproducible. Traffic spawns with a random
+## phase per visit (so the pattern is never the same rehearsal twice), which also
+## means ATC's sequencing hold is random — fine to fly, impossible to test
+## against. DockSmoke pins this; nothing in the game calls it.
+func set_traffic_seed(seed_value: int) -> void:
+	_rng.seed = seed_value
+
+
 func _ready() -> void:
 	_rng.randomize()
 	# Running into anything at all while flying a pattern is a go-around: the
@@ -673,11 +681,13 @@ func _update_hold(delta: float) -> void:
 	if (ship.get("velocity", Vector3.ZERO) as Vector3).length() > HOLD_SPEED:
 		_hold_time = 0.0
 		return
-	var was_ready := _hold_time >= CLEARANCE_MIN_HOLD
 	_hold_time += delta
-	# Once you've served the sequencing delay and the lane is clear, ATC calls
-	# the clearance itself rather than making you keep asking.
-	if not was_ready and _hold_time >= CLEARANCE_MIN_HOLD and _lane_conflict().is_empty():
+	# Once you've served the sequencing delay and the lane is clear, ATC calls the
+	# clearance itself rather than making you keep asking. Tested every frame, not
+	# just on the frame the delay runs out: traffic is usually working the lane at
+	# that exact moment, and an edge-triggered call would leave the ship holding
+	# for a slot that never gets offered again.
+	if _hold_time >= CLEARANCE_MIN_HOLD and _lane_conflict().is_empty():
 		_clear_inbound()
 
 
@@ -1107,7 +1117,7 @@ func _lane_conflict() -> Dictionary:
 
 func _lane_conflict_ids() -> Dictionary:
 	var out: Dictionary = {}
-	var legs := _remaining_legs()
+	var legs := _conflict_legs()
 	for entry: Dictionary in GameState.traffic:
 		var pos: Vector3 = (entry["transform"] as Transform3D).origin
 		for leg: Array in legs:
@@ -1118,27 +1128,26 @@ func _lane_conflict_ids() -> Dictionary:
 	return out
 
 
-## The legs still to be flown, as [from, to] world pairs — the lane ahead.
-func _remaining_legs() -> Array:
-	var legs: Array = []
-	if GameState.docking_state == "FINAL":
-		legs.append([gate_world(GATES.size() - 1), pad_world()])
-		return legs
-	if _outbound():
-		# Everything still between the ship and the exit, counting down.
-		var from_out: Vector3 = _leg_from if GameState.docking_state == "DEPARTING" \
-				else pad_world()
-		for i in range(int(GameState.docking.get("gate", GATES.size() - 1)), HOLD_GATE - 1, -1):
-			legs.append([from_out, gate_world(i)])
-			from_out = gate_world(i)
-		return legs
-	var start: int = maxi(int(GameState.docking.get("gate", HOLD_GATE)), HOLD_GATE + 1)
-	var from: Vector3 = gate_world(start - 1)
-	for i in range(start, GATES.size()):
-		legs.append([from, gate_world(i)])
-		from = gate_world(i)
-	legs.append([from, pad_world()])
-	return legs
+## The leg traffic is judged against: the one being flown right now, or — at a
+## hold — the one the ship is about to be cleared onto.
+##
+## Deliberately ONE leg rather than the whole route ahead. Judging every
+## remaining leg means the entire 200 m lane has to be simultaneously clear of
+## three ships that are always working it, and that window barely exists: ATC
+## would hold a pilot at the marker more or less indefinitely. "Traffic in the
+## lane ahead of you" is the leg you are on, which is also the only stretch a
+## hold actually protects.
+func _conflict_legs() -> Array:
+	var index: int = GameState.docking.get("gate", HOLD_GATE)
+	match GameState.docking_state:
+		"FINAL":
+			return [[gate_world(GATES.size() - 1), pad_world()]]
+		"DEPART_HOLD":
+			return [[pad_world(), gate_world(GATES.size() - 1)]]
+		"CLEARED", "DEPARTING":
+			return [[_leg_from, gate_world(index)]]
+	# INBOUND / HOLD: the first leg of the lane, the one a clearance grants.
+	return [[gate_world(HOLD_GATE), gate_world(HOLD_GATE + 1)]]
 
 
 func _distance_to_segment(point: Vector3, a: Vector3, b: Vector3) -> float:

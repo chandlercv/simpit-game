@@ -1,9 +1,10 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scenes/world/DebrisField.gd" id="1_field"]
 [ext_resource type="Script" path="res://scenes/world/SalvagePieces.gd" id="13_salvage_pieces"]
 [ext_resource type="PackedScene" path="res://scenes/world/Wreck.tscn" id="2_wreck"]
 [ext_resource type="PackedScene" path="res://scenes/world/Ship.tscn" id="3_ship"]
+[ext_resource type="PackedScene" path="res://scenes/world/Station.tscn" id="14_station"]
 [ext_resource type="Shader" path="res://scenes/world/space_sky.gdshader" id="4_sky"]
 [ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/meteor.glb" id="5_meteor"]
 [ext_resource type="PackedScene" path="res://assets/cc0/kenney-space-kit/meteor_detailed.glb" id="6_meteor_d"]
@@ -112,6 +113,9 @@ rotation = Vector3(0.05, 0.4, 0.1)
 
 [node name="SalvagePieces" type="Node3D" parent="."]
 script = ExtResource("13_salvage_pieces")
+
+[node name="Station" parent="." instance=ExtResource("14_station")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 900)
 
 [node name="Ship" parent="." instance=ExtResource("3_ship")]
 

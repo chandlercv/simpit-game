@@ -1,0 +1,25 @@
+[gd_scene load_steps=3 format=3 uid="uid://cst4tn0dockstn"]
+
+[ext_resource type="Script" path="res://scenes/world/Station.gd" id="1_station"]
+[ext_resource type="Script" path="res://scenes/world/StationTraffic.gd" id="2_traffic"]
+
+[node name="Station" type="Node3D"]
+script = ExtResource("1_station")
+
+[node name="Structure" type="Node3D" parent="."]
+
+[node name="Gates" type="Node3D" parent="."]
+
+[node name="Traffic" type="Node3D" parent="."]
+script = ExtResource("2_traffic")
+
+[node name="ApproachLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.35, 0.37, 0, 0.72, 0.69, -0.51, -0.6, 0.62, 0, 0, 0)
+light_color = Color(0.86, 0.9, 1, 1)
+light_energy = 0.55
+
+[node name="BerthLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 12, 14)
+light_color = Color(1, 0.78, 0.45, 1)
+light_energy = 3.0
+omni_range = 26.0
