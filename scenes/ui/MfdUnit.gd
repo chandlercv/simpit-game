@@ -23,12 +23,14 @@ const ContactListScript := preload("res://scenes/ui/ContactList.gd")
 const SalvagePanelScript := preload("res://scenes/ui/SalvagePanel.gd")
 const AlignPanelScript := preload("res://scenes/ui/AlignPanel.gd")
 const ScoopPanelScript := preload("res://scenes/ui/ScoopPanel.gd")
+const DockPanelScript := preload("res://scenes/ui/DockPanel.gd")
 
 ## Page order (also the menu grid order). Empty string = the MENU home.
 ## ALIGN and SCOOP sit together: they're the two halves of a salvage run (cut
-## the member free, then go collect it).
+## the member free, then go collect it). DOCK follows MARKET, which is where
+## an approach is started from.
 const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "SCOOP",
-		"MARKET", "CONTACTS"]
+		"MARKET", "DOCK", "CONTACTS"]
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 @export var background: Color = Color(0.012, 0.038, 0.038)
@@ -67,6 +69,11 @@ func _ready() -> void:
 			func(state: String) -> void: _auto_page("ALIGN", state == "ALIGNING"))
 	GameState.cargo_hatch_changed.connect(
 			func(open: bool) -> void: _auto_page("SCOOP", open))
+	# The docking pattern is a mini-game like the other two, so it takes the
+	# primary MFD while it runs and gives it back when the ship is berthed or
+	# away — including through a go-around, which never leaves the pattern.
+	GameState.docking_changed.connect(
+			func(state: String) -> void: _auto_page("DOCK", state != "INACTIVE"))
 
 
 ## Surface a mini-game's instrument page on the primary MFD while that mini-game
@@ -186,6 +193,10 @@ func _build_page(page: String) -> Control:
 			var scoop := ScoopPanelScript.new()
 			scoop.accent = accent
 			return scoop
+		"DOCK":
+			var dock := DockPanelScript.new()
+			dock.accent = accent
+			return dock
 		"MARKET":
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 8)

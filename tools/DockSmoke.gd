@@ -220,6 +220,33 @@ func _run() -> void:
 	await _wait(0.2)
 	_check(GameState.run_phase == "APPROACH", "auto-berth is refused on final")
 
+	# --- The DOCK page renders in both of its modes. Its draw code only runs
+	# when the page is visible, so nothing else here would catch a bad index or
+	# a missing status key in it. ---
+	var page: Control = load("res://scenes/ui/DockPanel.gd").new()
+	page.size = Vector2(420, 640)
+	add_child(page)
+	# The previous check left the ship on final, so take the pad view first and
+	# then get waved off (gear up on final) back onto the lane.
+	page.queue_redraw()
+	await get_tree().process_frame
+	_check(DockingSystem.status()["state"] == "FINAL",
+			"the DOCK page draws the pad view on final")
+	GameState.set_landing_gear(false)
+	await _wait_until(func() -> bool: return GameState.docking_state == "INBOUND", 10.0)
+	await _fly_to_cleared()
+	page.queue_redraw()
+	await get_tree().process_frame
+	_check(DockingSystem.status()["state"] == "CLEARED",
+			"...and the lane view on a cleared approach")
+	DockingSystem.abort_approach()
+	page.queue_redraw()
+	await get_tree().process_frame
+	_check(DockingSystem.status().is_empty(),
+			"...and the idle notice with no approach running")
+	page.queue_free()
+	await _wait_until(func() -> bool: return GameState.run_phase == "ON_SITE", 20.0)
+
 	# --- The 3D station is built from the same constants the rules use. ---
 	var world: Node3D = load("res://scenes/world/DebrisField.tscn").instantiate()
 	add_child(world)
