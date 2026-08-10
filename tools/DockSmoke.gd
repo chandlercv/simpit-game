@@ -146,6 +146,30 @@ func _run() -> void:
 	_check(int(GameState.docking["wave_offs"]) > before_gear,
 			"reaching the final gate with the gear up is a go-around")
 
+	# --- Contact is billed, not waved off. You have already paid in hull, and
+	# losing a clearance ten metres off the deck for a scrape is out of all
+	# proportion — so the station invoices you and you keep flying. ---
+	await _fly_to_cleared()
+	var hit_waves: int = GameState.docking["wave_offs"]
+	var hit_credits: int = GameState.credits
+	var hit_rep: float = GameState.reputation[GameState.market_factions[0]]
+	var hit_state: String = GameState.docking_state
+	GameState.hull_impact.emit("BOW", 0.2)
+	await _wait(0.2)
+	_check(GameState.docking_state == hit_state and int(
+			GameState.docking["wave_offs"]) == hit_waves,
+			"striking the station does not cost the clearance")
+	_check(GameState.credits < hit_credits,
+			"...it bills you for the damage (%d CR)" % (hit_credits - GameState.credits))
+	_check(GameState.reputation[GameState.market_factions[0]] < hit_rep,
+			"...and costs standing with the station")
+	# One scrape registering over several frames is one invoice.
+	var second_bill: int = GameState.credits
+	GameState.hull_impact.emit("BOW", 0.2)
+	await _wait(0.2)
+	_check(GameState.credits == second_bill,
+			"a second contact inside the cooldown is not billed twice")
+
 	# --- A hot touchdown bounces; a clean one books the berth. ---
 	await _fly_to_final()
 	var bounces: int = GameState.docking["wave_offs"]
@@ -211,6 +235,16 @@ func _run() -> void:
 	# --- Auto-berth: the paid way out of the pattern. ---
 	MarketSystem.request_dock(0)
 	await _wait_until(func() -> bool: return GameState.run_phase == "APPROACH", 20.0)
+	# The damages bill above left the account short, which is the other half of
+	# the auto-berth rule: it is a purchase, and you have to be able to afford it.
+	_check(GameState.credits < DockingSystem.AUTO_BERTH_FEE,
+			"the damages bill left too little for an auto-berth (%d CR)"
+					% GameState.credits)
+	DockingSystem.request_auto_berth()
+	await _wait(0.2)
+	_check(GameState.run_phase == "APPROACH", "auto-berth is refused when short of funds")
+	GameState.credits = 1000
+	GameState.credits_changed.emit(GameState.credits)
 	var credits_before: int = GameState.credits
 	DockingSystem.request_auto_berth()
 	var bought := await _wait_until(

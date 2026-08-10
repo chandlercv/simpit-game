@@ -213,12 +213,18 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
    - **Hold at marker ALPHA.** Fly to the hold ring and *stop* (under 3 m/s).
      ATC refuses a clearance while you're still moving, and sequences you behind
      the station's traffic — a lane tug, a shuttle and a slow ore barge working
-     the same volume. They are solid: hitting one costs hull and your clearance.
+     the same volume. They are solid, and so is the station.
    - **Run the lane.** Cleared, you fly **BRAVO → CHARLIE → DELTA** in order,
      *through* each ring, staying inside the leg's corridor (22 m, then 15 m
      through the slot between two hab drums, then 10 m) and under the pattern
      speed. Miss a ring, leave the corridor, or sit over the limit and you're
      **sent around** to hold again.
+   - **Hitting something is billed, not waved off.** A go-around is for the
+     instructions you were given; contact is damage. Scrape a bay wall or clip a
+     tug and you pay for it — hull, a **damages invoice** from the station
+     (roughly a quarter of a run's takings for a light scrape, half for a bad
+     one), and **standing** — but you keep your clearance and carry on flying.
+     Anything you can't pay comes out of your reputation instead.
    - **Gear down before the final gate.** The landing gear (keyboard **X**, or
      the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
      you act on early — arriving at DELTA with it up is a go-around, as is an

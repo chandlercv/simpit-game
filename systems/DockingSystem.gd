@@ -21,7 +21,10 @@ extends Node
 ##   * ATC INSTRUCTIONS you have to comply with: hold at the marker until you're
 ##     cleared, keep under the speed you were given, hold position again if
 ##     traffic crosses ahead, gear down before the final gate. Breaking one gets
-##     you sent around the pattern again.
+##     you sent around the pattern again. ACTUAL CONTACT is treated differently —
+##     it's billed, not waved off (see _bill_damages), because it has already
+##     cost you hull and losing the clearance for it as well would be a
+##     punishment out of all proportion to a scrape.
 ##   * THE LANDING itself: descend into the berth and put it on the pad with the
 ##     gear down and locked, wings level, inside the pad markings, at a sink rate
 ##     the legs can take. Quality is scored — a greaser earns standing with the
@@ -92,7 +95,8 @@ const LANE_CONFLICT_RANGE := 22.0
 ## Advisory band — ATC calls the traffic out but nothing is broken yet.
 const TRAFFIC_ADVISORY := 8.0
 ## ...and past that, hull-to-hull margin below which separation is lost and you
-## are sent around (short of an actual collision, which waves you off too).
+## are sent around. A near miss is a procedural failure, so it costs the
+## clearance; actually hitting the thing is damage, and gets billed instead.
 const SEPARATION_MARGIN := 2.5
 
 ## Touchdown limits. Sink rate below FIRM is a greaser; above HARD it costs hull;
@@ -125,6 +129,22 @@ const REP_AUTO_BERTH := 0.03
 ## pilot at the station), so it costs standing on a cooldown instead.
 const REP_PER_REPRIMAND := 0.015
 const REPRIMAND_COOLDOWN := 6.0
+
+## Hitting the station's structure is billed, not waved off. You have already
+## paid for it in hull damage, and losing the clearance ten metres off the deck
+## for scraping a bay wall is a punishment out of all proportion to the mistake —
+## so the station charges you for the damage and thinks less of you, and you
+## carry on flying. The bill is a call-out fee plus the repair, scaled by how
+## hard you hit (CollisionSystem caps impact damage at 0.6).
+## Scaled against a hold that sells for roughly 1000 CR: a scrape at the final
+## gate's 6 m/s costs about a quarter of a run, and the worst hit the collision
+## model can produce costs about half. Enough to hurt, not enough to end you.
+const DAMAGES_CALL_OUT := 100
+const DAMAGES_PER_DAMAGE := 800.0
+const REP_PER_COLLISION := 0.05
+## Seconds before a second impact can be billed again, so one clumsy scrape that
+## registers over several frames is one invoice.
+const DAMAGES_COOLDOWN := 3.0
 
 ## Hull wear per second of flying over the gear's rated speed with it extended.
 const GEAR_STRESS_PER_S := 0.02
@@ -176,6 +196,8 @@ var _leg_from := Vector3.ZERO
 var _advised: Dictionary = {}
 ## Seconds left before another outbound reprimand can cost standing again.
 var _reprimand_cool := 0.0
+## ...and the same for damage invoices.
+var _damages_cool := 0.0
 
 
 ## Fix the traffic phasing so a run is reproducible. Traffic spawns with a random
@@ -387,6 +409,7 @@ func begin_approach(faction_index: int) -> void:
 	_over_speed = 0.0
 	_off_lane = 0.0
 	_advised.clear()
+	_damages_cool = 0.0
 	GameState.docking = {
 		"faction": faction_index,
 		"station": "%s CONTROL" % faction,
@@ -423,6 +446,7 @@ func begin_departure(faction_index: int) -> void:
 	_off_lane = 0.0
 	_reprimand_cool = 0.0
 	_advised.clear()
+	_damages_cool = 0.0
 	GameState.docking = {
 		"faction": faction_index,
 		"station": "%s CONTROL" % faction,
@@ -544,6 +568,7 @@ func _process(delta: float) -> void:
 		return
 	_pattern_time += delta
 	_reprimand_cool = maxf(_reprimand_cool - delta, 0.0)
+	_damages_cool = maxf(_damages_cool - delta, 0.0)
 	_update_traffic()
 	_update_separation()
 	if not is_active():
@@ -941,8 +966,9 @@ func _clear_inbound() -> void:
 
 ## A pattern rule was broken. Which consequence that carries depends on the
 ## direction: inbound you get sent around, outbound you get told off. Every
-## shared rule (speed, corridor, separation, contact) reports through here so
-## the two directions can't drift apart.
+## shared PROCEDURAL rule (speed, corridor, separation) reports through here so
+## the two directions can't drift apart. Contact is not one of them — it goes to
+## _bill_damages, which never touches the clearance.
 func _violation(reason: String) -> void:
 	if _outbound():
 		_reprimand(reason)
@@ -977,6 +1003,7 @@ func _wave_off(reason: String) -> void:
 	_over_speed = 0.0
 	_off_lane = 0.0
 	_advised.clear()
+	_damages_cool = 0.0
 	_leg_from = gate_world(HOLD_GATE)
 	_set_state("INBOUND")
 	_atc("GO AROUND — %s" % reason,
@@ -988,10 +1015,38 @@ func _wave_off(reason: String) -> void:
 
 ## Anything the pattern hit is a go-around — CollisionSystem has already taken
 ## the hull out of it, this takes the clearance.
-func _on_hull_impact(section: String, _amount: float) -> void:
+## Anything the pattern hit. CollisionSystem has already taken it out of the
+## hull; this takes it out of your wallet and your standing — but NOT your
+## clearance. Contact is damage, not a procedural failure, and the go-around is
+## reserved for the instructions you were actually given (speed, corridor,
+## markers, gear).
+func _on_hull_impact(section: String, amount: float) -> void:
 	if not is_active() or GameState.run_phase != "APPROACH":
 		return
-	_violation("CONTACT — %s SECTION" % section)
+	_bill_damages(section, amount)
+
+
+## Invoice for hitting the station. Charged against credits, with anything the
+## pilot can't cover taken out of their standing instead — a station that can't
+## bill you writes you off rather than letting you scrape its structure for free.
+func _bill_damages(section: String, amount: float) -> void:
+	if _damages_cool > 0.0:
+		return
+	_damages_cool = DAMAGES_COOLDOWN
+	var bill := DAMAGES_CALL_OUT + roundi(maxf(amount, 0.0) * DAMAGES_PER_DAMAGE)
+	var paid: int = mini(bill, maxi(GameState.credits, 0))
+	if paid > 0:
+		GameState.credits -= paid
+		GameState.credits_changed.emit(GameState.credits)
+	var standing := REP_PER_COLLISION
+	if paid < bill:
+		# Couldn't pay: the shortfall lands on your reputation instead, in
+		# proportion to how much of the bill went unmet.
+		standing += REP_PER_COLLISION * (float(bill - paid) / float(bill))
+	_adjust_reputation(-standing)
+	_atc("CONTACT — %s SECTION" % section,
+			"YOU HAVE STRUCK STATION STRUCTURE. DAMAGES %d CR%s." % [
+				bill, "" if paid >= bill else " (UNPAID — LOGGED AGAINST YOU)"], true)
 
 
 ## Publish a standing instruction: one line of what to do, one of why, held in
