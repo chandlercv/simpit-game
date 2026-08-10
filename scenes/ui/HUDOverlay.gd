@@ -129,7 +129,9 @@ func _draw() -> void:
 func _draw_ops_state() -> void:
 	var font := ThemeDB.fallback_font
 	var c := size / 2.0
-	if GameState.run_phase != "ON_SITE":
+	# The docking pattern is flown, so it gets the full flight HUD rather than a
+	# banner — only the phases where the ship is parked get one.
+	if not GameState.flight_active():
 		var banner := "IN TRANSIT" if GameState.run_phase == "TRANSIT" \
 				else "DOCKED — %s" % GameState.market_factions[GameState.docked_faction]
 		draw_string(font, Vector2(0, c.y + 70), banner,

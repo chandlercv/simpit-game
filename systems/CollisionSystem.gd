@@ -58,7 +58,10 @@ var _cooldowns: Dictionary = {}
 
 
 func _process(delta: float) -> void:
-	if GameState.run_phase != "ON_SITE":
+	# Collisions bite wherever the ship is actually being flown — at the claim and
+	# in the station's docking pattern, where clipping a hab drum or a tug is the
+	# whole reason the lane is tight.
+	if not GameState.flight_active():
 		_cooldowns.clear()
 		return
 	for key: String in _cooldowns.keys():

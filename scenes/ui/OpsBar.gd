@@ -32,7 +32,16 @@ func _update() -> void:
 	var on_site := GameState.run_phase == "ON_SITE"
 	_approach_button.disabled = not on_site
 	if not on_site:
-		_approach_button.text = "IN TRANSIT" if GameState.run_phase == "TRANSIT" else "DOCKED"
+		match GameState.run_phase:
+			"TRANSIT":
+				_approach_button.text = "IN TRANSIT"
+			"APPROACH":
+				# Flying the station pattern: the DOCK page is where the approach
+				# is worked, so this only reports.
+				_approach_button.text = "DEPARTING" if DockingSystem.status().get(
+						"outbound", false) else "ON APPROACH"
+			_:
+				_approach_button.text = "DOCKED"
 		_cut_button.text = "—"
 		_cut_button.disabled = true
 		return

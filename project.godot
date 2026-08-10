@@ -27,6 +27,7 @@ MarketSystem="*res://systems/MarketSystem.gd"
 SalvageSystem="*res://systems/SalvageSystem.gd"
 ThreatSystem="*res://systems/ThreatSystem.gd"
 DriftSystem="*res://systems/DriftSystem.gd"
+DockingSystem="*res://systems/DockingSystem.gd"
 CollisionSystem="*res://systems/CollisionSystem.gd"
 
 [display]

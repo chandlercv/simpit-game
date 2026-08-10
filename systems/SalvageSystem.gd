@@ -483,6 +483,12 @@ func _random_tumble() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	# The station's docking pattern is hand-flown on the same stick, so manual
+	# flight has to integrate there too — but nothing else in this system means
+	# anything away from the claim: there is no wreck to scan, align on or cut.
+	if GameState.run_phase == "APPROACH":
+		_update_manual_flight(delta)
+		return
 	if GameState.run_phase != "ON_SITE":
 		return
 	_update_scan(delta)

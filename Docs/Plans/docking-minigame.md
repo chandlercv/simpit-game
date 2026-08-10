@@ -17,14 +17,19 @@ HUD markers, a headless smoke test — so it reads as more of the same game rath
 **Requested scope:** lots of piloting, a new MFD page, tight quarters, avoiding ship traffic,
 deploying landing gear, following ATC instructions, and new assets for the scene.
 
-## Work already on disk (done before plan mode engaged)
+## Work already on disk
 
-- `autoload/GameState.gd` — modified (+141 lines): `APPROACH` run phase, `FLIGHT_PHASES`,
+Drafted in a cloud session that stalled at the decisions below and never committed; recovered from
+that session's transcript and committed on `docking-recovered` (`b4499de`). Both files compile and
+the existing smoke scenes pass with them loaded.
+
+- `autoload/GameState.gd` — modified (+139 lines): `APPROACH` run phase, `FLIGHT_PHASES`,
   `DOCK_STATES`, gear state + travel in `_process`, `docking`/`traffic` state, signals, intents.
-- `systems/DockingSystem.gd` — new file, complete first draft (~700 lines): lane data, ATC state
-  machine, traffic routes, corridor/gate rules, wave-offs, touchdown scoring.
+- `systems/DockingSystem.gd` — new file, complete first draft (1005 lines): lane data, ATC state
+  machine, traffic routes, corridor/gate rules, wave-offs, touchdown scoring. **Not registered as an
+  autoload yet**, so nothing calls into it and the game is unchanged.
 
-Both need a review pass against the decisions below, but the design they encode is what follows.
+Both need a review pass against the decisions below.
 
 ## Design
 
@@ -171,17 +176,51 @@ Defaults go in the `keyboard` profile in `InputRouter.BUILTIN_PROFILES`, dispatc
   **Handy tool scenes** (`DockSmoke`, and the asset generator if one is added).
 - `CREDITS.md` if any third-party art is used.
 
-## Open decisions
+## Decisions (settled 2026-08-09)
 
-Three questions are being put to the user before this is finalised:
-1. How to produce the new station art (pure-Python glTF generator vs. Blender script vs. Godot
-   primitives in the scene).
-2. Whether piloted docking fully replaces the instant dock.
-3. Whether departure is also flown, or stays the abstract burn it is today.
+1. **Station art — a Blender script**, `tools/build_station.py`, run exactly like `build_hull.py`
+   (`blender --background --python tools/build_station.py`). Blender 4.5.10 LTS is installed
+   (`C:\Program Files\Blender Foundation\Blender 4.5\blender.exe`, not on PATH), so the script is
+   run and its output verified here and the generated `.glb` files are committed.
+2. **Auto-berth is kept** as an alternative to flying the pattern — see below.
+3. **Departure is flown too**, not abstracted — see below.
+
+### Auto-berth (decision 2)
+
+ATC will fly you in on request, so a run can be wrapped up without the mini-game. It is a *worse*
+deal than flying it, never a shortcut past a hard landing:
+
+- `DockingSystem.request_auto_berth()`, offered from the DOCK page footer and the MARKET panel while
+  an approach is live. Refused on `FINAL` — once you are over the pad it is your landing.
+- Costs a **handling fee** (credits, scaled by the berth's faction) and a **standing hit** of
+  `REP_AUTO_BERTH`, against the `REP_PER_LANDING * quality` a flown arrival *earns*. Flying it well
+  is the profitable path; the fee is the price of skipping it.
+- Books the berth through the same `MarketSystem.complete_dock(faction)` as a touchdown, with
+  `docking["quality"] = 0.0` and an `auto` flag, so there is still exactly one door into `DOCKED`.
+
+### Piloted departure (decision 3)
+
+`DOCK_STATES` gains `DEPART_HOLD` and `DEPARTING`, and the pattern runs outbound in reverse:
+
+- Undocking puts the ship on the pad in `DEPART_HOLD` (run phase back to `APPROACH`) awaiting a
+  departure clearance, which ATC sequences around the same traffic that gates an arrival.
+- `DEPARTING` flies the lane in reverse — DELTA, CHARLIE, BRAVO, ALPHA — under the same corridor and
+  speed rules `_check_corridor` / `_update_speed` already enforce.
+- **The gear must stay down until DELTA is behind you** (a leg is still in the bay); stowing it early
+  is a violation, and it must be stowed before the jump.
+- Departure violations are **reprimands, not go-arounds** — a standing cost and an urgent ATC call,
+  not a forced return to the pad, which would trap a bad pilot at the station. Collisions still cost
+  hull through `CollisionSystem` as everywhere else.
+- Past ALPHA outbound, ATC releases the ship and `MarketSystem` runs the existing jump back to the
+  claim.
+
+This keeps one lane definition, one corridor test and one speed test serving both directions; only
+the gate ordering and the failure consequence differ.
 
 ## Verification
 
-No Godot binary in this environment, so verification is: `godot --headless res://tools/DockSmoke.tscn`
+Godot 4.7 and Blender 4.5 are both available here, so all of this is verifiable:
+`godot --headless res://tools/DockSmoke.tscn`
 plus the existing smoke scenes (`Phase4Smoke`, `DriftSmoke`, `MfdNavSmoke`, `CollisionSmoke`) to
 confirm the `APPROACH` phase and gear interlock didn't disturb the salvage loop; then an interactive
 run — dock from the MARKET page, fly the pattern, and check the DOCK page, HUD markers and switch

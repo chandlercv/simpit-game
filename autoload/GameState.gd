@@ -130,8 +130,10 @@ const FLIGHT_PHASES: Array[String] = ["ON_SITE", "APPROACH"]
 ##   CLEARED  — cleared inbound, flying the lane's gates in order
 ##   FINAL    — over the pad, cleared to land; descend onto it
 ##   LANDED   — on the pad, berthing handed back to MarketSystem
+##   DEPART_HOLD — on the pad after undocking, waiting on a departure clearance
+##   DEPARTING   — cleared out, flying the same lane in reverse to leave
 const DOCK_STATES: Array[String] = ["INACTIVE", "INBOUND", "HOLD", "CLEARED",
-		"FINAL", "LANDED"]
+		"FINAL", "LANDED", "DEPART_HOLD", "DEPARTING"]
 
 ## Seconds the landing gear takes to travel between stowed and locked down. It
 ## is deliberately slow enough that "GEAR DOWN BY THE FINAL GATE" is a call you

@@ -113,6 +113,19 @@ const DAMAGE_PER_RATE := 0.06
 const REP_PER_LANDING := 0.04
 const REP_PER_WAVE_OFF := 0.02
 
+## Auto-berth: ATC flies you in on request, so a run can be wrapped up without
+## the pattern. Deliberately the worse deal — a flat handling fee and a standing
+## hit, against the standing a flown arrival earns — so it's an out, not a
+## shortcut past a landing you don't fancy.
+const AUTO_BERTH_FEE := 300
+const REP_AUTO_BERTH := 0.03
+
+## Departure: a broken rule on the way out is a reprimand rather than a
+## go-around (sending a departing ship back to the pad would just trap a bad
+## pilot at the station), so it costs standing on a cooldown instead.
+const REP_PER_REPRIMAND := 0.015
+const REPRIMAND_COOLDOWN := 6.0
+
 ## Hull wear per second of flying over the gear's rated speed with it extended.
 const GEAR_STRESS_PER_S := 0.02
 
@@ -161,6 +174,8 @@ var _leg_from := Vector3.ZERO
 ## Traffic already called out as advisory this pass, so "TRAFFIC — TRAFFIC" is a
 ## call and not a siren.
 var _advised: Dictionary = {}
+## Seconds left before another outbound reprimand can cost standing again.
+var _reprimand_cool := 0.0
 
 
 func _ready() -> void:
@@ -220,16 +235,35 @@ func is_active() -> bool:
 	return GameState.docking_state != "INACTIVE"
 
 
+## Flying the pattern OUTBOUND (undocking) rather than inbound. The lane, the
+## corridors and the speed rules are the same either way — what differs is the
+## gate order and what a broken rule costs.
+func _outbound() -> bool:
+	return GameState.docking_state == "DEPART_HOLD" \
+			or GameState.docking_state == "DEPARTING"
+
+
+## True while the ship is still climbing out of the berth bay (the pad→DELTA
+## leg), which is where the gear has to stay down and the tight limits apply.
+func _in_berth_bay() -> bool:
+	return GameState.docking_state == "DEPARTING" \
+			and int(GameState.docking.get("gate", 0)) >= GATES.size() - 1
+
+
 ## Speed ATC is holding you to right now. A hold instruction overrides the
 ## per-state limit — "hold position" means stop, wherever you happen to be.
 func speed_limit() -> float:
-	if GameState.docking.get("hold", false) or GameState.docking_state == "HOLD":
+	if GameState.docking.get("hold", false) or GameState.docking_state == "HOLD" \
+			or GameState.docking_state == "DEPART_HOLD":
 		return HOLD_SPEED
 	match GameState.docking_state:
 		"CLEARED":
 			return SPEED_CLEARED
 		"FINAL":
 			return SPEED_FINAL
+		"DEPARTING":
+			# Same tight limit on the way up out of the bay as on the way down.
+			return SPEED_FINAL if _in_berth_bay() else SPEED_CLEARED
 	return SPEED_INBOUND
 
 
@@ -283,8 +317,11 @@ func status() -> Dictionary:
 		"speed": speed,
 		"speed_limit": limit,
 		"speed_ok": speed <= limit,
-		"hold": GameState.docking.get("hold", false) or GameState.docking_state == "HOLD",
-		"cleared": GameState.docking_state == "CLEARED" or final_leg,
+		"hold": GameState.docking.get("hold", false) or GameState.docking_state == "HOLD"
+				or GameState.docking_state == "DEPART_HOLD",
+		"cleared": GameState.docking_state == "CLEARED" or final_leg
+				or GameState.docking_state == "DEPARTING",
+		"outbound": _outbound(),
 		"gear_ok": GameState.gear_locked_down(),
 		"gear_position": GameState.gear_position,
 		"hatch_ok": not GameState.cargo_hatch_open,
@@ -365,16 +402,59 @@ func begin_approach(faction_index: int) -> void:
 				GameState.docking["berth"]])
 
 
+## MarketSystem, on undocking: lift the ship off the berth into the departure
+## pattern. The jump home doesn't happen until the lane has been flown outbound
+## and ATC releases the ship (see _release_outbound).
+func begin_departure(faction_index: int) -> void:
+	if faction_index < 0 or faction_index >= GameState.market_factions.size():
+		return
+	var faction: String = GameState.market_factions[faction_index]
+	_pattern_time = 0.0
+	_hold_time = 0.0
+	_over_speed = 0.0
+	_off_lane = 0.0
+	_reprimand_cool = 0.0
+	_advised.clear()
+	GameState.docking = {
+		"faction": faction_index,
+		"station": "%s CONTROL" % faction,
+		"berth": _rng.randi_range(1, 9),
+		# Outbound the lane is flown backwards, so the first marker to make is the
+		# last one of an arrival.
+		"gate": GATES.size() - 1,
+		"gates": [],
+		"pad": pad_world(),
+		"hold": false,
+		"atc": {},
+		"wave_offs": 0,
+		"quality": 0.0,
+		"outbound": true,
+	}
+	_publish_gates()
+	_spawn_traffic()
+	_place_ship_on_pad()
+	_leg_from = pad_world()
+	_set_state("DEPART_HOLD")
+	_atc("HOLD ON THE PAD — REQUEST DEPARTURE WHEN READY",
+			"%s, %s. GEAR STAYS DOWN UNTIL YOU ARE CLEAR OF MARKER %s." % [
+				GameState.ship_def.display_name, GameState.docking["station"],
+				GATES[GATES.size() - 1]["name"]])
+
+
 ## Mapped/touch intent: ask ATC for the clearance to run the lane. Refused while
 ## you're still moving at the marker or while traffic fouls the lane — the
 ## refusal names which, so a held clearance is never a mystery.
 func request_clearance() -> void:
 	if not is_active():
 		return
-	if GameState.docking_state == "CLEARED" or GameState.docking_state == "FINAL":
+	if GameState.docking_state == "CLEARED" or GameState.docking_state == "FINAL" \
+			or GameState.docking_state == "DEPARTING":
 		# Already cleared: the same control reads back the standing instruction,
 		# which is what an acknowledge button is for.
 		_repeat_instruction()
+		return
+	if GameState.docking_state == "DEPART_HOLD":
+		_request_departure()
 		return
 	if GameState.docking_state != "HOLD":
 		GameState.post_comms("ATC", "%s — CONTINUE TO MARKER ALPHA AND HOLD"
@@ -397,10 +477,38 @@ func request_clearance() -> void:
 	_clear_inbound()
 
 
+## Mapped/touch intent: have ATC fly you in instead. Costs a handling fee and a
+## slice of standing — the way out when you don't want the pattern, never a way
+## to dodge a landing you've already committed to.
+func request_auto_berth() -> void:
+	if not is_active() or _outbound():
+		return
+	if GameState.docking_state == "FINAL":
+		_atc("AUTO-BERTH REFUSED — YOU ARE ON FINAL",
+				"TOO LATE TO HAND IT OVER. LAND IT OR GO AROUND.", true)
+		return
+	if GameState.credits < AUTO_BERTH_FEE:
+		_atc("AUTO-BERTH REFUSED — INSUFFICIENT FUNDS",
+				"HANDLING IS %d CR AND YOU ARE SHORT. FLY IT IN." % AUTO_BERTH_FEE, true)
+		return
+	var faction: int = GameState.docking["faction"]
+	var berth: int = GameState.docking["berth"]
+	GameState.credits -= AUTO_BERTH_FEE
+	GameState.credits_changed.emit(GameState.credits)
+	_adjust_reputation(-REP_AUTO_BERTH)
+	GameState.post_comms("ATC", "AUTO-BERTH ACCEPTED — HANDS OFF, BERTH %d. %d CR HANDLING." % [
+		berth, AUTO_BERTH_FEE])
+	# Booked through the same door a touchdown uses, with nothing scored: there is
+	# exactly one way into DOCKED.
+	_set_state("LANDED")
+	end_approach()
+	MarketSystem.complete_dock(faction)
+
+
 ## Mapped/touch intent (and the MARKET depart control while on approach): give up
 ## on the berth and go back to the claim.
 func abort_approach() -> void:
-	if not is_active():
+	if not is_active() or _outbound():
 		return
 	GameState.post_comms("ATC", "%s CANCELLING THE APPROACH — LEAVING THE PATTERN"
 			% GameState.ship_def.display_name)
@@ -427,6 +535,7 @@ func _process(delta: float) -> void:
 	if not is_active():
 		return
 	_pattern_time += delta
+	_reprimand_cool = maxf(_reprimand_cool - delta, 0.0)
 	_update_traffic()
 	_update_separation()
 	if not is_active():
@@ -444,6 +553,10 @@ func _process(delta: float) -> void:
 			_update_cleared(delta)
 		"FINAL":
 			_update_final(delta)
+		"DEPART_HOLD":
+			_update_depart_hold(delta)
+		"DEPARTING":
+			_update_departing(delta)
 
 
 ## Flying faster than the gear is rated for, with it off the stops, wears the
@@ -488,7 +601,7 @@ func _update_separation() -> void:
 			_advised.erase(id)
 			continue
 		if gap <= SEPARATION_MARGIN:
-			_wave_off("LOSS OF SEPARATION WITH %s" % entry["name"])
+			_violation("LOSS OF SEPARATION WITH %s" % entry["name"])
 			return
 		if not _advised.has(id):
 			_advised[id] = true
@@ -500,7 +613,8 @@ func _update_separation() -> void:
 ## and releases you once it's clear. Only bites once you're actually running the
 ## lane — at the marker you're holding anyway.
 func _update_atc_hold() -> void:
-	if GameState.docking_state != "CLEARED" and GameState.docking_state != "FINAL":
+	if GameState.docking_state != "CLEARED" and GameState.docking_state != "FINAL" \
+			and GameState.docking_state != "DEPARTING":
 		return
 	var blocker := _lane_conflict()
 	var holding: bool = GameState.docking.get("hold", false)
@@ -527,7 +641,10 @@ func _update_speed(delta: float) -> void:
 				"YOU ARE %.0f M/S OVER THE PATTERN LIMIT." % (speed - limit), true)
 	_over_speed += delta
 	if _over_speed >= SPEED_GRACE:
-		_wave_off("EXCESSIVE SPEED IN THE PATTERN")
+		# Outbound this is a telling-off rather than a go-around, so the timer
+		# restarts instead of latching — stay fast and you'll hear about it again.
+		_over_speed = 0.0
+		_violation("EXCESSIVE SPEED IN THE PATTERN")
 
 
 ## Free flight out to the hold marker — no corridor, just get to ALPHA and stop.
@@ -631,6 +748,102 @@ func _update_final(delta: float) -> void:
 	_touchdown(ship, xform, from_pad - up * altitude, up)
 
 
+## Sat on the pad after undocking, waiting for a slot. Same sequencing as an
+## arrival: serve the delay, and don't go anywhere while traffic is working the
+## lane you're about to fly up.
+func _update_depart_hold(delta: float) -> void:
+	var was_ready := _hold_time >= CLEARANCE_MIN_HOLD
+	_hold_time += delta
+	if not was_ready and _hold_time >= CLEARANCE_MIN_HOLD and _lane_conflict().is_empty():
+		_clear_outbound()
+
+
+## The pilot asking for the departure slot rather than waiting to be called.
+func _request_departure() -> void:
+	var blocker := _lane_conflict()
+	if not blocker.is_empty():
+		_atc("HOLD ON THE PAD — TRAFFIC IN THE LANE",
+				"%s IS WORKING THE LANE ABOVE YOU. STAND BY." % blocker["name"], true)
+		return
+	if _hold_time < CLEARANCE_MIN_HOLD:
+		_atc("STAND BY — SEQUENCING", "WE WILL CALL YOUR DEPARTURE.")
+		return
+	_clear_outbound()
+
+
+## Grant the departure slot.
+func _clear_outbound() -> void:
+	GameState.docking["hold"] = false
+	_leg_from = pad_world()
+	_over_speed = 0.0
+	_off_lane = 0.0
+	_set_state("DEPARTING")
+	_atc("CLEARED FOR DEPARTURE — MARKER %s FIRST" % GATES[GATES.size() - 1]["name"],
+			"LIFT OFF THE PAD AND RUN THE LANE OUTBOUND: %s. UNDER %.0f M/S IN THE BAY."
+					% [_gate_names_outbound(), SPEED_FINAL])
+
+
+## Flying the lane the other way. Same corridor and speed discipline, gates in
+## reverse, and two rules of its own: the gear stays down until the berth bay is
+## behind you, and it has to be stowed before ATC will release you for the jump.
+func _update_departing(delta: float) -> void:
+	var origin: Vector3 = (GameState.local_ship()["transform"] as Transform3D).origin
+	# A leg is still inside the bay's walls until DELTA is behind you, so stowing
+	# early is a real mistake rather than a formality.
+	if _in_berth_bay() and not GameState.gear_locked_down():
+		_violation("GEAR RAISED INSIDE THE BERTH BAY")
+	if not _check_corridor(origin, delta):
+		return
+	# Already past the last marker and only the gear is holding the release: keep
+	# asking every frame. The final leg is zero-length by then, so the gate logic
+	# below would never fire again and the ship would be stuck outside the pattern.
+	if bool(GameState.docking.get("release_held", false)):
+		_release_outbound()
+		return
+	var index: int = GameState.docking["gate"]
+	var target: Vector3 = gate_world(index)
+	var leg: Vector3 = target - _leg_from
+	var ahead: float = (origin - target).dot(leg.normalized()) if leg.length() > 0.001 else 0.0
+	var through := origin.distance_to(target) <= float(GATES[index]["radius"])
+	if not through and ahead <= 0.0:
+		return
+	if not through:
+		# Outbound a missed marker is still a miss, but you're leaving — it costs
+		# standing rather than turning you round.
+		_reprimand("MARKER %s MISSED ON DEPARTURE" % GATES[index]["name"])
+	_leg_from = target
+	if index > HOLD_GATE:
+		GameState.docking["gate"] = index - 1
+		var next: Dictionary = GATES[index - 1]
+		# Clearing the last gate is also clearing the bay's walls, which is the
+		# moment the gear stops being required and starts being drag.
+		var detail := "MAINTAIN %.0f M/S." % SPEED_CLEARED
+		if index == GATES.size() - 1:
+			detail = "CLEAR OF THE BAY — STOW YOUR GEAR AND MAINTAIN %.0f M/S." % SPEED_CLEARED
+		_atc("%s PASSED — NEXT MARKER %s" % [GATES[index]["name"], next["name"]], detail)
+		return
+	_release_outbound()
+
+
+## Past the hold marker and out of the pattern — provided the gear is actually
+## stowed. Holding the release on the gear is what makes the pilot cycle it on
+## the way out instead of dragging it home.
+func _release_outbound() -> void:
+	if not GameState.gear_stowed():
+		# Latch it so the check keeps running, and only call it once — this is a
+		# standing instruction, not a klaxon.
+		if not bool(GameState.docking.get("release_held", false)):
+			GameState.docking["release_held"] = true
+			_atc("STOW YOUR GEAR BEFORE THE JUMP",
+					"YOU ARE CLEAR OF THE PATTERN BUT STILL HANGING LEGS.", true)
+		return
+	GameState.docking["release_held"] = false
+	GameState.post_comms("ATC", "%s CLEAR OF THE PATTERN — GOOD HUNTING."
+			% GameState.ship_def.display_name)
+	end_approach()
+	MarketSystem.complete_undock()
+
+
 ## Contact. Everything the legs care about is judged in this one moment: gear,
 ## sink rate, where on the deck you put it, how level, and how much sideways you
 ## carried into it. Anything the legs can't take bounces the ship back into the
@@ -716,6 +929,30 @@ func _clear_inbound() -> void:
 				_gate_names(), SPEED_CLEARED, GATES[GATES.size() - 1]["name"]])
 
 
+## A pattern rule was broken. Which consequence that carries depends on the
+## direction: inbound you get sent around, outbound you get told off. Every
+## shared rule (speed, corridor, separation, contact) reports through here so
+## the two directions can't drift apart.
+func _violation(reason: String) -> void:
+	if _outbound():
+		_reprimand(reason)
+	else:
+		_wave_off(reason)
+
+
+## Outbound consequence: an urgent call and, at most once per cooldown, a bite
+## out of your standing with the station's faction. No forced return — you are
+## leaving, and stranding a clumsy pilot on the pad isn't a game.
+func _reprimand(reason: String) -> void:
+	_atc("%s — CORRECT IT" % reason,
+			"%s IS LOGGING THIS DEPARTURE." % GameState.docking.get("station", "CONTROL"),
+			true)
+	if _reprimand_cool > 0.0:
+		return
+	_reprimand_cool = REPRIMAND_COOLDOWN
+	_adjust_reputation(-REP_PER_REPRIMAND)
+
+
 ## Sent around: back to the inbound leg and the hold, with the clearance
 ## withdrawn. Repeat offenders lose a little standing with the berth's faction —
 ## a go-around is free once, expensive as a habit.
@@ -744,7 +981,7 @@ func _wave_off(reason: String) -> void:
 func _on_hull_impact(section: String, _amount: float) -> void:
 	if not is_active() or GameState.run_phase != "APPROACH":
 		return
-	_wave_off("CONTACT — %s SECTION" % section)
+	_violation("CONTACT — %s SECTION" % section)
 
 
 ## Publish a standing instruction: one line of what to do, one of why, held in
@@ -782,6 +1019,13 @@ func _gate_names() -> String:
 	return " ".join(names)
 
 
+func _gate_names_outbound() -> String:
+	var names: Array[String] = []
+	for i in range(GATES.size() - 1, HOLD_GATE - 1, -1):
+		names.append(String(GATES[i]["name"]))
+	return " ".join(names)
+
+
 ## --- Lane geometry ----------------------------------------------------------
 
 
@@ -805,6 +1049,13 @@ func _lane_limit() -> float:
 	if GameState.docking_state == "FINAL":
 		return FINAL_LANE
 	var index: int = GameState.docking.get("gate", HOLD_GATE)
+	if GameState.docking_state == "DEPARTING":
+		# Outbound legs are the inbound ones flown backwards, so the corridor is
+		# the one belonging to the gate BEHIND you — and the climb out of the bay
+		# is the descent onto the pad in reverse.
+		if index >= GATES.size() - 1:
+			return FINAL_LANE
+		return float(GATES[index + 1]["lane"])
 	if index <= HOLD_GATE or index >= GATES.size():
 		return float(GATES[HOLD_GATE]["lane"])
 	return float(GATES[index]["lane"])
@@ -815,8 +1066,10 @@ func _lane_limit() -> float:
 func _lane_deviation(origin: Vector3) -> float:
 	if GameState.docking_state == "FINAL":
 		return _distance_to_segment(origin, gate_world(GATES.size() - 1), pad_world())
-	if GameState.docking_state != "CLEARED":
+	if GameState.docking_state != "CLEARED" and GameState.docking_state != "DEPARTING":
 		return 0.0
+	# Both directions fly _leg_from → the gate they're making, so this measures
+	# either without caring which way round the lane is being run.
 	var index: int = GameState.docking.get("gate", HOLD_GATE)
 	return _distance_to_segment(origin, _leg_from, gate_world(index))
 
@@ -835,8 +1088,11 @@ func _check_corridor(origin: Vector3, delta: float) -> bool:
 	_off_lane += delta
 	if _off_lane < LANE_GRACE:
 		return true
-	_wave_off("DEPARTED THE LANE CORRIDOR")
-	return false
+	_off_lane = 0.0
+	_violation("DEPARTED THE LANE CORRIDOR")
+	# A wave-off has torn the approach down and the caller must stop; a reprimand
+	# hasn't, so an outbound ship carries on being told off until it corrects.
+	return _outbound()
 
 
 ## Traffic fouling the lane ahead of the ship: measured against the remaining
@@ -867,6 +1123,14 @@ func _remaining_legs() -> Array:
 	var legs: Array = []
 	if GameState.docking_state == "FINAL":
 		legs.append([gate_world(GATES.size() - 1), pad_world()])
+		return legs
+	if _outbound():
+		# Everything still between the ship and the exit, counting down.
+		var from_out: Vector3 = _leg_from if GameState.docking_state == "DEPARTING" \
+				else pad_world()
+		for i in range(int(GameState.docking.get("gate", GATES.size() - 1)), HOLD_GATE - 1, -1):
+			legs.append([from_out, gate_world(i)])
+			from_out = gate_world(i)
 		return legs
 	var start: int = maxi(int(GameState.docking.get("gate", HOLD_GATE)), HOLD_GATE + 1)
 	var from: Vector3 = gate_world(start - 1)
@@ -983,6 +1247,20 @@ func _place_ship_at_entry() -> void:
 		basis = Basis.looking_at(facing.normalized(), pad_up())
 	ship["transform"] = Transform3D(basis, origin)
 	ship["velocity"] = Vector3.ZERO
+
+
+## Undocking: the ship is standing on the pad on its legs, parked on the lane's
+## heading, with the gear already down and locked (it has been holding the ship
+## up all the while it was berthed).
+func _place_ship_on_pad() -> void:
+	var ship: Dictionary = GameState.local_ship()
+	var up := pad_up()
+	ship["transform"] = Transform3D(Basis.looking_at(-pad_forward(), up),
+			pad_world() + up * GEAR_HEIGHT)
+	ship["velocity"] = Vector3.ZERO
+	GameState.gear_down = true
+	GameState.gear_position = 1.0
+	GameState.landing_gear_changed.emit(true)
 
 
 func _damage_hull(section: String, amount: float) -> void:

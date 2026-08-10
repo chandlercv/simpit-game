@@ -217,6 +217,10 @@ func _run() -> void:
 	var left_id := DriftSystem.spawn_piece(left_member, 1.0)
 	_check(DriftSystem.is_collecting(), "collection is live while on site")
 	MarketSystem.request_dock(0)
+	# The berth is flown for now (DockSmoke covers the pattern); this test is
+	# about what happens to an abandoned piece, so it buys its way in.
+	await _wait_until(func() -> bool: return GameState.run_phase == "APPROACH", 20.0)
+	DockingSystem.request_auto_berth()
 	var docked := await _wait_until(
 			func() -> bool: return GameState.run_phase == "DOCKED", 20.0)
 	_check(docked, "docking with a piece adrift completes")
@@ -230,6 +234,11 @@ func _run() -> void:
 			.distance_to(frozen_at) < 0.001,
 			"the abandoned piece is frozen off site rather than drifting on")
 	MarketSystem.request_undock()
+	# Likewise the departure: assert the handover into the pattern, then take the
+	# release ATC gives a ship that has flown the lane out.
+	await _wait_until(func() -> bool: return GameState.docking_state == "DEPART_HOLD", 20.0)
+	DockingSystem.end_approach()
+	MarketSystem.complete_undock()
 	var back := await _wait_until(
 			func() -> bool: return GameState.run_phase == "ON_SITE", 20.0)
 	_check(back, "the jump back to the claim completes")
