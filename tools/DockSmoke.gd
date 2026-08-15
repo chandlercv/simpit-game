@@ -294,6 +294,23 @@ func _run() -> void:
 	# as a berth that cannot be entered.
 	_check(String(DockingSystem.status()["atc"].get("text", "")).contains("CONTACT"),
 			"a contact takes the instrument while it is current")
+	# Per BODY, not per ship: brushing the floor and then clipping a wall inside
+	# the same grace window is two things that happened, and a ship-wide gate
+	# reported only the first — the rest were silent, which is precisely how a
+	# knock becomes "something hit me and I don't know what".
+	var second_comms := GameState.comms.size()
+	GameState.ship_contact.emit("STATION BAYWALL+1+0",
+			CollisionSystem.IMPACT_SPEED_FLOOR * 0.5)
+	_check(_has_comms_since(second_comms, "BAYWALL+1+0"),
+			"a different body touched in the same window is reported too")
+	# ...while the same body still being scraped is not repeated every frame.
+	var repeat_comms := GameState.comms.size()
+	for _i in 5:
+		GameState.ship_contact.emit("STATION BAYWALL+1+0",
+				CollisionSystem.IMPACT_SPEED_FLOOR * 0.5)
+		await get_tree().process_frame
+	_check(not _has_comms_since(repeat_comms, "BAYWALL+1+0"),
+			"...but the same body scraping on is not re-reported every frame")
 	var knocked := await _hold(_leg_point(0.5) + Vector3(0, 60, 0), Vector3.ZERO,
 			func() -> bool: return int(GameState.docking["wave_offs"]) > knock_waves,
 			DockingSystem.LANE_GRACE * 2.0)

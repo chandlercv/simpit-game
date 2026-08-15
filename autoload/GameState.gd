@@ -120,6 +120,12 @@ const CHANNEL_HIGH_OVERRIDE: Dictionary = {"LIFE": 1.0}
 
 const HULL_SECTIONS: Array[String] = ["BOW", "PORT", "STBD", "CORE", "AFT", "DRIVE"]
 
+## Every comms line is mirrored here as it is posted (see post_comms), so a run
+## can be read back from disk rather than photographed off the screen. Its real
+## location is printed at boot; on Windows it lands under
+## %APPDATA%\Godot\app_userdata\<project>\.
+const COMMS_LOG_PATH := "user://comms_log.txt"
+
 ## Run phases: ON_SITE (at the salvage claim), TRANSIT (abstract burn to/from
 ## a station), APPROACH (hand-flying the station's docking pattern — the
 ## docking/landing mini-game, DockingSystem), DOCKED (berthed at a faction
@@ -326,6 +332,8 @@ var panel_switches: Dictionary = {}
 
 ## Comms/mission log entries: { "tick": int, "source": String, "text": String }.
 var comms: Array[Dictionary] = []
+## Open handle for COMMS_LOG_PATH; null if the file could not be opened.
+var _comms_log: FileAccess
 
 ## Shared tick counter, displayed on every window (kept from Phase 1 as the
 ## cheapest way to spot a stalled window over spacedesk).
@@ -353,6 +361,7 @@ var _power_target: Dictionary = {}
 
 
 func _ready() -> void:
+	_open_comms_log()
 	ships[LOCAL_PEER_ID] = {
 		"transform": Transform3D.IDENTITY,
 		"velocity": Vector3.ZERO,
@@ -762,6 +771,37 @@ func post_comms(source: String, text: String) -> void:
 	var entry := {"tick": tick, "source": source, "text": text}
 	comms.append(entry)
 	comms_posted.emit(entry)
+	_write_comms_log(entry)
+
+
+## Open (and truncate) this session's comms log, and print where it landed so
+## the path never has to be hunted for.
+func _open_comms_log() -> void:
+	_comms_log = FileAccess.open(COMMS_LOG_PATH, FileAccess.WRITE)
+	if _comms_log == null:
+		push_warning("GameState: could not open %s for writing" % COMMS_LOG_PATH)
+		return
+	_comms_log.store_line("# Salvager session log — %s" %
+			Time.get_datetime_string_from_system())
+	_comms_log.flush()
+	print("comms log: ", ProjectSettings.globalize_path(COMMS_LOG_PATH))
+
+
+## Mirror every comms line to a file so a session can be read afterwards instead
+## of photographed. The in-game log scrolls and holds a limited history, and the
+## things worth reading back — what was hit, where, and in what order — are
+## exactly the things that scroll away while you are busy flying.
+##
+## Truncated at each launch: a log you have to scroll to the end of to find the
+## current run is barely better than a screenshot.
+func _write_comms_log(entry: Dictionary) -> void:
+	if _comms_log == null:
+		return
+	_comms_log.store_line("[T+%08.1f] %-7s %s" % [
+		float(entry["tick"]) / TICK_RATE_HZ, entry["source"], entry["text"]])
+	# Flushed per line: the runs worth reading back are the ones that ended in a
+	# crash or a force-quit, which is precisely when buffered output is lost.
+	_comms_log.flush()
 
 
 func _process(delta: float) -> void:

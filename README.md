@@ -567,6 +567,17 @@ re-opens the chooser, `F5` re-detects monitors). The `hid-gd` GDExtension is
 required for the switch panel and the X55 POV glance; without it those inputs are
 disabled but the rest still works.
 
+**Session log.** Every comms line — ATC calls, collisions, ops chatter — is
+mirrored to `user://comms_log.txt` as it is posted, so a run can be read back
+instead of photographed off the screen. The real path is printed at boot
+(`comms log: …`); on Windows it lands under
+`%APPDATA%\Godotpp_userdata\Salvager\`. It is truncated at each launch, so
+the file is always the current session. Contact calls carry the ship's altitude
+and offset from the pad, so a knock in the berth says exactly where it happened.
+The first line of the docking system's boot message also carries a **build**
+fingerprint of `DockingSystem.gd`, which is the quickest way to tell whether a
+running game predates a change.
+
 ### Handy tool scenes (`tools/`)
 
 | Scene | Purpose |

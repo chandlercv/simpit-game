@@ -190,6 +190,12 @@ const CONTACT_GRACE := 5.0
 ## invoice) holds the instrument before it falls back to the standing clearance.
 const CALL_HOLD := 6.0
 
+## Seconds clear of a body before touching it again counts as a NEW contact
+## rather than the same one continuing. Contact is tracked per body: brushing
+## the floor and then clipping a wall is two things that happened to you, and a
+## single ship-wide gate reported only the first and swallowed the rest.
+const CONTACT_EPISODE_GAP := 1.0
+
 ## Hull wear per second of flying over the gear's rated speed with it extended.
 const GEAR_STRESS_PER_S := 0.02
 
@@ -244,6 +250,11 @@ var _reprimand_cool := 0.0
 var _damages_cool := 0.0
 ## Seconds of post-contact amnesty left on the sustained rules.
 var _contact_grace := 0.0
+## Per body name: {"seen": last frame it was touched, "said": last time it was
+## called out}, both in _pattern_time. Keyed by body so nothing gets lost behind
+## another body's call, and timestamped so a sustained scrape keeps saying so
+## rather than going quiet while it is still happening.
+var _touching: Dictionary = {}
 
 
 ## Fix the traffic phasing so a run is reproducible. Traffic spawns with a random
@@ -470,6 +481,7 @@ func begin_approach(faction_index: int) -> void:
 	_advised.clear()
 	_damages_cool = 0.0
 	_contact_grace = 0.0
+	_touching.clear()
 	GameState.docking = {
 		"faction": faction_index,
 		"station": "%s CONTROL" % faction,
@@ -508,6 +520,7 @@ func begin_departure(faction_index: int) -> void:
 	_advised.clear()
 	_damages_cool = 0.0
 	_contact_grace = 0.0
+	_touching.clear()
 	GameState.docking = {
 		"faction": faction_index,
 		"station": "%s CONTROL" % faction,
@@ -1106,6 +1119,7 @@ func _wave_off(reason: String) -> void:
 	_advised.clear()
 	_damages_cool = 0.0
 	_contact_grace = 0.0
+	_touching.clear()
 	_leg_from = gate_world(HOLD_GATE)
 	_set_state("INBOUND")
 	_atc("GO AROUND — %s" % reason,
@@ -1141,21 +1155,35 @@ func _on_hull_impact(section: String, amount: float) -> void:
 func _on_ship_contact(body_name: String, closing: float) -> void:
 	if not is_active() or GameState.run_phase != "APPROACH":
 		return
-	var fresh := _contact_grace <= 0.0
 	_contact_grace = CONTACT_GRACE
 	# Reset what's already accumulated: the deviation that put the ship here is
 	# the impact's doing, not the pilot's.
 	_off_lane = 0.0
 	_over_speed = 0.0
-	if fresh and closing < CollisionSystem.IMPACT_SPEED_FLOOR:
-		# Too soft to damage or bill, so nothing else would ever mention it.
-		# Only claim the clearance stands when there IS one — saying it to a ship
-		# that was waved off ten seconds ago is worse than saying nothing.
-		var standing := "STEADY UP AND CONTINUE — YOUR CLEARANCE STANDS."
-		if not bool(status().get("cleared", false)):
-			standing = "STEADY UP. YOU ARE NOT CLEARED — RETURN TO MARKER %s." \
-					% GATES[HOLD_GATE]["name"]
-		_call("CONTACT — %s %s" % [body_name, _where()], standing, true)
+
+	var record: Dictionary = _touching.get(body_name,
+			{"seen": -999.0, "said": -999.0})
+	# A new touch of this body, or the same one still going on after the last
+	# call has fallen off the instrument. Repeating matters: a scrape that goes
+	# quiet while the ship is still against the wall is how a pilot ends up
+	# drifting into something they were never told they were touching.
+	var new_episode: bool = _pattern_time - float(record["seen"]) > CONTACT_EPISODE_GAP
+	var gone_quiet: bool = _pattern_time - float(record["said"]) >= CALL_HOLD
+	record["seen"] = _pattern_time
+	if new_episode or gone_quiet:
+		record["said"] = _pattern_time
+		# A damaging hit is announced by _bill_damages with its cost, so this
+		# only speaks for the gentle ones nothing else would ever mention.
+		if closing < CollisionSystem.IMPACT_SPEED_FLOOR:
+			# Only claim the clearance stands when there IS one — saying it to a
+			# ship that was waved off ten seconds ago is worse than saying nothing.
+			var standing := "STEADY UP AND CONTINUE — YOUR CLEARANCE STANDS."
+			if not bool(status().get("cleared", false)):
+				standing = "STEADY UP. YOU ARE NOT CLEARED — RETURN TO MARKER %s." \
+						% GATES[HOLD_GATE]["name"]
+			var again := "STILL " if not new_episode else ""
+			_call("%sCONTACT — %s %s" % [again, body_name, _where()], standing, true)
+	_touching[body_name] = record
 
 
 ## Invoice for hitting the station. Charged against credits, with anything the
