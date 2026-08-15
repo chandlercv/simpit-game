@@ -146,6 +146,42 @@ func _run() -> void:
 	_check(int(GameState.docking["wave_offs"]) > before_gear,
 			"reaching the final gate with the gear up is a go-around")
 
+	# --- The corner into the descent has to be flyable. DELTA's ring is wider
+	# than the tube below it, and you arrive there carrying horizontal speed you
+	# cannot shed instantly, so a legal crossing near the ring's edge must not be
+	# an instant lane bust. ---
+	await _fly_to_cleared()
+	GameState.set_landing_gear(true)
+	await _wait_until(GameState.gear_locked_down, 8.0)
+	await _run_gates_to_last()
+	var last: int = DockingSystem.GATES.size() - 1
+	# Just inside the ring: a crossing ATC accepts as flying the marker.
+	var edge: float = float(DockingSystem.GATES[last]["radius"]) - 0.2
+	var sideways: Vector3 = DockingSystem.station_transform().basis.x.normalized()
+	_teleport(DockingSystem.gate_world(last) + sideways * edge)
+	await _wait(0.3)
+	_check(GameState.docking_state == "FINAL",
+			"crossing DELTA near the edge of its ring still starts the descent")
+	var corner_waves: int = GameState.docking.get("wave_offs", 0)
+	# Hold that legal-but-offset position for longer than the corridor grace.
+	var held_offset := await _hold(
+			DockingSystem.gate_world(last) + sideways * edge, Vector3.ZERO,
+			func() -> bool: return int(GameState.docking.get("wave_offs", 0)) > corner_waves,
+			DockingSystem.LANE_GRACE * 4.0)
+	_check(not held_offset,
+			"...and is not immediately outside the final corridor (%.1f m off, ring is %.1f)"
+					% [edge, float(DockingSystem.GATES[last]["radius"])])
+	# The other half: down between the walls it is still the strict tube. The
+	# funnel opens where there is nothing to hit, and nowhere else.
+	var deep_waves: int = GameState.docking.get("wave_offs", 0)
+	var low: Vector3 = DockingSystem.pad_world() \
+			+ DockingSystem.pad_up() * (DockingSystem.BAY_WALL_HEIGHT * 0.5) \
+			+ sideways * (DockingSystem.FINAL_LANE + 1.5)
+	var deep := await _hold(low, Vector3.ZERO,
+			func() -> bool: return int(GameState.docking.get("wave_offs", 0)) > deep_waves,
+			DockingSystem.LANE_GRACE * 6.0)
+	_check(deep, "...but down between the bay walls the corridor is still the tight tube")
+
 	# --- Contact is billed, not waved off. You have already paid in hull, and
 	# losing a clearance ten metres off the deck for a scrape is out of all
 	# proportion — so the station invoices you and you keep flying. ---
@@ -425,6 +461,14 @@ func _fly_to_cleared() -> void:
 ## Hop the ship through every remaining ring in order.
 func _run_gates() -> void:
 	for i in range(int(GameState.docking.get("gate", 1)), DockingSystem.GATES.size()):
+		_teleport(DockingSystem.gate_world(i))
+		await get_tree().process_frame
+
+
+## Every gate except the last, so a check can control exactly how the final one
+## is crossed.
+func _run_gates_to_last() -> void:
+	for i in range(int(GameState.docking.get("gate", 1)), DockingSystem.GATES.size() - 1):
 		_teleport(DockingSystem.gate_world(i))
 		await get_tree().process_frame
 

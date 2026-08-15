@@ -49,16 +49,29 @@ GATES = [
 ]
 PAD = (-30.0, 0.0, 14.0)
 PAD_RADIUS = 7.0
+# The final descent is a funnel: the strict tube between the bay walls, opening
+# out above them where there is nothing to hit. Mirrors FINAL_LANE /
+# FINAL_LANE_TOP / BAY_WALL_HEIGHT in DockingSystem.gd — and BAY_WALL_HEIGHT is
+# the BAY_HEIGHT this script builds the walls to, which the assert below pins.
 FINAL_LANE = 6.0
+FINAL_LANE_TOP = 10.0
+BAY_WALL_HEIGHT = 8.0
 # Structure must clear the corridor it runs alongside by at least this much, so a
 # pilot flying a legal line never scrapes scenery.
 CLEARANCE_MARGIN = 1.0
 
-# Lane segments as (from, to, corridor_radius). The inbound legs plus the drop
-# onto the pad.
+# Lane segments as (from, to, radius_at_from, radius_at_to); the radius is
+# interpolated along the segment, which is what lets the final leg taper. The
+# inbound legs are parallel-sided, then the drop onto the pad is split at the
+# wall tops: funnel above, tube below.
+_BAY_TOP = (PAD[0], PAD[1] + BAY_WALL_HEIGHT, PAD[2])
 LANE = [
-    (GATES[i][1], GATES[i + 1][1], GATES[i + 1][3]) for i in range(len(GATES) - 1)
-] + [(GATES[-1][1], PAD, FINAL_LANE)]
+    (GATES[i][1], GATES[i + 1][1], GATES[i + 1][3], GATES[i + 1][3])
+    for i in range(len(GATES) - 1)
+] + [
+    (GATES[-1][1], _BAY_TOP, FINAL_LANE_TOP, FINAL_LANE),
+    (_BAY_TOP, PAD, FINAL_LANE, FINAL_LANE),
+]
 
 
 def _sub(a, b):
@@ -69,24 +82,27 @@ def _dot(a, b):
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
-def distance_to_segment(p, a, b) -> float:
-    """Shortest distance from point `p` to segment `ab` — the same test
+def distance_to_segment(p, a, b):
+    """Shortest distance from point `p` to segment `ab`, plus how far along the
+    segment the closest point lies. The distance is the same test
     DockingSystem._distance_to_segment does at runtime, so build-time clearance
     and in-game corridor discipline are measured identically."""
     ab = _sub(b, a)
     len_sq = _dot(ab, ab)
     if len_sq < 1e-6:
-        return math.dist(p, a)
+        return math.dist(p, a), 0.0
     t = max(0.0, min(1.0, _dot(_sub(p, a), ab) / len_sq))
-    return math.dist(p, (a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t))
+    closest = (a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t)
+    return math.dist(p, closest), t
 
 
 def clearance(p, radius: float) -> float:
     """How much room a solid of `radius` centred at `p` leaves inside the tightest
     corridor it is near. Negative means it is poking into the lane."""
     worst = float("inf")
-    for a, b, lane in LANE:
-        worst = min(worst, distance_to_segment(p, a, b) - lane - radius)
+    for a, b, lane_a, lane_b in LANE:
+        dist, t = distance_to_segment(p, a, b)
+        worst = min(worst, dist - (lane_a + (lane_b - lane_a) * t) - radius)
     return worst
 
 
@@ -485,6 +501,12 @@ def export(parts, path: str) -> None:
 
 
 def main() -> None:
+    # The funnel's tight section is defined by where these walls stop, so the two
+    # numbers are one number and must not drift apart.
+    assert BAY_HEIGHT == BAY_WALL_HEIGHT, (
+        "BAY_HEIGHT (%.1f) must match BAY_WALL_HEIGHT / DockingSystem's "
+        "BAY_WALL_HEIGHT (%.1f) — the final corridor tightens exactly where the "
+        "walls begin" % (BAY_HEIGHT, BAY_WALL_HEIGHT))
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
     script_path = os.path.realpath(__file__)

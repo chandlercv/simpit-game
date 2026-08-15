@@ -229,6 +229,10 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
      the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
      you act on early — arriving at DELTA with it up is a go-around, as is an
      open cargo hatch.
+   - **Turn the corner.** The descent corridor is a **funnel**: it is wide where
+     you cross DELTA — you arrive there with horizontal speed and a vertical drop
+     to fly, so the overshoot is part of the manoeuvre — and tightens to 6 m by
+     the time you are down between the bay walls, where there is something to hit.
    - **Land it.** Descend into the berth and put it on the pad: inside the deck
      markings, wings level, under the sink rate the legs will take. The touchdown
      is **scored** — a greaser earns standing with the faction, a hard arrival

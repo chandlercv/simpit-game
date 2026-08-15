@@ -64,9 +64,24 @@ const HOLD_GATE := 0
 const PAD_LOCAL := Vector3(-30, 0, 14)
 ## Deck markings you have to be inside to be ON the pad rather than beside it.
 const PAD_RADIUS := 7.0
-## Corridor radius for the descent from DELTA to the pad — the berth bay's walls
-## sit 9 m out, so this is the "between the walls" gate.
+## The descent from DELTA onto the pad is a FUNNEL, not a tube.
+##
+## Between the bay walls (which stand BAY_WALL_HEIGHT above the deck — the
+## BAY_HEIGHT that tools/build_station.py builds them to) the corridor is the
+## strict FINAL_LANE: the walls sit 9 m out, so this is the "between the walls"
+## gate and it has to stay tight.
+##
+## ABOVE the walls it opens out to FINAL_LANE_TOP, because a constant 6 m tube
+## is not flyable and never was:
+##   * DELTA's ring is 6.5 m, so crossing the marker legally anywhere but dead
+##     centre put you outside the corridor on the very next frame; and
+##   * you arrive at DELTA carrying up to SPEED_CLEARED of HORIZONTAL speed and
+##     the final leg is a vertical drop, so overshooting the descent axis while
+##     you turn the corner is unavoidable, not sloppy flying.
+## There is nothing to hit up there, so that is where the room belongs.
 const FINAL_LANE := 6.0
+const FINAL_LANE_TOP := 10.0
+const BAY_WALL_HEIGHT := 8.0
 ## Where the ship is placed when it arrives from the transit burn: out along the
 ## lane, short of the hold marker, so the first thing you do is fly to ALPHA.
 const ENTRY_LOCAL := Vector3(0, 0, 246)
@@ -343,7 +358,7 @@ func status() -> Dictionary:
 		"aim": aim,
 		"off_axis": off_axis,
 		"lane_deviation": _lane_deviation(xform.origin),
-		"lane_limit": _lane_limit(),
+		"lane_limit": _lane_limit(xform.origin),
 		"speed": speed,
 		"speed_limit": limit,
 		"speed_ok": speed <= limit,
@@ -1110,20 +1125,33 @@ func _publish_gates() -> void:
 
 
 ## Corridor radius for the leg being flown right now.
-func _lane_limit() -> float:
+func _lane_limit(origin: Vector3) -> float:
 	if GameState.docking_state == "FINAL":
-		return FINAL_LANE
+		return _final_lane_at(origin)
 	var index: int = GameState.docking.get("gate", HOLD_GATE)
 	if GameState.docking_state == "DEPARTING":
 		# Outbound legs are the inbound ones flown backwards, so the corridor is
 		# the one belonging to the gate BEHIND you — and the climb out of the bay
 		# is the descent onto the pad in reverse.
 		if index >= GATES.size() - 1:
-			return FINAL_LANE
+			return _final_lane_at(origin)
 		return float(GATES[index + 1]["lane"])
 	if index <= HOLD_GATE or index >= GATES.size():
 		return float(GATES[HOLD_GATE]["lane"])
 	return float(GATES[index]["lane"])
+
+
+## Corridor radius on the final leg at a given point: the strict tube while
+## you're down between the bay walls, opening out linearly above them to give
+## the turn off the CHARLIE-DELTA leg somewhere to happen.
+func _final_lane_at(origin: Vector3) -> float:
+	var height: float = (origin - pad_world()).dot(pad_up())
+	var delta_height: float = float(GATES[GATES.size() - 1]["position"].y) - PAD_LOCAL.y
+	if height <= BAY_WALL_HEIGHT or delta_height <= BAY_WALL_HEIGHT:
+		return FINAL_LANE
+	var t: float = clampf((height - BAY_WALL_HEIGHT)
+			/ (delta_height - BAY_WALL_HEIGHT), 0.0, 1.0)
+	return lerpf(FINAL_LANE, FINAL_LANE_TOP, t)
 
 
 ## How far the ship is off the centreline of the leg it's on. Free flight (the
@@ -1143,7 +1171,7 @@ func _lane_deviation(origin: Vector3) -> float:
 ## instantly fatal. Returns false once it has sent the ship around.
 func _check_corridor(origin: Vector3, delta: float) -> bool:
 	var deviation := _lane_deviation(origin)
-	var limit := _lane_limit()
+	var limit := _lane_limit(origin)
 	if deviation <= limit:
 		_off_lane = 0.0
 		return true
