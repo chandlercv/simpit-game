@@ -43,6 +43,9 @@ func _run() -> void:
 	# Traffic phases are random per visit, which makes ATC's sequencing hold
 	# random too — pinned here so a failure is reproducible.
 	DockingSystem.set_traffic_seed(20260809)
+	# Same fingerprint the game stamps into its comms log at boot, so a test run
+	# and a screenshot can be compared without guessing.
+	print("DOCKING BUILD %s" % DockingSystem.build_id())
 
 	# --- The gear interlocks the cutter (a leg sits in the torch's arc), which
 	# is what gives it a cost back at the claim and not just at the station.
