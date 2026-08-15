@@ -223,6 +223,10 @@ view_top={
 "deadzone": 0.2,
 "events": []
 }
+view_belly={
+"deadzone": 0.2,
+"events": []
+}
 tactical_view_cycle={
 "deadzone": 0.2,
 "events": []

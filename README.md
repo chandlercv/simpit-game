@@ -34,7 +34,7 @@ with its own input stream.
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
 | **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
 | **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. |
-| **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP** — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
+| **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP**, and **BELLY** (straight down past the hull — the landing view) — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
 
@@ -234,7 +234,12 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
      to fly, so the overshoot is part of the manoeuvre — and tightens to 6 m by
      the time you are down between the bay walls, where there is something to hit.
    - **Land it.** Descend into the berth and put it on the pad: inside the deck
-     markings, wings level, under the sink rate the legs will take. The touchdown
+     markings, wings level, under the sink rate the legs will take. **You land on
+     the legs, level** — the touchdown check rejects more than 20° of tilt, so
+     pitching the nose down at the pad both fails it and puts the bow into the
+     deck. The pad is directly beneath you and the hull camera looks forward, so
+     fly the last stretch on the Camera display's **BELLY** view (keyboard **5**),
+     the MFD **DOCK** page's pad view, and the HUD landing ladder. The touchdown
      is **scored** — a greaser earns standing with the faction, a hard arrival
      costs hull, and anything worse bounces you back into the pattern.
 
@@ -368,7 +373,7 @@ defaults:
 | **C** | Fire cutter / align + commit | | **M** | Cycle sensor mode |
 | **, / .** | Prev / next cut target | | **N** | Cycle locked contact |
 | **G / H** | MFD-A / MFD-B → MENU | | **T** | Toggle Tactical SCOPE / CHART |
-| **]** | Cycle external camera | | **1 / 2 / 3 / 4** | Camera REAR / SIDE / CHASE / TOP |
+| **]** | Cycle external camera | | **1 / 2 / 3 / 4 / 5** | Camera REAR / SIDE / CHASE / TOP / BELLY |
 | **B** | Open/close cargo hatch | | **X** | Landing gear up / down |
 | **Z** | Request clearance / acknowledge ATC | | | |
 
@@ -560,7 +565,7 @@ disabled but the rest still works.
 | --- | --- |
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
-| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title]`) — `close` parks the ship at cutting range, `title` lays the launch title card over the view. |
+| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `title` lays the launch title card over the view. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |

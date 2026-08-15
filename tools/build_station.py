@@ -152,7 +152,7 @@ def _srgb(c: float) -> float:
 
 
 def _material(name: str, rgb, metallic: float, roughness: float,
-              emission=None) -> bpy.types.Material:
+              emission=None, emission_strength: float = 1.0) -> bpy.types.Material:
     mat = bpy.data.materials.get(name)
     if mat is not None:
         return mat
@@ -166,7 +166,7 @@ def _material(name: str, rgb, metallic: float, roughness: float,
     if emission is not None:
         bsdf.inputs["Emission Color"].default_value = (
             _srgb(emission[0]), _srgb(emission[1]), _srgb(emission[2]), 1.0)
-        bsdf.inputs["Emission Strength"].default_value = 1.0
+        bsdf.inputs["Emission Strength"].default_value = emission_strength
     return mat
 
 
@@ -183,10 +183,16 @@ def trim_material():
 
 
 def marking_material():
-    """Deck markings — emissive so the pad stays legible in the station's own
-    shadow, which is exactly where you land."""
+    """Deck markings — faintly emissive so the pad stays legible in the station's
+    own shadow, which is exactly where you land.
+
+    Kept LOW deliberately. At touchdown height the pad fills the whole view, and
+    at full emission the markings render as flat white with the glow blown out —
+    you lose every depth cue at the exact moment you need them. These are painted
+    lines catching the berth light, not light sources.
+    """
     return _material("pad_marking", (0.95, 0.72, 0.2), 0.0, 0.7,
-                     emission=(0.95, 0.72, 0.2))
+                     emission=(0.95, 0.72, 0.2), emission_strength=0.25)
 
 
 def traffic_material():

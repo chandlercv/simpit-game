@@ -20,8 +20,18 @@ transform = Transform3D(0.86, -0.35, 0.37, 0, 0.72, 0.69, -0.51, -0.6, 0.62, 0, 
 light_color = Color(0.86, 0.9, 1, 1)
 light_energy = 0.55
 
-[node name="BerthLight" type="OmniLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 12, 14)
+; Two lamps on the bay walls rather than one overhead. A light directly above
+; the pad sat ON the descent path -- the ship flew through it at about 12 m and
+; the deck blew out to flat white just as the pilot needed depth cues. From the
+; corners the markings read, and the walls cast shape.
+[node name="BerthLightA" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -38, 7, 6)
 light_color = Color(1, 0.78, 0.45, 1)
-light_energy = 3.0
-omni_range = 26.0
+light_energy = 1.6
+omni_range = 24.0
+
+[node name="BerthLightB" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 7, 22)
+light_color = Color(1, 0.78, 0.45, 1)
+light_energy = 1.6
+omni_range = 24.0

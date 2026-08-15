@@ -85,7 +85,9 @@ const SENSOR_MODES: Array[String] = ["PASSIVE", "ACTIVE", "STRUCT"]
 ## External-camera vantages for the Camera display (see ExternalCameraRig):
 ## REAR looks aft (a rear-view), SIDE frames the ship's profile, CHASE trails it,
 ## TOP looks straight down.
-const EXTERNAL_VIEWS: Array[String] = ["REAR", "SIDE", "CHASE", "TOP"]
+## BELLY looks straight down past the hull — the landing view, since a berth
+## pad sits directly under a ship that has to stay level to touch down.
+const EXTERNAL_VIEWS: Array[String] = ["REAR", "SIDE", "CHASE", "TOP", "BELLY"]
 
 ## Tactical display modes (see TacticalContent): SCOPE (sensor scope + hull
 ## status) and CHART (system star chart).

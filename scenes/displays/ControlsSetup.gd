@@ -70,6 +70,7 @@ const BUTTON_TARGETS := [
 	{"label": "View Side", "action": "view_side", "group": "VIEW"},
 	{"label": "View Chase", "action": "view_chase", "group": "VIEW"},
 	{"label": "View Top", "action": "view_top", "group": "VIEW"},
+	{"label": "View Belly (landing)", "action": "view_belly", "group": "VIEW"},
 ]
 ## X52 nub virtual axes offered as explicit picks for an axis row (matches
 ## InputRouter.HID_SOURCES). The X52 wheel is joypad buttons 32/33 — bind it on

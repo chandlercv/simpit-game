@@ -396,6 +396,26 @@ func _run() -> void:
 	_check(worst < 0.01,
 			"every ring renders exactly on the gate it represents (%.3f m worst)" % worst)
 
+	# --- The BELLY camera: the landing view. A berth pad sits directly under a
+	# ship that must stay level to touch down, and the hull camera looks forward
+	# while the glance rig only reaches 45° down — so without a downward vantage
+	# the pad is the one thing you cannot see, and the instinct that provokes
+	# (pitching the nose at it) is exactly what fails the landing. ---
+	_check(GameState.EXTERNAL_VIEWS.has("BELLY"), "BELLY is in the external view cycle")
+	var rig: Node3D = load("res://scenes/world/ExternalCameraRig.gd").new()
+	add_child(rig)
+	GameState.set_external_view("BELLY")
+	_place_level(DockingSystem.pad_world() + DockingSystem.pad_up() * 8.0)
+	for _i in 4:
+		await get_tree().process_frame
+	var cam: Camera3D = rig.get_child(0)
+	var ship_xform: Transform3D = GameState.local_ship()["transform"]
+	var below: float = (cam.global_position - ship_xform.origin).dot(ship_xform.basis.y)
+	_check(below < 0.0, "the belly camera sits under the hull (%.1f m)" % below)
+	var looking: float = (-cam.global_transform.basis.z).dot(DockingSystem.pad_up())
+	_check(looking < -0.9, "...and looks straight down at the pad (%.2f)" % looking)
+	rig.queue_free()
+
 	if _failures.is_empty():
 		print("DOCK SMOKE: ALL CHECKS PASSED")
 		get_tree().quit(0)
@@ -429,6 +449,15 @@ func _park_at(position: Vector3, velocity: Vector3) -> void:
 func _just_above_deck() -> Vector3:
 	return DockingSystem.pad_world() \
 			+ DockingSystem.pad_up() * (DockingSystem.GEAR_HEIGHT - 0.05)
+
+
+## Wings level on the lane's heading — the only attitude a landing can be flown
+## in, so the only one worth measuring the landing view against.
+func _place_level(at: Vector3) -> void:
+	var ship: Dictionary = GameState.local_ship()
+	ship["transform"] = Transform3D(
+			Basis.looking_at(DockingSystem.pad_forward(), DockingSystem.pad_up()), at)
+	ship["velocity"] = Vector3.ZERO
 
 
 func _teleport(position: Vector3) -> void:

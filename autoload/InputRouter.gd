@@ -117,6 +117,7 @@ const BUILTIN_PROFILES := [
 			{"key": KEY_2, "action": "view_side"},
 			{"key": KEY_3, "action": "view_chase"},
 			{"key": KEY_4, "action": "view_top"},
+			{"key": KEY_5, "action": "view_belly"},
 		],
 	},
 ]
@@ -146,6 +147,7 @@ const POWER_AXES: Dictionary = {
 ## Direct-select camera-view action -> the vantage it picks.
 const VIEW_ACTIONS: Dictionary = {
 	"view_rear": "REAR", "view_side": "SIDE", "view_chase": "CHASE", "view_top": "TOP",
+	"view_belly": "BELLY",
 }
 
 var _throttle_device := -1

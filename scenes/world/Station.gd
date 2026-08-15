@@ -50,6 +50,15 @@ func _ready() -> void:
 	_bake_hulls()
 	GameState.docking_changed.connect(_on_docking_changed)
 	_on_docking_changed(GameState.docking_state)
+	set_process(true)
+
+
+## Ring visibility follows the gate index, which advances WITHOUT a state change
+## (every marker on the CLEARED leg), so there is no signal to hang it on. Four
+## visibility flags a frame is cheaper than adding one.
+func _process(_delta: float) -> void:
+	if DockingSystem.is_active():
+		_update_rings()
 
 
 ## Structure is placed relative to the lane it was designed around: the drums
@@ -98,13 +107,45 @@ func _build_gates() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = torus
 		mi.position = gate["position"]
-		# TorusMesh lies in the xz plane; the lane runs along z, so stand it up to
-		# face the direction of flight.
-		mi.rotate_x(PI / 2.0)
+		# Stand the ring across the leg it is flown through, not across a fixed
+		# axis: the lane doglegs, so a ring facing a constant -z would sit at an
+		# angle to the path you actually cross it on.
+		var through: Vector3 = _leg_into(i)
+		if through.length() > 0.001:
+			mi.basis = Basis.looking_at(through.normalized(), Vector3.UP) \
+					* Basis(Vector3.RIGHT, PI / 2.0)
 		mi.material_override = _ring_material(
 				RING_FAR.lerp(RING_NEAR, float(i) / maxf(gates.size() - 1.0, 1.0)))
 		_rings.add_child(mi)
 		_ring_nodes.append(mi)
+
+
+## Direction the pilot is travelling when they cross gate `index` — the leg that
+## leads into it, which is also the axis DockingSystem tests the gate's plane
+## against. Station-local; gate 0 is entered from the arrival point.
+func _leg_into(index: int) -> Vector3:
+	var here: Vector3 = DockingSystem.GATES[index]["position"]
+	if index <= 0:
+		return here - DockingSystem.ENTRY_LOCAL
+	return here - (DockingSystem.GATES[index - 1]["position"] as Vector3)
+
+
+## A ring you have already flown is clutter, and DELTA's is worse than that: it
+## is centred 16 m above the pad with a 6.5 m radius, so it hangs edge-on
+## straight down the descent path and puts a glowing bar across the one view the
+## pilot needs while landing. Rings show only while they are still ahead.
+func _update_rings() -> void:
+	var gate: int = int(GameState.docking.get("gate", 0))
+	var outbound: bool = DockingSystem.status().get("outbound", false)
+	var final_leg: bool = GameState.docking_state == "FINAL"
+	for i in _ring_nodes.size():
+		var ring: MeshInstance3D = _ring_nodes[i]
+		if final_leg:
+			ring.visible = false           # every marker is behind you by now
+		elif outbound:
+			ring.visible = i <= gate       # counting down toward the exit
+		else:
+			ring.visible = i >= gate
 
 
 func _ring_material(tint: Color) -> StandardMaterial3D:
@@ -112,7 +153,9 @@ func _ring_material(tint: Color) -> StandardMaterial3D:
 	mat.albedo_color = tint
 	mat.emission_enabled = true
 	mat.emission = tint
-	mat.emission_energy_multiplier = 1.6
+	# Bright enough to pick out at range in the station's shadow, dim enough
+	# not to bloom over the structure once you are inside the pattern.
+	mat.emission_energy_multiplier = 0.9
 	return mat
 
 
