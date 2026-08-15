@@ -286,6 +286,14 @@ func _run() -> void:
 			CollisionSystem.IMPACT_SPEED_FLOOR * 0.5)
 	_check(_has_comms_since(knock_comms, "CONTACT"),
 			"even a graze too gentle to bill is called out")
+	_check(_has_comms_since(knock_comms, "ALT "),
+			"...naming where it happened, not just what was hit")
+	# A contact is an EVENT. Left standing on the instrument it outlives the
+	# thing it describes: the banner still read "CONTACT — STATION BAYFLOOR"
+	# with the ship 14 m above the pad and nothing within 6 m of it, which reads
+	# as a berth that cannot be entered.
+	_check(String(DockingSystem.status()["atc"].get("text", "")).contains("CONTACT"),
+			"a contact takes the instrument while it is current")
 	var knocked := await _hold(_leg_point(0.5) + Vector3(0, 60, 0), Vector3.ZERO,
 			func() -> bool: return int(GameState.docking["wave_offs"]) > knock_waves,
 			DockingSystem.LANE_GRACE * 2.0)
@@ -294,6 +302,11 @@ func _run() -> void:
 			func() -> bool: return int(GameState.docking["wave_offs"]) > knock_waves,
 			DockingSystem.CONTACT_GRACE + DockingSystem.LANE_GRACE * 6.0)
 	_check(recovered, "...and the rule resumes once the amnesty runs out")
+	# By now the call has long outlived CALL_HOLD, so the instrument should be
+	# back on the standing clearance rather than still reporting the contact.
+	var shown := String(DockingSystem.status()["atc"].get("text", ""))
+	_check(not shown.contains("CONTACT"),
+			"...and the contact call falls off the instrument (now: %s)" % shown)
 
 	# --- A hot touchdown bounces; a clean one books the berth. ---
 	await _fly_to_final()

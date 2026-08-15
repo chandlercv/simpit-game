@@ -186,6 +186,10 @@ const DAMAGES_COOLDOWN := 3.0
 ## gather it up and get back on the centreline.
 const CONTACT_GRACE := 5.0
 
+## Seconds a momentary ATC call (a contact, a traffic advisory, a damages
+## invoice) holds the instrument before it falls back to the standing clearance.
+const CALL_HOLD := 6.0
+
 ## Hull wear per second of flying over the gear's rated speed with it extended.
 const GEAR_STRESS_PER_S := 0.02
 
@@ -389,7 +393,7 @@ func status() -> Dictionary:
 		"state": GameState.docking_state,
 		"station": GameState.docking.get("station", ""),
 		"berth": GameState.docking.get("berth", 0),
-		"atc": GameState.docking.get("atc", {}),
+		"atc": current_instruction(),
 		"gate": index,
 		"gate_name": "PAD" if final_leg else String(GATES[index]["name"]),
 		"gate_position": target,
@@ -701,7 +705,7 @@ func _update_separation() -> void:
 			return
 		if not _advised.has(id):
 			_advised[id] = true
-			_atc("TRAFFIC — %s" % entry["name"],
+			_call("TRAFFIC — %s" % entry["name"],
 					"%.0f M OFF YOUR HULL. MAINTAIN SEPARATION." % gap, true)
 
 
@@ -1151,7 +1155,7 @@ func _on_ship_contact(body_name: String, closing: float) -> void:
 		if not bool(status().get("cleared", false)):
 			standing = "STEADY UP. YOU ARE NOT CLEARED — RETURN TO MARKER %s." \
 					% GATES[HOLD_GATE]["name"]
-		_atc("CONTACT — %s" % body_name, standing, true)
+		_call("CONTACT — %s %s" % [body_name, _where()], standing, true)
 
 
 ## Invoice for hitting the station. Charged against credits, with anything the
@@ -1172,7 +1176,7 @@ func _bill_damages(section: String, amount: float) -> void:
 		# proportion to how much of the bill went unmet.
 		standing += REP_PER_COLLISION * (float(bill - paid) / float(bill))
 	_adjust_reputation(-standing)
-	_atc("CONTACT — %s SECTION" % section,
+	_call("CONTACT — %s SECTION %s" % [section, _where()],
 			"YOU HAVE STRUCK STATION STRUCTURE. DAMAGES %d CR%s." % [
 				bill, "" if paid >= bill else " (UNPAID — LOGGED AGAINST YOU)"], true)
 
@@ -1189,6 +1193,36 @@ func _atc(text: String, detail := "", urgent := false) -> void:
 	GameState.atc_instruction.emit(instruction)
 
 
+## A momentary CALL rather than a standing instruction.
+##
+## _atc publishes something that stays on the instrument for as long as it
+## applies, which is right for a clearance ("CLEARED TO LAND", "HOLD AT ALPHA")
+## and badly wrong for an event. A contact call left standing sat on the banner
+## long after the ship had climbed away from whatever it touched, so the pilot
+## read a berth they were 14 m above as still blocked — the instrument saying
+## "CONTACT — STATION BAYFLOOR" while there was nothing within 6 m of them.
+##
+## Calls sit on top of the standing instruction for CALL_HOLD, then fall away
+## and leave the clearance showing.
+func _call(text: String, detail := "", urgent := false) -> void:
+	var call := {
+		"text": text, "detail": detail, "urgent": urgent,
+		"tick": GameState.tick, "until": _pattern_time + CALL_HOLD,
+	}
+	GameState.docking["call"] = call
+	GameState.post_comms("ATC", text if detail.is_empty() else "%s — %s" % [text, detail])
+	GameState.atc_instruction.emit(call)
+
+
+## Whatever the instrument should be showing: a live call if there is one, else
+## the standing instruction.
+func current_instruction() -> Dictionary:
+	var call: Dictionary = GameState.docking.get("call", {})
+	if not call.is_empty() and _pattern_time < float(call.get("until", 0.0)):
+		return call
+	return GameState.docking.get("atc", {})
+
+
 ## "Say again": re-post the standing instruction without changing it.
 func _repeat_instruction() -> void:
 	var instruction: Dictionary = GameState.docking.get("atc", {})
@@ -1203,6 +1237,17 @@ func _set_state(state: String) -> void:
 		return
 	GameState.docking_state = state
 	GameState.docking_changed.emit(state)
+
+
+## Where the ship is relative to the berth, in the same numbers the DOCK page
+## shows. Stapled onto contact calls so a report of one names the spot it
+## happened at instead of leaving it to be inferred from the geometry.
+func _where() -> String:
+	var xform: Transform3D = GameState.local_ship()["transform"]
+	var from_pad: Vector3 = xform.origin - pad_world()
+	var altitude: float = from_pad.dot(pad_up()) - GEAR_HEIGHT
+	var lateral: float = (from_pad - pad_up() * from_pad.dot(pad_up())).length()
+	return "(ALT %.1f M, %.1f M OFF)" % [altitude, lateral]
 
 
 func _gate_names() -> String:
