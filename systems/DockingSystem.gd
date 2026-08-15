@@ -136,6 +136,12 @@ const DAMAGE_PER_RATE := 0.06
 ## bounced one or a repeated go-around.
 const REP_PER_LANDING := 0.04
 const REP_PER_WAVE_OFF := 0.02
+## ...but capped for the whole visit. A pattern you are struggling with should
+## cost you a reputation, not erase it, and an uncapped bleed turns a bad run
+## into an unrecoverable one: a single visit that racked up hundreds of
+## go-arounds took a faction from full standing to zero, which then closes off
+## the prices and the goodwill you would need to dig back out.
+const REP_WAVE_OFF_CAP := 0.12
 
 ## Auto-berth: ATC flies you in on request, so a run can be wrapped up without
 ## the pattern. Deliberately the worse deal — a flat handling fee and a standing
@@ -1082,8 +1088,13 @@ func _wave_off(reason: String) -> void:
 	_atc("GO AROUND — %s" % reason,
 			"CLEARANCE CANCELLED. RETURN TO MARKER ALPHA AND HOLD. (GO-AROUND %d)"
 					% count, true)
+	# A go-around is free once, expensive as a habit, and never ruinous.
 	if count > 1:
-		_adjust_reputation(-REP_PER_WAVE_OFF)
+		var bled: float = float(GameState.docking.get("rep_bled", 0.0))
+		var bite: float = minf(REP_PER_WAVE_OFF, maxf(REP_WAVE_OFF_CAP - bled, 0.0))
+		if bite > 0.0:
+			GameState.docking["rep_bled"] = bled + bite
+			_adjust_reputation(-bite)
 
 
 ## Anything the pattern hit is a go-around — CollisionSystem has already taken
@@ -1115,8 +1126,13 @@ func _on_ship_contact(body_name: String, closing: float) -> void:
 	_over_speed = 0.0
 	if fresh and closing < CollisionSystem.IMPACT_SPEED_FLOOR:
 		# Too soft to damage or bill, so nothing else would ever mention it.
-		_atc("CONTACT — %s" % body_name,
-				"YOU BRUSHED IT. STEADY UP AND CONTINUE — YOUR CLEARANCE STANDS.", true)
+		# Only claim the clearance stands when there IS one — saying it to a ship
+		# that was waved off ten seconds ago is worse than saying nothing.
+		var standing := "STEADY UP AND CONTINUE — YOUR CLEARANCE STANDS."
+		if not bool(status().get("cleared", false)):
+			standing = "STEADY UP. YOU ARE NOT CLEARED — RETURN TO MARKER %s." \
+					% GATES[HOLD_GATE]["name"]
+		_atc("CONTACT — %s" % body_name, standing, true)
 
 
 ## Invoice for hitting the station. Charged against credits, with anything the

@@ -230,6 +230,9 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
      deviation the station's own wall gave you would make "contact keeps your
      clearance" meaningless. Even a graze too gentle to damage anything gets
      called out, so you are never knocked silently.
+     Repeated go-arounds bleed standing, but only **up to a cap per visit** — a
+     pattern you are struggling with should cost you a reputation, not erase
+     one.
    - **Gear down before the final gate.** The landing gear (keyboard **X**, or
      the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
      you act on early — arriving at DELTA with it up is a go-around, as is an

@@ -206,6 +206,31 @@ func _run() -> void:
 	_check(GameState.credits == second_bill,
 			"a second contact inside the cooldown is not billed twice")
 
+	# --- A bad visit must not erase a faction. Go-arounds bleed standing, and
+	# uncapped that turns a struggle into an unrecoverable run — the prices and
+	# goodwill you would need to dig back out are exactly what it burns. ---
+	# Seeded full: earlier checks here have already spent this faction's standing
+	# down near zero, and the 0.0 floor would bind before the cap did — passing
+	# this without ever exercising the thing under test.
+	GameState.reputation[GameState.market_factions[0]] = 1.0
+	var rep_start: float = GameState.reputation[GameState.market_factions[0]]
+	# Back to back, with no frames in between: the per-frame state machine would
+	# otherwise re-clear the ship and the cap would never actually bind, leaving
+	# this passing for the wrong reason.
+	for _i in 40:
+		DockingSystem._wave_off("SMOKE TEST")
+	# Measured on the visit total, not on this loop: the checks above already
+	# spent part of the allowance, so the loop alone sees only the remainder.
+	var spent: float = float(GameState.docking.get("rep_bled", 0.0))
+	_check(is_equal_approx(snappedf(spent, 0.001),
+			snappedf(DockingSystem.REP_WAVE_OFF_CAP, 0.001)),
+			"a visit's go-arounds bleed standing only up to the cap (%.3f)" % spent)
+	var bled: float = rep_start - GameState.reputation[GameState.market_factions[0]]
+	_check(bled < DockingSystem.REP_PER_WAVE_OFF * 40.0,
+			"...so 40 more go-arounds cost far less than 40 go-arounds' worth (%.3f)" % bled)
+	_check(GameState.reputation[GameState.market_factions[0]] > 0.0,
+			"...leaving the faction still worth dealing with")
+
 	# --- The deck catches the ship in EVERY state, not just FINAL. Lose the
 	# clearance on the way down and you are still descending into a real berth;
 	# with the deck check living inside the FINAL handler, such a ship sank past

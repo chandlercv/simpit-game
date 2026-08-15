@@ -382,19 +382,28 @@ def build_berth_bay() -> list:
         bm = bmesh.new()
         add_box(bm, wx, cy, wz, sx, BAY_HEIGHT, sz)
         out.append(_finalize(bm, "BayWall%+d%+d" % (dx, dz), structure_material()))
-    # A low lip across the mouth, so the berth still reads as enclosed from the
-    # cockpit without reaching up into the approach corridor.
-    lip_z = pz + BAY_HALF + BAY_WALL / 2.0
-    check_box_clear("bay lip", (px, py + 1.0, lip_z), (span, 2.0, BAY_WALL))
-    bm = bmesh.new()
-    add_box(bm, px, py + 1.0, lip_z, span, 2.0, BAY_WALL)
-    out.append(_finalize(bm, "BayLip", structure_material()))
     # Floor slab under the deck. Its top face sits at the pad's own height, so a
     # ship on its legs rests above it rather than in it.
     bm = bmesh.new()
     add_box(bm, px, py - 1.0, pz, span + 2.0, 2.0, span + 2.0)
     out.append(_finalize(bm, "BayFloor", structure_material()))
     return out
+
+
+def build_berth_lip() -> bpy.types.Object:
+    """A low lip across the bay's mouth, so the berth reads as enclosed from the
+    cockpit without reaching up into the approach corridor.
+
+    Exported on its own because it is DECOR: Station.gd parents it under Decor
+    and it never becomes a collision body. It exists to be looked at, it sits
+    exactly where a ship crosses into the berth, and making the thing you fly
+    over on the way in solid buys nothing but a bill.
+    """
+    bm = bmesh.new()
+    px, py, pz = PAD
+    span = BAY_HALF * 2.0 + BAY_WALL
+    add_box(bm, px, py + 1.0, pz + BAY_HALF + BAY_WALL / 2.0, span, 2.0, BAY_WALL)
+    return _finalize(bm, "BerthLip", trim_material())
 
 
 def build_pad_deck() -> bpy.types.Object:
@@ -525,6 +534,7 @@ def main() -> None:
         (build_drum("HabDrum"), "hab_drum.glb"),
         (build_drum_caps("HabDrumCaps"), "hab_drum_caps.glb"),
         (build_berth_bay(), "berth_bay.glb"),
+        (build_berth_lip(), "berth_lip.glb"),
         (build_pad_deck(), "pad_deck.glb"),
         (build_pad_markings(), "pad_markings.glb"),
         (build_gantry(), "gantry.glb"),

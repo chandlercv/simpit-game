@@ -167,6 +167,10 @@ func _ring_material(tint: Color) -> StandardMaterial3D:
 func _build_pad() -> void:
 	_add_part("pad_deck", Vector3.ZERO, false)
 	_add_part("pad_markings", Vector3.ZERO, false)
+	# The lip across the bay's mouth is decor too. It sits exactly where a ship
+	# crosses into the berth, so making the thing you fly over on the way in
+	# solid bought nothing but a damages bill on entry.
+	_add_part("berth_lip", Vector3.ZERO, false)
 
 
 ## Bake a convex hull per structural mesh, so clipping a hab drum on the way
