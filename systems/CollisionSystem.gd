@@ -388,7 +388,10 @@ func _gjk_segment_hull(sa: Vector3, sb: Vector3, points: PackedVector3Array) -> 
 		for k: int in sub["ids"]:
 			kept.append(simplex[k])
 		simplex = kept
-		if simplex.size() == 4:  # origin enclosed by the simplex: penetration
+		# Penetration is reported by the sub-distance routine, which is the only
+		# thing that actually knows. Inferring it from "four vertices survived"
+		# meant any degenerate simplex that failed to reduce read as a hit.
+		if bool(sub.get("inside", false)):
 			return {"dist": 0.0, "normal": Vector3.ZERO, "inside": true}
 	var dist := v.length()
 	return {
@@ -498,7 +501,19 @@ func _sub_tetra(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> Dictionary:
 	var verts := [a, b, c, d]
 	# [v0, v1, v2, opposite] index sets for the four faces.
 	var faces := [[0, 1, 2, 3], [0, 2, 3, 1], [0, 3, 1, 2], [1, 3, 2, 0]]
-	var best := {"point": Vector3.ZERO, "ids": [0, 1, 2, 3]}
+	# A FLAT tetrahedron encloses nothing, and must not be allowed to reach the
+	# containment conclusion below.
+	#
+	# _origin_outside_face works from the face normal (b-a)x(c-a). Squash the
+	# tetra flat and every normal collapses toward zero, so every face scores
+	# ~0 and reports "origin not outside" — which reads as "origin inside", i.e.
+	# penetration, no matter how far away the origin actually is. Support points
+	# taken from a thin slab are coplanar exactly like this: it is how a ship
+	# 11 m ABOVE the berth's floor plate was told it was inside it, and it would
+	# do the same for any flat hull (a wall, a deck, a radiator panel).
+	if _tetra_is_flat(a, b, c, d):
+		return _best_face(verts, faces)
+	var best := {"point": Vector3.ZERO, "ids": [0, 1, 2, 3], "inside": false}
 	var best_sq := INF
 	var any_outside := false
 	for f: Array in faces:
@@ -515,9 +530,35 @@ func _sub_tetra(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> Dictionary:
 			var ids: Array = []
 			for li: int in sub["ids"]:
 				ids.append(f[li])
-			best = {"point": sub["point"], "ids": ids}
-	if not any_outside:  # origin inside the tetra
-		return {"point": Vector3.ZERO, "ids": [0, 1, 2, 3]}
+			best = {"point": sub["point"], "ids": ids, "inside": false}
+	if not any_outside:  # origin genuinely enclosed by a non-degenerate tetra
+		return {"point": Vector3.ZERO, "ids": [0, 1, 2, 3], "inside": true}
+	return best
+
+
+## Is this tetrahedron flat enough that it bounds no volume? Measured against
+## its own size, so it holds for a hull a metre across and one a hundred metres
+## across alike.
+func _tetra_is_flat(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> bool:
+	var volume6 := absf((b - a).cross(c - a).dot(d - a))
+	var scale := maxf(maxf((b - a).length(), (c - a).length()), (d - a).length())
+	return volume6 <= 1e-6 * scale * scale * scale
+
+
+## Closest point on any of the tetra's four faces — what a flat tetra reduces
+## to, since it has an inside/outside only in the plane's sense.
+func _best_face(verts: Array, faces: Array) -> Dictionary:
+	var best := {"point": verts[0], "ids": [0], "inside": false}
+	var best_sq := INF
+	for f: Array in faces:
+		var sub := _sub_tri(verts[f[0]], verts[f[1]], verts[f[2]])
+		var sq: float = (sub["point"] as Vector3).length_squared()
+		if sq < best_sq:
+			best_sq = sq
+			var ids: Array = []
+			for li: int in sub["ids"]:
+				ids.append(f[li])
+			best = {"point": sub["point"], "ids": ids, "inside": false}
 	return best
 
 

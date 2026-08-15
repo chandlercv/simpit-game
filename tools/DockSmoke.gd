@@ -496,6 +496,31 @@ func _run() -> void:
 				or body_name.contains("PADMARKINGS")
 	_check(not pad_solid, "the pad deck and its markings are not collision bodies")
 
+	# --- Nothing may report contact with a ship that is demonstrably clear of it.
+	#
+	# The berth floor is a 22 x 2 x 22 m plate, so its bounding sphere reaches
+	# 15.6 m and GJK gets asked about ships high above the pad. Asked from there,
+	# the simplex goes coplanar, _sub_tetra read that as "origin enclosed", and
+	# the plate reported CONTACT with a ship ELEVEN METRES above it — the fault
+	# behind a run of unexplained BAYFLOOR contacts on clean, centred descents. ---
+	var ghosts: Array[String] = []
+	for alt in [3.0, 5.9, 6.4, 8.0, 10.9, 13.3, 16.0]:
+		_place_level(DockingSystem.pad_world()
+				+ DockingSystem.pad_up() * (alt + DockingSystem.GEAR_HEIGHT))
+		var xf: Transform3D = GameState.local_ship()["transform"]
+		var cap_a: Vector3 = xf.origin + xf.basis * GameState.ship_def.collision_a
+		var cap_b: Vector3 = xf.origin + xf.basis * GameState.ship_def.collision_b
+		for obstacle: Dictionary in GameState.obstacles:
+			var body_name := String(obstacle["name"])
+			if not body_name.begins_with("STATION"):
+				continue
+			var gap: float = CollisionSystem.hull_distance(cap_a, cap_b, obstacle["hull"])
+			if gap <= GameState.ship_def.collision_radius:
+				ghosts.append("%s at ALT %.1f (gap %.2f)" % [body_name, alt, gap])
+	_check(ghosts.is_empty(),
+			"no station body claims contact with a ship clear above the pad (%s)" % (
+				", ".join(ghosts) if not ghosts.is_empty() else "none do"))
+
 	# ...and the whole point of the above: a landing has to actually complete
 	# with the station's collision geometry in the world. Every touchdown check
 	# further up runs headless, with no station to hit — which is exactly how a
