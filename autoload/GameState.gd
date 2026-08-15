@@ -46,6 +46,13 @@ signal wreck_members_lost
 ## the integrity lost. Extension seam: future crippling/destruction consequences
 ## and view juice (camera shake, alarms) subscribe here.
 signal hull_impact(section: String, amount: float)
+## ANY resolved contact between the ship and a solid body (CollisionSystem),
+## including ones too gentle to do damage. hull_impact is the damage event;
+## this is the "you touched something" event, and it fires even when the only
+## consequence was being pushed back out of the body. DockingSystem needs the
+## gentle ones: they still shove the ship off its line, and being knocked out of
+## a corridor by scenery should not read to the pilot as their own bad flying.
+signal ship_contact(body_name: String, closing: float)
 signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
 ## Pre-cut alignment mini-game phase changed (SalvageSystem), one of ALIGN_STATES.

@@ -225,6 +225,11 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
      (roughly a quarter of a run's takings for a light scrape, half for a bad
      one), and **standing** — but you keep your clearance and carry on flying.
      Anything you can't pay comes out of your reputation instead.
+     A knock also buys a few seconds' **amnesty** on the speed and corridor
+     rules: the impact shoves you off your line, and being waved off for a
+     deviation the station's own wall gave you would make "contact keeps your
+     clearance" meaningless. Even a graze too gentle to damage anything gets
+     called out, so you are never knocked silently.
    - **Gear down before the final gate.** The landing gear (keyboard **X**, or
      the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
      you act on early — arriving at DELTA with it up is a go-around, as is an

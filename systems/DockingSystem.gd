@@ -161,6 +161,15 @@ const REP_PER_COLLISION := 0.05
 ## registers over several frames is one invoice.
 const DAMAGES_COOLDOWN := 3.0
 
+## Seconds of amnesty on the SUSTAINED rules (corridor, speed) after touching
+## something. CollisionSystem pushes the ship back out of whatever it hit and
+## reflects its velocity, which on the final descent throws it clean out of a 6 m
+## tube — so without this, "contact is billed, not waved off" was a lie: the bill
+## arrived and then the shove you took from the wall waved you off a second
+## later, for a deviation the impact caused rather than the pilot. Long enough to
+## gather it up and get back on the centreline.
+const CONTACT_GRACE := 5.0
+
 ## Hull wear per second of flying over the gear's rated speed with it extended.
 const GEAR_STRESS_PER_S := 0.02
 
@@ -213,6 +222,8 @@ var _advised: Dictionary = {}
 var _reprimand_cool := 0.0
 ## ...and the same for damage invoices.
 var _damages_cool := 0.0
+## Seconds of post-contact amnesty left on the sustained rules.
+var _contact_grace := 0.0
 
 
 ## Fix the traffic phasing so a run is reproducible. Traffic spawns with a random
@@ -228,6 +239,8 @@ func _ready() -> void:
 	# Running into anything at all while flying a pattern is a go-around: the
 	# damage is CollisionSystem's business, the clearance is ours.
 	GameState.hull_impact.connect(_on_hull_impact)
+	# Every contact, including the gentle ones that never reach hull_impact.
+	GameState.ship_contact.connect(_on_ship_contact)
 
 
 ## --- Scene registration (Station.gd) ---------------------------------------
@@ -425,6 +438,7 @@ func begin_approach(faction_index: int) -> void:
 	_off_lane = 0.0
 	_advised.clear()
 	_damages_cool = 0.0
+	_contact_grace = 0.0
 	GameState.docking = {
 		"faction": faction_index,
 		"station": "%s CONTROL" % faction,
@@ -462,6 +476,7 @@ func begin_departure(faction_index: int) -> void:
 	_reprimand_cool = 0.0
 	_advised.clear()
 	_damages_cool = 0.0
+	_contact_grace = 0.0
 	GameState.docking = {
 		"faction": faction_index,
 		"station": "%s CONTROL" % faction,
@@ -584,6 +599,7 @@ func _process(delta: float) -> void:
 	_pattern_time += delta
 	_reprimand_cool = maxf(_reprimand_cool - delta, 0.0)
 	_damages_cool = maxf(_damages_cool - delta, 0.0)
+	_contact_grace = maxf(_contact_grace - delta, 0.0)
 	_update_traffic()
 	_update_separation()
 	if not is_active():
@@ -682,6 +698,11 @@ func _update_speed(delta: float) -> void:
 	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
 	var limit := speed_limit()
 	if speed <= limit:
+		_over_speed = 0.0
+		return
+	# A contact reflects velocity as well as displacing the ship, so the same
+	# amnesty covers the overspeed it can hand you.
+	if _contact_grace > 0.0:
 		_over_speed = 0.0
 		return
 	if _over_speed == 0.0:
@@ -1019,6 +1040,7 @@ func _wave_off(reason: String) -> void:
 	_off_lane = 0.0
 	_advised.clear()
 	_damages_cool = 0.0
+	_contact_grace = 0.0
 	_leg_from = gate_world(HOLD_GATE)
 	_set_state("INBOUND")
 	_atc("GO AROUND — %s" % reason,
@@ -1039,6 +1061,26 @@ func _on_hull_impact(section: String, amount: float) -> void:
 	if not is_active() or GameState.run_phase != "APPROACH":
 		return
 	_bill_damages(section, amount)
+
+
+## Touching anything at all — the gentle grazes included, which never reach
+## hull_impact and so were previously silent even though the push-out moved the
+## ship. Opens the amnesty window, and says so, because being knocked off the
+## centreline and then told you departed the lane with nothing in between is the
+## game blaming the pilot for its own shove.
+func _on_ship_contact(body_name: String, closing: float) -> void:
+	if not is_active() or GameState.run_phase != "APPROACH":
+		return
+	var fresh := _contact_grace <= 0.0
+	_contact_grace = CONTACT_GRACE
+	# Reset what's already accumulated: the deviation that put the ship here is
+	# the impact's doing, not the pilot's.
+	_off_lane = 0.0
+	_over_speed = 0.0
+	if fresh and closing < CollisionSystem.IMPACT_SPEED_FLOOR:
+		# Too soft to damage or bill, so nothing else would ever mention it.
+		_atc("CONTACT — %s" % body_name,
+				"YOU BRUSHED IT. STEADY UP AND CONTINUE — YOUR CLEARANCE STANDS.", true)
 
 
 ## Invoice for hitting the station. Charged against credits, with anything the
@@ -1173,6 +1215,11 @@ func _check_corridor(origin: Vector3, delta: float) -> bool:
 	var deviation := _lane_deviation(origin)
 	var limit := _lane_limit(origin)
 	if deviation <= limit:
+		_off_lane = 0.0
+		return true
+	# Just been shoved by something solid: the deviation is the impact's, so it
+	# doesn't count against the pilot until they've had a moment to recover.
+	if _contact_grace > 0.0:
 		_off_lane = 0.0
 		return true
 	if _off_lane == 0.0:

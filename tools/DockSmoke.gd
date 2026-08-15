@@ -206,6 +206,28 @@ func _run() -> void:
 	_check(GameState.credits == second_bill,
 			"a second contact inside the cooldown is not billed twice")
 
+	# --- Being knocked must not cost the approach either. CollisionSystem pushes
+	# the ship out of whatever it touched and reflects its velocity, so without an
+	# amnesty the shove itself throws you out of the corridor and the go-around
+	# arrives anyway — billing you and then waving you off for its own push. ---
+	await _fly_to_cleared()
+	var knock_waves: int = GameState.docking["wave_offs"]
+	var knock_comms := GameState.comms.size()
+	# Gentler than IMPACT_SPEED_FLOOR: too soft to damage or bill, and previously
+	# too soft to even be mentioned — while still moving the ship.
+	GameState.ship_contact.emit("STATION BAYWALL-1+0",
+			CollisionSystem.IMPACT_SPEED_FLOOR * 0.5)
+	_check(_has_comms_since(knock_comms, "CONTACT"),
+			"even a graze too gentle to bill is called out")
+	var knocked := await _hold(_leg_point(0.5) + Vector3(0, 60, 0), Vector3.ZERO,
+			func() -> bool: return int(GameState.docking["wave_offs"]) > knock_waves,
+			DockingSystem.LANE_GRACE * 2.0)
+	_check(not knocked, "a knock buys amnesty on the corridor rule")
+	var recovered := await _hold(_leg_point(0.5) + Vector3(0, 60, 0), Vector3.ZERO,
+			func() -> bool: return int(GameState.docking["wave_offs"]) > knock_waves,
+			DockingSystem.CONTACT_GRACE + DockingSystem.LANE_GRACE * 6.0)
+	_check(recovered, "...and the rule resumes once the amnesty runs out")
+
 	# --- A hot touchdown bounces; a clean one books the berth. ---
 	await _fly_to_final()
 	var bounces: int = GameState.docking["wave_offs"]

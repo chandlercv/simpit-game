@@ -85,6 +85,11 @@ func _process(delta: float) -> void:
 			continue
 		var normal: Vector3 = contact["normal"]
 		var closing := -velocity.dot(normal)  # +ve = driving into the body
+		# Report every contact, not just the damaging ones. The push-out below
+		# moves the ship whatever the closing speed was, so a gentle graze is
+		# still something that happened TO the pilot and systems downstream
+		# (DockingSystem's corridor rules) have to be able to know about it.
+		GameState.ship_contact.emit(String(body["name"]), closing)
 		origin += normal * float(contact["depth"])  # push out of penetration
 		if closing > 0.0:
 			velocity += normal * closing * (1.0 + RESTITUTION)  # reflect inward part
