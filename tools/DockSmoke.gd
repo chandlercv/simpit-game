@@ -206,6 +206,23 @@ func _run() -> void:
 	_check(GameState.credits == second_bill,
 			"a second contact inside the cooldown is not billed twice")
 
+	# --- The deck catches the ship in EVERY state, not just FINAL. Lose the
+	# clearance on the way down and you are still descending into a real berth;
+	# with the deck check living inside the FINAL handler, such a ship sank past
+	# deck height with nothing to catch it and ground against the bay floor's
+	# collision hull instead of ever being evaluated as a landing. ---
+	await _fly_to_cleared()
+	_check(GameState.docking_state == "CLEARED", "set up above the berth, not cleared to land")
+	var deck_comms := GameState.comms.size()
+	_park_at(_just_above_deck(), Vector3(0, -1.0, 0))
+	await _wait(0.4)
+	var height: float = (_ship_pos() - DockingSystem.pad_world()).dot(DockingSystem.pad_up())
+	_check(height > DockingSystem.GEAR_HEIGHT,
+			"arriving at the deck without a clearance bounces the ship clear (%.1f m)" % height)
+	_check(_has_comms_since(deck_comms, "WITHOUT A LANDING CLEARANCE"),
+			"...and says why, rather than grinding on the bay floor")
+	_check(GameState.run_phase == "APPROACH", "...and does not book the berth")
+
 	# --- Being knocked must not cost the approach either. CollisionSystem pushes
 	# the ship out of whatever it touched and reflects its velocity, so without an
 	# amnesty the shove itself throws you out of the corridor and the go-around

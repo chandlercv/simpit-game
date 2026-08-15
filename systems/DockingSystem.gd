@@ -64,6 +64,11 @@ const HOLD_GATE := 0
 const PAD_LOCAL := Vector3(-30, 0, 14)
 ## Deck markings you have to be inside to be ON the pad rather than beside it.
 const PAD_RADIUS := 7.0
+## How far either side of the pad centre still counts as "in the berth" for the
+## purposes of hitting the deck — the bay's footprint, a little wider than the
+## markings. Outside this, being at deck height is just open space beside the
+## station rather than an arrival.
+const DECK_REACH := 11.0
 ## The descent from DELTA onto the pad is a FUNNEL, not a tube.
 ##
 ## Between the bay walls (which stand BAY_WALL_HEIGHT above the deck — the
@@ -608,6 +613,11 @@ func _process(delta: float) -> void:
 	_update_speed(delta)
 	if not is_active():
 		return
+	# Before the per-state work: the deck stops the ship no matter which state it
+	# is in, including the states a go-around just put it in.
+	_check_deck()
+	if not is_active():
+		return
 	match GameState.docking_state:
 		"INBOUND":
 			_update_inbound(delta)
@@ -808,15 +818,9 @@ func _update_final(delta: float) -> void:
 	if GameState.cargo_hatch_open:
 		_wave_off("CARGO HATCH OPENED ON FINAL")
 		return
-	if not _check_corridor(xform.origin, delta):
-		return
-	var up := pad_up()
-	var pad := pad_world()
-	var from_pad: Vector3 = xform.origin - pad
-	var altitude := from_pad.dot(up)
-	if altitude > GEAR_HEIGHT:
-		return
-	_touchdown(ship, xform, from_pad - up * altitude, up)
+	# The deck itself is handled by _check_deck, every frame and in every state —
+	# see there for why it can't live in here.
+	_check_corridor(xform.origin, delta)
 
 
 ## Sat on the pad after undocking, waiting for a slot. Same sequencing as an
@@ -913,6 +917,38 @@ func _release_outbound() -> void:
 			% GameState.ship_def.display_name)
 	end_approach()
 	MarketSystem.complete_undock()
+
+
+## The deck is solid whatever ATC currently thinks of you.
+##
+## Evaluated every frame a pattern is live, NOT only on FINAL. A ship that lost
+## its clearance on the way down — an overspeed bust, a missed marker, a
+## go-around called while it was already in the berth — is still a ship
+## descending into a real bay. With this check living inside _update_final, that
+## ship simply sank past deck height with nothing to catch it and ground to a
+## halt against the bay floor's collision hull: "CONTACT — STATION BAYFLOOR",
+## repeatedly, with no landing ever evaluated.
+##
+## Arriving without a clearance is a bounce rather than a berth — you can't have
+## a landing you weren't cleared for — but it's a bounce, which puts the ship
+## back in the air where it can be flown, instead of a grind.
+func _check_deck() -> void:
+	var ship: Dictionary = GameState.local_ship()
+	var xform: Transform3D = ship["transform"]
+	var up := pad_up()
+	var from_pad: Vector3 = xform.origin - pad_world()
+	var altitude := from_pad.dot(up)
+	if altitude > GEAR_HEIGHT:
+		return
+	var offset: Vector3 = from_pad - up * altitude
+	# Only inside the berth. Elsewhere "below deck height" is just open space
+	# alongside the station, which the pilot is entitled to fly through.
+	if offset.length() > DECK_REACH:
+		return
+	if GameState.docking_state != "FINAL":
+		_bounce(ship, xform, up, "TOUCHED DOWN WITHOUT A LANDING CLEARANCE", 0.0)
+		return
+	_touchdown(ship, xform, offset, up)
 
 
 ## Contact. Everything the legs care about is judged in this one moment: gear,
