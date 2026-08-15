@@ -248,6 +248,28 @@ func _run() -> void:
 			"...and says why, rather than grinding on the bay floor")
 	_check(GameState.run_phase == "APPROACH", "...and does not book the berth")
 
+	# --- The deck catch has to cover the whole floor slab, not a circle inside
+	# it. The slab is square, so its corners stand 10.8 * sqrt(2) = 15.3 m out;
+	# an 11 m radius left a ship over one of them above solid floor with nothing
+	# to catch it, sinking onto the slab and grinding — which is what
+	# "CONTACT — STATION BAYFLOOR" on a cleared approach turned out to be. ---
+	await _fly_to_final()
+	var corner_comms := GameState.comms.size()
+	var basis: Basis = DockingSystem.station_transform().basis
+	var corner: Vector3 = DockingSystem.pad_world() \
+			+ DockingSystem.pad_up() * (DockingSystem.GEAR_HEIGHT - 0.05) \
+			+ basis.x.normalized() * (DockingSystem.DECK_HALF_EXTENT - 0.5) \
+			+ basis.z.normalized() * (DockingSystem.DECK_HALF_EXTENT - 0.5)
+	_park_at(corner, Vector3(0, -1.0, 0))
+	await _wait(0.4)
+	var corner_height: float = (_ship_pos() - DockingSystem.pad_world()).dot(
+			DockingSystem.pad_up())
+	_check(corner_height > DockingSystem.GEAR_HEIGHT,
+			"the deck catches a ship over the slab's far corner too (%.1f m, %.1f m out)"
+					% [corner_height, (corner - DockingSystem.pad_world()).length()])
+	_check(_has_comms_since(corner_comms, "OFF THE PAD MARKINGS"),
+			"...and calls it what it is rather than grinding on the floor")
+
 	# --- Being knocked must not cost the approach either. CollisionSystem pushes
 	# the ship out of whatever it touched and reflects its velocity, so without an
 	# amnesty the shove itself throws you out of the corridor and the go-around

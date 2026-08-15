@@ -64,11 +64,16 @@ const HOLD_GATE := 0
 const PAD_LOCAL := Vector3(-30, 0, 14)
 ## Deck markings you have to be inside to be ON the pad rather than beside it.
 const PAD_RADIUS := 7.0
-## How far either side of the pad centre still counts as "in the berth" for the
-## purposes of hitting the deck — the bay's footprint, a little wider than the
-## markings. Outside this, being at deck height is just open space beside the
-## station rather than an arrival.
-const DECK_REACH := 11.0
+## Half-extent of the berth's floor slab, per axis, matching the slab
+## tools/build_station.py lays down (BAY_HALF * 2 + BAY_WALL + 2, halved).
+##
+## Tested per axis rather than as a radius, because the slab is SQUARE: an 11 m
+## radius left the corners — which reach 10.8 * sqrt(2) = 15.3 m — above solid
+## floor but outside the deck catch, so a ship out that way sank onto the slab
+## and ground against it with the landing never evaluated. The catch has to
+## cover exactly what is solid, no more (beyond the slab there is open space the
+## pilot is entitled to fly through) and no less.
+const DECK_HALF_EXTENT := 10.8
 ## The descent from DELTA onto the pad is a FUNNEL, not a tube.
 ##
 ## Between the bay walls (which stand BAY_WALL_HEIGHT above the deck — the
@@ -245,8 +250,19 @@ func set_traffic_seed(seed_value: int) -> void:
 	_rng.seed = seed_value
 
 
+## Short fingerprint of this script as it exists on disk. Stamped into the comms
+## log at boot so "which build is actually running?" is answerable from a
+## screenshot: a running game holds the code it was launched with, and chasing a
+## bug that was already fixed — or reporting one against a stale build — costs
+## far more than one line of log.
+func build_id() -> String:
+	var digest := FileAccess.get_md5("res://systems/DockingSystem.gd")
+	return digest.substr(0, 7) if digest != "" else "unknown"
+
+
 func _ready() -> void:
 	_rng.randomize()
+	GameState.post_comms("OPS", "DOCKING SYSTEM ONLINE — BUILD %s" % build_id())
 	# Running into anything at all while flying a pattern is a go-around: the
 	# damage is CollisionSystem's business, the clearance is ours.
 	GameState.hull_impact.connect(_on_hull_impact)
@@ -947,9 +963,12 @@ func _check_deck() -> void:
 	if altitude > GEAR_HEIGHT:
 		return
 	var offset: Vector3 = from_pad - up * altitude
-	# Only inside the berth. Elsewhere "below deck height" is just open space
-	# alongside the station, which the pilot is entitled to fly through.
-	if offset.length() > DECK_REACH:
+	# Only where the berth's floor actually is. Elsewhere "below deck height" is
+	# open space alongside the station, which the pilot is entitled to fly
+	# through. Per axis, in the station's own frame, because the slab is square.
+	var basis := _station_xform.basis
+	if absf(offset.dot(basis.x.normalized())) > DECK_HALF_EXTENT \
+			or absf(offset.dot(basis.z.normalized())) > DECK_HALF_EXTENT:
 		return
 	if GameState.docking_state != "FINAL":
 		_bounce(ship, xform, up, "TOUCHED DOWN WITHOUT A LANDING CLEARANCE", 0.0)
