@@ -533,6 +533,19 @@ func _run() -> void:
 	_check(landed_for_real, "a landing completes with the station's hulls in the world")
 	_check(not _has_comms_since(contact_comms, "CONTACT"),
 			"...without the descent registering a hull contact")
+	# ...and the station is still THERE afterwards. A touchdown ends the pattern
+	# (DockingSystem goes INACTIVE handing the berth over), so anything keyed to
+	# "a pattern is live" deletes the station at the exact instant the ship parks
+	# on it — the pad, the bay and the drums all vanishing around a berthed ship.
+	await get_tree().process_frame
+	_check(station.visible, "the station is still there once the ship is berthed on it")
+	var berthed_bodies := 0
+	for obstacle: Dictionary in GameState.obstacles:
+		if String(obstacle["name"]).begins_with("STATION"):
+			berthed_bodies += 1
+	_check(berthed_bodies == station_bodies,
+			"...with its hulls still registered for the departure (%d of %d)" % [
+				berthed_bodies, station_bodies])
 	var worst := 0.0
 	for i in DockingSystem.GATES.size():
 		var ring: Node3D = rings.get_child(i)

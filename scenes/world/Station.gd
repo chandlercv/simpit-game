@@ -48,8 +48,8 @@ func _ready() -> void:
 	_build_gates()
 	_build_pad()
 	_bake_hulls()
-	GameState.docking_changed.connect(_on_docking_changed)
-	_on_docking_changed(GameState.docking_state)
+	GameState.run_phase_changed.connect(_refresh_presence.unbind(1))
+	_refresh_presence()
 	set_process(true)
 
 
@@ -57,7 +57,7 @@ func _ready() -> void:
 ## (every marker on the CLEARED leg), so there is no signal to hang it on. Four
 ## visibility flags a frame is cheaper than adding one.
 func _process(_delta: float) -> void:
-	if DockingSystem.is_active():
+	if visible:
 		_update_rings()
 
 
@@ -135,6 +135,13 @@ func _leg_into(index: int) -> Vector3:
 ## straight down the descent path and puts a glowing bar across the one view the
 ## pilot needs while landing. Rings show only while they are still ahead.
 func _update_rings() -> void:
+	# Berthed. The station is still there to look at, but there is no lane left to
+	# fly, so the markers come down — otherwise an auto-berth (which can end the
+	# pattern from anywhere) leaves its rings hanging over the bay.
+	if not DockingSystem.is_active():
+		for ring: MeshInstance3D in _ring_nodes:
+			ring.visible = false
+		return
 	var gate: int = int(GameState.docking.get("gate", 0))
 	var outbound: bool = DockingSystem.status().get("outbound", false)
 	var final_leg: bool = GameState.docking_state == "FINAL"
@@ -204,16 +211,25 @@ func _bake_hulls() -> void:
 		})
 
 
-## The station is only worth colliding against while a pattern is being flown.
-## Registering/unregistering rather than flagging, because CollisionSystem tests
-## every obstacle in the list — leaving a station in it would have the ship
-## trading paint with scenery hundreds of metres from the claim it never left.
-func _on_docking_changed(_state: String) -> void:
-	var live: bool = DockingSystem.is_active()
-	visible = live
-	if live == not _obstacle_ids.is_empty():
+## The station exists while the ship is AT it, which is the run phase's business
+## and NOT the pattern's: a touchdown ENDS the pattern (DockingSystem hands the
+## berth to MarketSystem and drops to INACTIVE the same frame the legs are down),
+## so keying this on DockingSystem.is_active() deleted the whole station out from
+## under a ship that had just landed on it. APPROACH is the flown pattern in
+## either direction, DOCKED is sitting in the berth; TRANSIT and ON_SITE are the
+## claim, hundreds of metres away, where the ship must not be trading paint with
+## scenery it never flew to.
+##
+## Registering/unregistering the hulls rather than flagging them, because
+## CollisionSystem tests every obstacle in the list. They are inert while DOCKED
+## anyway (flight_active() is false), but they stay registered so undocking flies
+## out past the same geometry it flew in through.
+func _refresh_presence() -> void:
+	var here: bool = GameState.run_phase == "APPROACH" or GameState.run_phase == "DOCKED"
+	visible = here
+	if here == not _obstacle_ids.is_empty():
 		return
-	if live:
+	if here:
 		for body: Dictionary in _hulls:
 			_obstacle_ids.append(GameState.register_obstacle(
 					body["name"], body["center"], body["radius"], body["hull"]))
