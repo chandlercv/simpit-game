@@ -96,8 +96,11 @@ const BAY_WALL_HEIGHT := 8.0
 ## lane, short of the hold marker, so the first thing you do is fly to ALPHA.
 const ENTRY_LOCAL := Vector3(0, 0, 246)
 
-## Ship-origin altitude above the pad at which the gear is on the deck.
-const GEAR_HEIGHT := 2.2
+## Ship-origin altitude above the pad at which the gear is on the deck. Set by
+## the art: Ship.gd mounts the legs at y=-1.0 and build_station.py's leg drops
+## 0.6 below its mount, so the feet are 1.6 under the origin. If either number
+## moves, this one moves with it or the ship parks in the air / in the deck.
+const GEAR_HEIGHT := 1.6
 
 ## ATC speed limits (m/s) by state. HOLD_SPEED doubles as the "hold position"
 ## limit when ATC stops you mid-approach for crossing traffic.

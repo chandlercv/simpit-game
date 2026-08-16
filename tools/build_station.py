@@ -200,7 +200,10 @@ def traffic_material():
 
 
 def gear_material():
-    return _material("landing_gear", (0.3, 0.31, 0.34), 0.8, 0.35)
+    """Light machined steel. Kept well clear of black on purpose: craft_miner is a
+    pale, high-key hull, and the near-black metal this used to be turned three
+    small legs into three heavy blobs hanging under a bright ship."""
+    return _material("landing_gear", (0.46, 0.48, 0.52), 0.55, 0.45)
 
 
 # --- Primitives (all authored in Godot space) -----------------------------------
@@ -483,12 +486,28 @@ def build_barge() -> bpy.types.Object:
 
 def build_gear_leg() -> bpy.types.Object:
     """One landing-gear leg, authored in SHIP space hanging straight down from the
-    origin, fully extended. Ship.gd instances three and swings them from stowed to
-    down with GameState.gear_position, so this is the 1.0 end of that travel."""
+    origin, fully extended. Ship.gd instances one per GEAR_LEGS mount and swings
+    them from stowed to down with GameState.gear_position, so this is the 1.0 end
+    of that travel.
+
+    Sized against the hull it hangs off, not in a vacuum: craft_miner is 1.8 wide
+    and only 0.7 TALL, so a leg longer than the hull is deep reads as stilts. The
+    0.6 m drop below is a little under the hull's own height, which is the
+    proportion a lander's gear actually has. That drop is also the number
+    Ship.gd's mount height subtracts from to land on DockingSystem.GEAR_HEIGHT —
+    change it here and that constant moves with it."""
     bm = bmesh.new()
-    add_cylinder(bm, (0.0, -0.55, 0.0), 0.12, 1.1, axis="y", segments=10)  # strut
-    add_cylinder(bm, (0.0, -1.08, 0.0), 0.34, 0.12, axis="y", segments=14)  # foot
-    add_box(bm, 0.0, -0.2, 0.0, 0.34, 0.3, 0.34)                            # knuckle
+    # Telescoping strut: a fat oleo sleeve the thin piston slides out of, on a
+    # flared ankle and a broad pad. Two cylinders rather than one stick is most of
+    # what makes it read as gear — and the knuckle stays SMALL and sits mostly
+    # above y=0 (i.e. buried in the hull), because a big one below the skin turns
+    # the whole leg into a block with a peg under it.
+    add_box(bm, 0.0, 0.02, 0.0, 0.15, 0.2, 0.15)                             # knuckle
+    add_cylinder(bm, (0.0, -0.19, 0.0), 0.07, 0.24, axis="y", segments=10)   # sleeve
+    add_cylinder(bm, (0.0, -0.4, 0.0), 0.045, 0.24, axis="y", segments=8)    # piston
+    add_cylinder(bm, (0.0, -0.535, 0.0), 0.16, 0.07, axis="y", segments=12,
+                 taper=0.3)                                                  # ankle
+    add_cylinder(bm, (0.0, -0.575, 0.0), 0.18, 0.05, axis="y", segments=12)  # foot pad
     return _finalize(bm, "GearLeg", gear_material())
 
 
