@@ -17,19 +17,40 @@ HUD markers, a headless smoke test — so it reads as more of the same game rath
 **Requested scope:** lots of piloting, a new MFD page, tight quarters, avoiding ship traffic,
 deploying landing gear, following ATC instructions, and new assets for the scene.
 
-## Work already on disk
+## Status — built
 
-Drafted in a cloud session that stalled at the decisions below and never committed; recovered from
-that session's transcript and committed on `docking-recovered` (`b4499de`). Both files compile and
-the existing smoke scenes pass with them loaded.
+**Everything below is implemented and on `docking-recovered`.** The rest of this document is kept as
+the design record, not as a work list. Where the shipped code diverges from it the code is right; the
+divergences are listed at the end of this section.
 
-- `autoload/GameState.gd` — modified (+139 lines): `APPROACH` run phase, `FLIGHT_PHASES`,
-  `DOCK_STATES`, gear state + travel in `_process`, `docking`/`traffic` state, signals, intents.
-- `systems/DockingSystem.gd` — new file, complete first draft (1005 lines): lane data, ATC state
-  machine, traffic routes, corridor/gate rules, wave-offs, touchdown scoring. **Not registered as an
-  autoload yet**, so nothing calls into it and the game is unchanged.
+How it got here: the starting point was a draft from a cloud session that stalled at the decisions
+below and was never committed, recovered from that session's transcript (`ca02a77`).
+`DockingSystem.gd` arrived there as a first draft and was deliberately not registered as an autoload,
+so the game was unchanged. It was reviewed against the decisions and wired up in `f4fd9a2`, and
+writing `DockSmoke` immediately found two more defects in it that would have stranded a player at the
+hold (`f6e6735`). Most of what came after is the shape flying it actually demanded — see the branch
+history, where each fix carries the symptom that produced it.
 
-Both need a review pass against the decisions below.
+Where the build diverged from this design:
+
+- **The gear.** `GEAR_HEIGHT` is 1.6, not 2.2, and the ship carries **four** legs rather than three.
+  `craft_miner` is a twin-boom craft with no nose to hang a leg from, and a tripod tips at 7.7° against
+  a touchdown check that legally allows 20° (`8bbe8f7`).
+- **The final corridor is a funnel**, not the parallel 6 m tube in the lane table. DELTA's 6.5 m ring
+  was wider than the corridor it fed, so crossing the marker legally anywhere but dead centre put you
+  outside the lane on the next frame (`abb7f6d`).
+- **Contact is billed, not waved off.** Hitting the structure was double jeopardy on top of the hull
+  damage; it now costs credits, hull and standing but keeps the clearance (`d03443a`), and opens a
+  short amnesty on the sustained rules, since the impact's own shove is what caused the deviation
+  (`5b64fb5`).
+- **The deck catch runs in every state**, not just `FINAL` — losing the clearance mid-descent otherwise
+  let the ship sink straight through the pad (`e94c5a5`) — and is tested per axis against the square
+  slab rather than as a radius (`12b30b9`).
+- **ATC distinguishes momentary calls from standing instructions** (`4523566`), and go-around standing
+  bleed is capped per visit so a bad run can't become unrecoverable (`e1bf941`).
+- **A BELLY camera was added** (not in this design at all): the pad is directly beneath the ship and
+  the hull camera looks forward, so the one thing you aim at was the one thing you couldn't see
+  (`9c81992`).
 
 ## Design
 
