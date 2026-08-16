@@ -974,6 +974,9 @@ func _release_outbound() -> void:
 ## Arriving without a clearance is a bounce rather than a berth — you can't have
 ## a landing you weren't cleared for — but it's a bounce, which puts the ship
 ## back in the air where it can be flown, instead of a grind.
+##
+## OUTBOUND is the exception, and gets _settle_on_deck instead: a departing ship
+## is not arriving anywhere, it is standing on the berth it is leaving.
 func _check_deck() -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var xform: Transform3D = ship["transform"]
@@ -989,6 +992,9 @@ func _check_deck() -> void:
 	var basis := _station_xform.basis
 	if absf(offset.dot(basis.x.normalized())) > DECK_HALF_EXTENT \
 			or absf(offset.dot(basis.z.normalized())) > DECK_HALF_EXTENT:
+		return
+	if _outbound():
+		_settle_on_deck(ship, xform, up)
 		return
 	if GameState.docking_state != "FINAL":
 		_bounce(ship, xform, up, "TOUCHED DOWN WITHOUT A LANDING CLEARANCE", 0.0)
@@ -1062,6 +1068,34 @@ func _bounce(ship: Dictionary, xform: Transform3D, up: Vector3, reason: String,
 		_damage_hull("DRIVE", damage)
 		_damage_hull("CORE", damage * 0.5)
 	_wave_off(reason)
+
+
+## The deck under an OUTBOUND ship: it holds the ship up rather than judging it.
+## No bounce, no wave-off, no clearance lost — a departing ship on the pad is
+## standing on its own berth, which is where a departure begins.
+##
+## Outbound is the one direction that legitimately STARTS in contact with the
+## deck, and _place_ship_on_pad puts the ship down at exactly GEAR_HEIGHT — the
+## boundary _check_deck tests. Whether that parked pose read as "on the deck"
+## therefore came down to which way float rounding of the station's placement
+## fell: at the shipped origin it lands a hair high and escapes, but move the
+## station and it doesn't, and then the ship was bounced and waved off to
+## INBOUND on the first frame of the departure — sent to fly an ARRIVAL it had
+## just completed, before the pilot had moved a metre. Setting back down while
+## climbing out of the bay hit the same wall and needed no rounding luck at all.
+##
+## The deck still has to be SOLID (see _check_deck — a ship that sinks past it
+## grinds against the bay floor's collision hull), so this catches the ship at
+## gear height and takes the sink out of it, leaving travel ACROSS the deck
+## alone: slide off the edge of the slab and you are in open space again.
+func _settle_on_deck(ship: Dictionary, xform: Transform3D, up: Vector3) -> void:
+	var resting := xform
+	resting.origin += up * (GEAR_HEIGHT - (xform.origin - pad_world()).dot(up))
+	ship["transform"] = resting
+	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
+	var sink: float = -velocity.dot(up)
+	if sink > 0.0:
+		ship["velocity"] = velocity + up * sink
 
 
 ## --- ATC plumbing -----------------------------------------------------------

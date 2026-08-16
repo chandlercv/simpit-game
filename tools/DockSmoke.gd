@@ -352,10 +352,34 @@ func _run() -> void:
 	_check(GameState.gear_locked_down(), "the ship starts the departure on its legs")
 	_check(_ship_pos().distance_to(DockingSystem.pad_world())
 			< DockingSystem.GEAR_HEIGHT + 0.5, "...standing on the pad")
+
+	# The deck is the departing ship's GROUND, not a trap. A departure begins in
+	# contact with the pad — at exactly the height _check_deck tests — so an
+	# outbound ship on the deck has to be held up, not read as an arrival nobody
+	# cleared. Pushed a hair under so the test doesn't rest on which way float
+	# rounding of the station's placement happens to fall.
+	var pad_waves: int = GameState.docking["wave_offs"]
+	_park_at(_just_above_deck(), Vector3(0, -1.0, 0))
+	await _wait(0.4)
+	_check(GameState.docking_state == "DEPART_HOLD"
+			and int(GameState.docking["wave_offs"]) == pad_waves,
+			"sitting on the deck outbound is not a touchdown without a clearance")
+	_check(_deck_altitude() > -0.001,
+			"...and the deck still holds the ship up (%.2f m)" % _deck_altitude())
+
 	var out_cleared := await _wait_until(
 			func() -> bool: return GameState.docking_state == "DEPARTING",
 			CLEARANCE_TIMEOUT)
 	_check(out_cleared, "ATC calls the departure once the delay is served")
+
+	# ...and the same once the slot is granted: a ship that sets back down while
+	# climbing out of the bay is still leaving, not arriving.
+	var lift_waves: int = GameState.docking["wave_offs"]
+	_park_at(_just_above_deck(), Vector3(0, -1.0, 0))
+	await _wait(0.4)
+	_check(GameState.docking_state == "DEPARTING"
+			and int(GameState.docking["wave_offs"]) == lift_waves,
+			"setting back down while climbing out does not lose the departure")
 	_check(int(GameState.docking["gate"]) == DockingSystem.GATES.size() - 1,
 			"the outbound lane starts at the marker an arrival ends on")
 
@@ -606,6 +630,13 @@ func _park_at(position: Vector3, velocity: Vector3) -> void:
 func _just_above_deck() -> Vector3:
 	return DockingSystem.pad_world() \
 			+ DockingSystem.pad_up() * (DockingSystem.GEAR_HEIGHT - 0.05)
+
+
+## How far the legs are above the deck: 0 is standing on it, negative is through
+## it. The same number DockingSystem.status() reports as "altitude".
+func _deck_altitude() -> float:
+	return (_ship_pos() - DockingSystem.pad_world()).dot(DockingSystem.pad_up()) \
+			- DockingSystem.GEAR_HEIGHT
 
 
 ## Wings level on the lane's heading — the only attitude a landing can be flown
