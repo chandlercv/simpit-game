@@ -88,11 +88,39 @@ func request_dock(faction_index: int) -> void:
 	_set_phase("TRANSIT")
 	GameState.post_comms("OPS", "DEPARTURE BURN — BOUND FOR %s STATION" % faction_name)
 	await get_tree().create_timer(TRANSIT_TIME).timeout
+	# The burn only gets you to the station's outer approach. The berth is flown
+	# for (DockingSystem) — or bought with an auto-berth handling fee — and only
+	# complete_dock() below actually books it.
+	_set_phase("APPROACH")
+	DockingSystem.begin_approach(faction_index)
+
+
+## DockingSystem: the ship is on the pad (a touchdown, or an auto-berth ATC flew
+## in). The one door into DOCKED — both paths come through here so the market
+## only ever wakes up one way.
+func complete_dock(faction_index: int) -> void:
+	if faction_index < 0 or faction_index >= _factions.size():
+		return
+	var faction_name: String = GameState.market_factions[faction_index]
 	GameState.docked_faction = faction_index
 	_reroll_jitter()
 	_reprice()
 	_set_phase("DOCKED")
 	GameState.post_comms("HARBOR", "DOCKED AT %s STATION — MARKET FEED LIVE" % faction_name)
+
+
+## DockingSystem: the approach was abandoned. Burn back to the claim WITHOUT
+## resetting the site — no berth was made, so the run isn't over and the wreck
+## is exactly as it was left.
+func abort_dock() -> void:
+	if GameState.run_phase != "APPROACH":
+		return
+	_set_phase("TRANSIT")
+	GameState.post_comms("OPS", "APPROACH ABANDONED — BURNING FOR CLAIM 7741-C")
+	await get_tree().create_timer(TRANSIT_TIME).timeout
+	_place_ship_at_claim()
+	_set_phase("ON_SITE")
+	GameState.post_comms("OPS", "BACK ON STATION AT CLAIM 7741-C")
 
 
 func sell_hold() -> void:
@@ -114,20 +142,41 @@ func sell_hold() -> void:
 		faction_name, total])
 
 
+## Leaving the berth is flown too: this lifts off into the departure pattern
+## rather than jumping. The jump itself waits on complete_undock().
 func request_undock() -> void:
 	if GameState.run_phase != "DOCKED":
 		return
 	if GameState.cargo_hatch_open:
 		GameState.post_comms("OPS", "DEPARTURE HELD — SECURE CARGO HATCH FIRST")
 		return
+	var faction_index := GameState.docked_faction
 	GameState.docked_faction = -1
+	_set_phase("APPROACH")
+	DockingSystem.begin_departure(faction_index)
+
+
+## DockingSystem: the ship is outbound past the hold marker and released by ATC.
+## Now the abstract burn home runs, and a fresh run starts at the claim.
+func complete_undock() -> void:
 	_set_phase("TRANSIT")
-	GameState.post_comms("OPS", "UNDOCKED — BURNING FOR CLAIM 7741-C")
+	GameState.post_comms("OPS", "CLEAR OF THE PATTERN — BURNING FOR CLAIM 7741-C")
 	await get_tree().create_timer(TRANSIT_TIME).timeout
 	SalvageSystem.reset_site()
 	ThreatSystem.reset_run()
+	_place_ship_at_claim()
 	_set_phase("ON_SITE")
 	GameState.post_comms("OPS", "JUMP COMPLETE — ON STATION AT CLAIM 7741-C")
+
+
+## Arriving at the claim: the fixed entry pose (the boot pose — origin, facing
+## the wreck at DEFAULT_WRECK_POS down -Z), stopped. Without this the ship would
+## still be wherever the station pattern left it, hundreds of metres from the
+## claim it just jumped to.
+func _place_ship_at_claim() -> void:
+	var ship: Dictionary = GameState.local_ship()
+	ship["transform"] = Transform3D.IDENTITY
+	ship["velocity"] = Vector3.ZERO
 
 
 ## --- Internals --------------------------------------------------------------

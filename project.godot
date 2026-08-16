@@ -27,6 +27,7 @@ MarketSystem="*res://systems/MarketSystem.gd"
 SalvageSystem="*res://systems/SalvageSystem.gd"
 ThreatSystem="*res://systems/ThreatSystem.gd"
 DriftSystem="*res://systems/DriftSystem.gd"
+DockingSystem="*res://systems/DockingSystem.gd"
 CollisionSystem="*res://systems/CollisionSystem.gd"
 
 [display]
@@ -112,6 +113,14 @@ throttle_cmd_toggle={
 "events": []
 }
 cargo_hatch_open={
+"deadzone": 0.2,
+"events": []
+}
+landing_gear={
+"deadzone": 0.2,
+"events": []
+}
+dock_request={
 "deadzone": 0.2,
 "events": []
 }
@@ -211,6 +220,10 @@ view_chase={
 "events": []
 }
 view_top={
+"deadzone": 0.2,
+"events": []
+}
+view_belly={
 "deadzone": 0.2,
 "events": []
 }

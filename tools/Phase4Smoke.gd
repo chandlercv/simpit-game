@@ -73,14 +73,21 @@ func _run() -> void:
 		CargoSystem.jettison(cargo[0]["id"])
 	_check(GameState.local_ship()["cargo"].size() == 2, "jettison removes an item")
 
-	# 5. Dock and sell.
-	var credits_before: int = GameState.credits
+	# 5. Dock and sell. The berth is flown for now (DockingSystem), which DockSmoke
+	# covers; this test is about the market, so it buys an auto-berth to get in.
 	var buyer: String = GameState.market_factions[0]
-	var rep_before: float = GameState.reputation[buyer]
 	MarketSystem.request_dock(0)
 	_check(await _wait_until(
+			func() -> bool: return GameState.run_phase == "APPROACH", 20.0),
+			"transit ends on the station's approach")
+	DockingSystem.request_auto_berth()
+	_check(await _wait_until(
 			func() -> bool: return GameState.run_phase == "DOCKED", 20.0),
-			"transit ends docked at a station")
+			"auto-berth books the berth")
+	# After the handling fee, so the sale is measured against what's actually in
+	# the account.
+	var credits_before: int = GameState.credits
+	var rep_before: float = GameState.reputation[buyer]
 	var quote: int = MarketSystem.hold_value(0)
 	MarketSystem.sell_hold()
 	_check(GameState.credits == credits_before + quote and quote > 0,
@@ -89,8 +96,15 @@ func _run() -> void:
 	_check(GameState.reputation[buyer] > rep_before,
 			"reputation rises with the buyer (%s)" % buyer)
 
-	# 6. Jump back: fresh site.
+	# 6. Jump back: fresh site. Undocking now lifts into a piloted departure
+	# (DockSmoke flies it); this asserts the handover and then takes the release
+	# ATC would give a ship that had flown the lane out.
 	MarketSystem.request_undock()
+	_check(await _wait_until(
+			func() -> bool: return GameState.docking_state == "DEPART_HOLD", 20.0),
+			"undocking lifts into the departure pattern")
+	DockingSystem.end_approach()
+	MarketSystem.complete_undock()
 	_check(await _wait_until(
 			func() -> bool: return GameState.run_phase == "ON_SITE", 20.0),
 			"jump returns to the claim")

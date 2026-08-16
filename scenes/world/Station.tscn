@@ -1,0 +1,37 @@
+[gd_scene load_steps=3 format=3 uid="uid://cst4tn0dockstn"]
+
+[ext_resource type="Script" path="res://scenes/world/Station.gd" id="1_station"]
+[ext_resource type="Script" path="res://scenes/world/StationTraffic.gd" id="2_traffic"]
+
+[node name="Station" type="Node3D"]
+script = ExtResource("1_station")
+
+[node name="Structure" type="Node3D" parent="."]
+
+[node name="Decor" type="Node3D" parent="."]
+
+[node name="Gates" type="Node3D" parent="."]
+
+[node name="Traffic" type="Node3D" parent="."]
+script = ExtResource("2_traffic")
+
+[node name="ApproachLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.35, 0.37, 0, 0.72, 0.69, -0.51, -0.6, 0.62, 0, 0, 0)
+light_color = Color(0.86, 0.9, 1, 1)
+light_energy = 0.55
+
+; Two lamps on the bay walls rather than one overhead. A light directly above
+; the pad sat ON the descent path -- the ship flew through it at about 12 m and
+; the deck blew out to flat white just as the pilot needed depth cues. From the
+; corners the markings read, and the walls cast shape.
+[node name="BerthLightA" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -38, 7, 6)
+light_color = Color(1, 0.78, 0.45, 1)
+light_energy = 1.6
+omni_range = 24.0
+
+[node name="BerthLightB" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 7, 22)
+light_color = Color(1, 0.78, 0.45, 1)
+light_energy = 1.6
+omni_range = 24.0

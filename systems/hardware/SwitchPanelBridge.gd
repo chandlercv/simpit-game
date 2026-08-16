@@ -124,3 +124,11 @@ func _route_intent(switch_name: String, on: bool) -> void:
 			GameState.set_power_switch(switch_name, on)
 		"COWL":
 			GameState.set_cargo_hatch(on)
+		# The panel's gear lever is a two-position switch decoded as a pair, so
+		# only the edge that is going ON carries the intent.
+		"GEAR_DOWN":
+			if on:
+				GameState.set_landing_gear(true)
+		"GEAR_UP":
+			if on:
+				GameState.set_landing_gear(false)

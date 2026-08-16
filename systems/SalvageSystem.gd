@@ -244,6 +244,12 @@ func request_cut() -> void:
 	if GameState.cargo_hatch_open:
 		GameState.post_comms("OPS", "CUT ABORT — SECURE CARGO HATCH FIRST")
 		return
+	# An extended leg sits in the torch's arc, so the gear interlocks the cutter
+	# the same way the hatch does — which is what gives the gear a cost at the
+	# claim as well as at the station.
+	if not GameState.gear_stowed():
+		GameState.post_comms("OPS", "CUT ABORT — STOW THE LANDING GEAR FIRST")
+		return
 	if GameState.align_state == "ALIGNING":
 		_commit_align()
 		return
@@ -483,6 +489,12 @@ func _random_tumble() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	# The station's docking pattern is hand-flown on the same stick, so manual
+	# flight has to integrate there too — but nothing else in this system means
+	# anything away from the claim: there is no wreck to scan, align on or cut.
+	if GameState.run_phase == "APPROACH":
+		_update_manual_flight(delta)
+		return
 	if GameState.run_phase != "ON_SITE":
 		return
 	_update_scan(delta)

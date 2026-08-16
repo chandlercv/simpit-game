@@ -23,6 +23,9 @@ func _ready() -> void:
 	GameState.credits_changed.connect(func(_credits: int) -> void: _rebuild())
 	GameState.reputation_changed.connect(_rebuild)
 	GameState.run_phase_changed.connect(func(_phase: String) -> void: _rebuild())
+	# The approach's own states matter here too: reaching FINAL withdraws the
+	# auto-berth offer, and the footer tracks inbound vs. outbound.
+	GameState.docking_changed.connect(func(_state: String) -> void: _rebuild())
 	GameState.cargo_changed.connect(_rebuild)
 	_rebuild()
 
@@ -58,6 +61,13 @@ func _rebuild() -> void:
 			_footer.text = "CACHED FEED — DOCK TO TRADE (LEAVES THE CLAIM)"
 		"TRANSIT":
 			_footer.text = "IN TRANSIT — STAND BY"
+		"APPROACH":
+			var docking: Dictionary = DockingSystem.status()
+			if docking.get("outbound", false):
+				_footer.text = "DEPARTING %s — FLY THE LANE OUT" % docking.get("station", "")
+			else:
+				_footer.text = "ON APPROACH TO %s — FLY IT IN, OR BUY AN AUTO-BERTH" \
+						% docking.get("station", "")
 		"DOCKED":
 			_footer.text = "DOCKED AT %s — HOLD SELLS HERE FOR %d CR" % [
 				GameState.market_factions[GameState.docked_faction],
@@ -78,6 +88,25 @@ func _faction_actions(faction_index: int) -> Control:
 		var depart := _make_button("DEPART FOR CLAIM", accent)
 		depart.pressed.connect(MarketSystem.request_undock)
 		box.add_child(depart)
+	elif GameState.run_phase == "APPROACH" \
+			and faction_index == int(GameState.docking.get("faction", -1)):
+		# Mid-approach the column becomes the two ways out of the pattern that
+		# aren't flying it: pay ATC to park it, or give up on the berth. Neither
+		# applies on the way out, where you're already leaving.
+		if DockingSystem.status().get("outbound", false):
+			var leaving := _make_button("DEPARTING — FLY THE LANE", accent)
+			leaving.disabled = true
+			box.add_child(leaving)
+		else:
+			var auto := _make_button("AUTO-BERTH (%d CR)" % DockingSystem.AUTO_BERTH_FEE,
+					accent)
+			auto.disabled = GameState.credits < DockingSystem.AUTO_BERTH_FEE \
+					or GameState.docking_state == "FINAL"
+			auto.pressed.connect(DockingSystem.request_auto_berth)
+			box.add_child(auto)
+			var abort := _make_button("ABORT APPROACH", SELL_COLOR)
+			abort.pressed.connect(DockingSystem.abort_approach)
+			box.add_child(abort)
 	else:
 		var dock := _make_button("DOCK", accent)
 		dock.disabled = GameState.run_phase != "ON_SITE"

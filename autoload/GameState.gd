@@ -46,6 +46,13 @@ signal wreck_members_lost
 ## the integrity lost. Extension seam: future crippling/destruction consequences
 ## and view juice (camera shake, alarms) subscribe here.
 signal hull_impact(section: String, amount: float)
+## ANY resolved contact between the ship and a solid body (CollisionSystem),
+## including ones too gentle to do damage. hull_impact is the damage event;
+## this is the "you touched something" event, and it fires even when the only
+## consequence was being pushed back out of the body. DockingSystem needs the
+## gentle ones: they still shove the ship off its line, and being knocked out of
+## a corridor by scenery should not read to the pilot as their own bad flying.
+signal ship_contact(body_name: String, closing: float)
 signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
 ## Pre-cut alignment mini-game phase changed (SalvageSystem), one of ALIGN_STATES.
@@ -57,6 +64,19 @@ signal salvage_piece_spawned(id: int)
 signal salvage_piece_removed(id: int)
 ## Cargo hatch position changed (GameState.set_cargo_hatch/toggle_cargo_hatch).
 signal cargo_hatch_changed(open: bool)
+## Landing-gear lever moved (GameState.set_landing_gear/toggle_landing_gear).
+## The gear then TRAVELS over GEAR_TRAVEL_TIME — read gear_position for how far
+## it actually is, and gear_locked_down() for "safe to land on".
+signal landing_gear_changed(down: bool)
+## DockingSystem: the docking/landing approach phase changed, one of DOCK_STATES.
+signal docking_changed(state: String)
+## DockingSystem: a fresh ATC instruction was issued. Carries the instruction
+## dict (see GameState.docking["atc"]) so an instrument can flash the new call
+## rather than diffing text every frame.
+signal atc_instruction(instruction: Dictionary)
+## DockingSystem: the station's traffic list changed (a ship joined or left the
+## pattern). Positions move every frame without this — it's arrivals/departures.
+signal traffic_changed
 @warning_ignore_restore("unused_signal")
 
 ## Godot's convention for the local/server peer. GameState.ships is keyed by
@@ -72,7 +92,9 @@ const SENSOR_MODES: Array[String] = ["PASSIVE", "ACTIVE", "STRUCT"]
 ## External-camera vantages for the Camera display (see ExternalCameraRig):
 ## REAR looks aft (a rear-view), SIDE frames the ship's profile, CHASE trails it,
 ## TOP looks straight down.
-const EXTERNAL_VIEWS: Array[String] = ["REAR", "SIDE", "CHASE", "TOP"]
+## BELLY looks straight down past the hull — the landing view, since a berth
+## pad sits directly under a ship that has to stay level to touch down.
+const EXTERNAL_VIEWS: Array[String] = ["REAR", "SIDE", "CHASE", "TOP", "BELLY"]
 
 ## Tactical display modes (see TacticalContent): SCOPE (sensor scope + hull
 ## status) and CHART (system star chart).
@@ -98,9 +120,44 @@ const CHANNEL_HIGH_OVERRIDE: Dictionary = {"LIFE": 1.0}
 
 const HULL_SECTIONS: Array[String] = ["BOW", "PORT", "STBD", "CORE", "AFT", "DRIVE"]
 
+## Every comms line is mirrored here as it is posted (see post_comms), so a run
+## can be read back from disk rather than photographed off the screen. Its real
+## location is printed at boot; on Windows it lands under
+## %APPDATA%\Godot\app_userdata\<project>\.
+const COMMS_LOG_PATH := "user://comms_log.txt"
+
 ## Run phases: ON_SITE (at the salvage claim), TRANSIT (abstract burn to/from
-## a station), DOCKED (at a faction station, hold can be sold).
-const RUN_PHASES: Array[String] = ["ON_SITE", "TRANSIT", "DOCKED"]
+## a station), APPROACH (hand-flying the station's docking pattern — the
+## docking/landing mini-game, DockingSystem), DOCKED (berthed at a faction
+## station, hold can be sold).
+const RUN_PHASES: Array[String] = ["ON_SITE", "TRANSIT", "APPROACH", "DOCKED"]
+
+## Phases where the pilot is hand-flying a real ship in a real volume, so manual
+## flight integrates and collisions bite (SalvageSystem, CollisionSystem). The
+## claim and the station pattern are both "in the air"; TRANSIT and DOCKED are
+## not — the ship is parked while the burn/berth is resolved.
+const FLIGHT_PHASES: Array[String] = ["ON_SITE", "APPROACH"]
+
+## Docking/landing approach states (DockingSystem):
+##   INACTIVE — not flying a pattern
+##   INBOUND  — proceed to the hold marker (also where a wave-off puts you)
+##   HOLD     — holding at the marker, waiting on a clearance from ATC
+##   CLEARED  — cleared inbound, flying the lane's gates in order
+##   FINAL    — over the pad, cleared to land; descend onto it
+##   LANDED   — on the pad, berthing handed back to MarketSystem
+##   DEPART_HOLD — on the pad after undocking, waiting on a departure clearance
+##   DEPARTING   — cleared out, flying the same lane in reverse to leave
+const DOCK_STATES: Array[String] = ["INACTIVE", "INBOUND", "HOLD", "CLEARED",
+		"FINAL", "LANDED", "DEPART_HOLD", "DEPARTING"]
+
+## Seconds the landing gear takes to travel between stowed and locked down. It
+## is deliberately slow enough that "GEAR DOWN BY THE FINAL GATE" is a call you
+## have to act on early, not a switch you flick on short final.
+const GEAR_TRAVEL_TIME := 3.0
+
+## Airspeed (m/s) the extended gear is rated for. Flying faster than this with
+## the gear off the stops wears it — see DockingSystem, which does the damage.
+const GEAR_LIMIT_SPEED := 18.0
 
 ## Approach states (SalvageSystem): HOLDING (free drift), APPROACHING
 ## (closing/matching), MATCHED (inside cutting range, velocity matched).
@@ -215,6 +272,34 @@ var salvage_pieces: Array[Dictionary] = []
 ## SalvageSystem/MarketSystem interlock cutting and jump/dock while it's open).
 var cargo_hatch_open: bool = false
 
+## Landing-gear LEVER position (what the pilot selected), and how far the gear
+## has actually travelled toward it (0 = stowed, 1 = down and locked). The lever
+## is the intent; the position is the machine catching up, advanced here in
+## _process so the gear keeps travelling in every run phase — it's ship
+## equipment, not something the claim or the station owns.
+var gear_down: bool = false
+var gear_position: float = 0.0
+
+## Docking/landing approach state, one of DOCK_STATES (owned by DockingSystem).
+var docking_state: String = "INACTIVE"
+
+## Live docking/landing mini-game state, owned/mutated by DockingSystem while
+## docking_state != INACTIVE. Replication-friendly:
+## { "faction": int (index into market_factions), "station": String,
+##   "gate": int (index of the next gate to fly), "gates": Array[Dictionary]
+##   (each { "name": String, "position": Vector3, "radius": float,
+##   "lane": float }), "pad": Vector3, "pad_up": Vector3, "pad_forward": Vector3,
+##   "speed_limit": float, "hold": bool (ATC is holding you where you are),
+##   "atc": Dictionary (the standing instruction: { "text", "detail", "urgent" }),
+##   "wave_offs": int, "quality": float 0..1 (last touchdown's score) }.
+var docking: Dictionary = {}
+
+## Station traffic in the pattern, owned by DockingSystem. Each:
+## { "id": int, "name": String, "kind": String, "transform": Transform3D,
+##   "radius": float, "contact_id": int, "conflict": bool (currently fouling
+##   the lane) }. StationTraffic (view) mirrors these into meshes.
+var traffic: Array[Dictionary] = []
+
 ## Scenario picked on the title card, one of SCENARIOS' ids.
 var scenario: String = SCENARIOS[0]["id"]
 
@@ -247,6 +332,8 @@ var panel_switches: Dictionary = {}
 
 ## Comms/mission log entries: { "tick": int, "source": String, "text": String }.
 var comms: Array[Dictionary] = []
+## Open handle for COMMS_LOG_PATH; null if the file could not be opened.
+var _comms_log: FileAccess
 
 ## Shared tick counter, displayed on every window (kept from Phase 1 as the
 ## cheapest way to spot a stalled window over spacedesk).
@@ -274,6 +361,7 @@ var _power_target: Dictionary = {}
 
 
 func _ready() -> void:
+	_open_comms_log()
 	ships[LOCAL_PEER_ID] = {
 		"transform": Transform3D.IDENTITY,
 		"velocity": Vector3.ZERO,
@@ -460,6 +548,57 @@ func toggle_cargo_hatch() -> void:
 	set_cargo_hatch(not cargo_hatch_open)
 
 
+## Landing-gear intent (keybind / the switch panel's GEAR lever / the MFD DOCK
+## page). Only moves the LEVER — the gear itself travels over GEAR_TRAVEL_TIME
+## in _process, so selecting down is a decision you make ahead of the final gate,
+## not on top of it.
+func set_landing_gear(down: bool) -> void:
+	if down == gear_down:
+		return
+	gear_down = down
+	landing_gear_changed.emit(down)
+	post_comms("OPS", "LANDING GEAR — %s" % ("DOWN SELECTED" if down else "UP SELECTED"))
+
+
+func toggle_landing_gear() -> void:
+	set_landing_gear(not gear_down)
+
+
+## Gear down AND fully travelled: the state a landing needs and the cutter
+## interlock trips on. Mid-travel is neither stowed nor usable.
+func gear_locked_down() -> bool:
+	return gear_down and gear_position >= 1.0
+
+
+## Gear fully stowed — the cutter needs this (an extended leg sits in the torch's
+## arc), and it's what "clean" reads as on the instruments.
+func gear_stowed() -> bool:
+	return not gear_down and gear_position <= 0.0
+
+
+## True while the pilot is hand-flying in a real volume (see FLIGHT_PHASES) —
+## the claim or the station's docking pattern. Systems that integrate the ship
+## or punish it for hitting things gate on this rather than on ON_SITE alone.
+func flight_active() -> bool:
+	return FLIGHT_PHASES.has(run_phase)
+
+
+## DockingSystem: register a ship in the station's traffic pattern. Returns the
+## live entry (Dictionaries are references) so the caller keeps writing its
+## transform in place, exactly like salvage pieces.
+func add_traffic(entry: Dictionary) -> void:
+	traffic.append(entry)
+	traffic_changed.emit()
+
+
+func remove_traffic(id: int) -> void:
+	for i in traffic.size():
+		if traffic[i]["id"] == id:
+			traffic.remove_at(i)
+			traffic_changed.emit()
+			return
+
+
 func set_tracked_contact(id: int) -> void:
 	tracked_contact_id = id
 	tracked_contact_changed.emit(id)
@@ -632,11 +771,62 @@ func post_comms(source: String, text: String) -> void:
 	var entry := {"tick": tick, "source": source, "text": text}
 	comms.append(entry)
 	comms_posted.emit(entry)
+	_write_comms_log(entry)
+
+
+## Open (and truncate) this session's comms log, and print where it landed so
+## the path never has to be hunted for.
+func _open_comms_log() -> void:
+	_comms_log = FileAccess.open(COMMS_LOG_PATH, FileAccess.WRITE)
+	if _comms_log == null:
+		push_warning("GameState: could not open %s for writing" % COMMS_LOG_PATH)
+		return
+	_comms_log.store_line("# Salvager session log — %s" %
+			Time.get_datetime_string_from_system())
+	_comms_log.flush()
+	print("comms log: ", ProjectSettings.globalize_path(COMMS_LOG_PATH))
+
+
+## Mirror every comms line to a file so a session can be read afterwards instead
+## of photographed. The in-game log scrolls and holds a limited history, and the
+## things worth reading back — what was hit, where, and in what order — are
+## exactly the things that scroll away while you are busy flying.
+##
+## Truncated at each launch: a log you have to scroll to the end of to find the
+## current run is barely better than a screenshot.
+func _write_comms_log(entry: Dictionary) -> void:
+	if _comms_log == null:
+		return
+	_comms_log.store_line("[T+%08.1f] %-7s %s" % [
+		float(entry["tick"]) / TICK_RATE_HZ, entry["source"], entry["text"]])
+	# Flushed per line: the runs worth reading back are the ones that ended in a
+	# crash or a force-quit, which is precisely when buffered output is lost.
+	_comms_log.flush()
 
 
 func _process(delta: float) -> void:
+	_advance_gear(delta)
 	_tick_accum += delta
 	while _tick_accum >= 1.0 / TICK_RATE_HZ:
 		_tick_accum -= 1.0 / TICK_RATE_HZ
 		tick += 1
 		tick_changed.emit(tick)
+
+
+## Run the gear toward wherever the lever is. Lives here rather than in
+## DockingSystem because the gear is ship equipment: it must keep travelling
+## while docking is INACTIVE (you can cycle it at the claim, where it interlocks
+## the cutter) and it has to reach the stops for gear_locked_down() to mean
+## anything. Announces only the two ends — the travel itself is silent.
+func _advance_gear(delta: float) -> void:
+	var target := 1.0 if gear_down else 0.0
+	# Exact compare, not is_equal_approx: move_toward lands exactly on `target`,
+	# and an approx guard would stop a hair short of the stops — leaving the gear
+	# permanently "in transit" and gear_locked_down() permanently false.
+	if gear_position == target:
+		return
+	gear_position = move_toward(gear_position, target, delta / GEAR_TRAVEL_TIME)
+	if gear_position >= 1.0:
+		post_comms("OPS", "LANDING GEAR DOWN AND LOCKED")
+	elif gear_position <= 0.0:
+		post_comms("OPS", "LANDING GEAR UP AND STOWED")

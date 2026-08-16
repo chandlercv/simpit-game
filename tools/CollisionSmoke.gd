@@ -151,6 +151,47 @@ func _run() -> void:
 			"hull fit settles the ship far short of the bounding-sphere standoff")
 	GameState.remove_obstacle(plate_id)
 
+	# --- A FLAT hull must not swallow things that are nowhere near it.
+	#
+	# GJK reduces its simplex through _sub_tetra, which decided "origin inside"
+	# whenever no face reported the origin outside it. A squashed tetrahedron has
+	# near-zero face normals, so every face abstains and the origin reads as
+	# enclosed — at any distance. Support points taken from a thin slab are
+	# coplanar exactly like that, so the station's 22 x 2 x 22 m berth floor
+	# reported contact with a ship ELEVEN METRES above it, intermittently,
+	# depending on which coplanar vertices the supports happened to pick.
+	var slab := PackedVector3Array()
+	for sx in [-11.0, 11.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-11.0, 11.0]:
+				slab.append(Vector3(sx, sy, sz))
+	var worst_error := 0.0
+	var false_hits := 0
+	# Queried with the ship's REAL capsule, not a point: the degenerate simplex
+	# only shows up for a segment-vs-slab Minkowski difference, which is exactly
+	# what the ship is.
+	# Explicit, not read from ship_def: the plate check above zeroes the capsule,
+	# and a point query does not produce the degenerate simplex this is about.
+	var ca := Vector3(0.0, -0.7, -0.95)
+	var cb := Vector3(0.0, -0.7, 0.95)
+	for h in [3.0, 5.0, 7.5, 9.0, 11.0, 12.5, 14.0, 15.5, 17.0]:
+		var centre := Vector3(0.4, h, -0.3)   # above the slab, near its middle
+		var measured: float = CollisionSystem.hull_distance(centre + ca, centre + cb, slab)
+		var expected: float = h + minf(ca.y, cb.y) - 1.0   # slab's top face
+		worst_error = maxf(worst_error, absf(measured - expected))
+		if measured <= 0.0:
+			false_hits += 1
+	_check(false_hits == 0,
+			"a flat slab reports no contact with a ship clear of it (%d false hits)"
+					% false_hits)
+	_check(worst_error < 0.01,
+			"...and measures the true distance to its face (worst error %.3f m)"
+					% worst_error)
+	# The other half: a point genuinely inside the slab still reads as inside.
+	_check(CollisionSystem.hull_distance(Vector3(0.2, 0.0, 0.1),
+			Vector3(0.2, 0.0, 0.1), slab) <= 0.0,
+			"...while a point actually inside it still registers")
+
 	if _failures.is_empty():
 		print("COLLISION SMOKE: ALL CHECKS PASSED")
 		get_tree().quit(0)
