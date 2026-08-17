@@ -231,6 +231,27 @@ func profile_for_guid(guid: String) -> Dictionary:
 	return {}
 
 
+## The live throttle binding as {device, axis, spec}, or {} when no connected
+## profile carries one. The throttle is read straight off its axis (an idle..full
+## range can't be an action), so it's invisible to the Input Map — a surface that
+## reports what's bound has to ask here (see scenes/ui/BindingLabel.gd).
+func throttle_binding() -> Dictionary:
+	if _throttle_device < 0 or _throttle_spec.is_empty():
+		return {}
+	return {
+		"device": _throttle_device,
+		"axis": _throttle_axis,
+		"spec": _throttle_spec.duplicate(true),
+	}
+
+
+## The active raw-HID axis bindings (the X52 nub), which are composited in
+## _process rather than injected into the Input Map — so, like the throttle,
+## they're invisible to anything reading bindings back from it.
+func hid_axis_bindings() -> Array:
+	return _hid_axis_bindings.duplicate(true)
+
+
 ## Open/close the in-game remapper overlay (the F7 hotkey).
 func _toggle_controls_setup() -> void:
 	if is_instance_valid(_controls_ui):

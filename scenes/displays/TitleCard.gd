@@ -16,6 +16,9 @@ class_name TitleCard
 ##    and reveals it again on close — no hide/show handshake needed. The row reads
 ##    back which sticks are connected.
 ##
+## ...plus the PILOT'S MANUAL (PilotManual), which this card owns outright — it is
+## the only thing that opens it, so the layer lives here rather than on a system.
+##
 ## LAUNCH commits the scenario (GameState.launch_scenario) and hands back to
 ## WindowManager, which builds the display windows and lets the world run.
 
@@ -26,6 +29,40 @@ signal launched
 signal display_setup_requested
 
 const ButtonThemeScript := preload("res://scenes/ui/ButtonTheme.gd")
+const ManualViewerScript := preload("res://scenes/displays/ManualViewer.gd")
+const PilotManualContentScript := preload("res://scenes/displays/PilotManualContent.gd")
+const TerminalProceduresContentScript := preload("res://scenes/displays/TerminalProceduresContent.gd")
+
+## The two documents the ship carries, each a row on the card. They are separate
+## publications because they have separate publishers — the handbook is the
+## builder's and describes the ship; the terminal procedures are the harbour's
+## and bind the pilot — so neither can be folded into the other.
+##   "title"/"subtitle" — the masthead ManualViewer prints
+##   "status"           — the card's own line describing what's inside
+const DOCUMENTS := [
+	{
+		"id": "manual",
+		"button": "PILOT'S MANUAL",
+		"title": "PILOT'S MANUAL — %s",
+		"subtitle": "SALVAGE CUTTER · OPERATING INSTRUCTIONS AND PROCEDURES",
+		"status": "the ship, her systems and her limits, and the checklists for\n"
+			+ "departure · arrival · cutting · collecting",
+	},
+	{
+		"id": "terminal",
+		"button": "TERMINAL PROCEDURES",
+		"title": "TERMINAL PROCEDURES",
+		"subtitle": "ISSUED BY HARBOUR CONTROL · NOT A BUILDER PUBLICATION",
+		"status": "the approach lane and its plate, clearance and traffic rules,\n"
+			+ "charges, claim conditions and the schedule of prices",
+	},
+]
+
+## CanvasLayer a document is raised on. Above this card (WindowManager puts it on
+## 15) so it covers it, and deliberately BELOW the display chooser (20) and the
+## remapper (25): F5/F6/F7 are polled globally and still fire while a document is
+## up, so those surfaces have to draw over it rather than under it.
+const MANUAL_LAYER := 18
 
 const ACCENT := Color(0.35, 0.95, 0.55)
 const SETUP_ACCENT := Color(0.4, 0.8, 1.0)
@@ -38,6 +75,10 @@ var _blurb: Label
 var _display_status: Label
 var _controls_status: Label
 var _launch_button: Button
+var _manual_layer: CanvasLayer = null
+var _manual_ui: Control = null
+## DOCUMENTS id currently on the reader, "" when none is.
+var _open_document_id := ""
 
 
 ## Build the card and start tracking the state it reports. Call after adding this
@@ -166,6 +207,17 @@ func _add_setup_rows(vbox: VBoxContainer) -> void:
 	_controls_status.custom_minimum_size = Vector2(520, 0)
 	grid.add_child(_controls_status)
 
+	# No hotkey suffix, unlike the two rows above: the documents are read before you
+	# fly, so they're reachable from here and nowhere else. Their status lines are
+	# fixed — there's no live state to report, just what's inside each.
+	for document: Dictionary in DOCUMENTS:
+		var open := _make_setup_button(String(document["button"]))
+		open.pressed.connect(_open_document.bind(document["id"]))
+		grid.add_child(open)
+		var status := _make_label(String(document["status"]), 16, DIM)
+		status.custom_minimum_size = Vector2(520, 0)
+		grid.add_child(status)
+
 
 func _add_actions(vbox: VBoxContainer) -> void:
 	var actions := HBoxContainer.new()
@@ -209,6 +261,75 @@ func _make_label(text: String, font_size: int, color: Color) -> Label:
 	return label
 
 
+# --- The ship's documents --------------------------------------------------
+
+## The chapter catalog for a DOCUMENTS id. Kept here rather than in the catalog
+## itself because a const Array can't hold a preloaded script reference.
+func _document_chapters(id: String) -> Array:
+	return (TerminalProceduresContentScript.CHAPTERS if id == "terminal"
+			else PilotManualContentScript.CHAPTERS)
+
+
+## Raise a document on its own CanvasLayer. Parented to THIS node rather than the
+## window, so LAUNCH freeing the card takes the document with it instead of
+## leaving a page floating over the run. Opening one while another is up swaps
+## them, so the two can never stack.
+func _open_document(id: String) -> void:
+	if is_instance_valid(_manual_ui):
+		if _open_document_id == id:
+			return
+		_close_manual()
+	var document := _document_def(id)
+	if document.is_empty():
+		return
+	_open_document_id = id
+	_manual_layer = CanvasLayer.new()
+	_manual_layer.layer = MANUAL_LAYER
+	# ALWAYS so the document's buttons and its Esc still work while this card holds
+	# the tree paused — a paused Control receives no input at all.
+	_manual_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_manual_layer)
+	_manual_ui = ManualViewerScript.new()
+	_manual_ui.closed.connect(_close_manual)
+	_manual_layer.add_child(_manual_ui)
+	# The handbook's masthead carries the ship's name; the harbour's does not, so
+	# the format string is only substituted when it asks for one.
+	var title := String(document["title"])
+	if title.contains("%s"):
+		title = title % GameState.ship_def.display_name
+	_manual_ui.configure(_document_chapters(id), title, String(document["subtitle"]))
+	_manual_ui.start()
+
+
+func _document_def(id: String) -> Dictionary:
+	for document: Dictionary in DOCUMENTS:
+		if document["id"] == id:
+			return document
+	return {}
+
+
+func _close_manual() -> void:
+	if is_instance_valid(_manual_ui):
+		_manual_ui.queue_free()
+	_manual_ui = null
+	if is_instance_valid(_manual_layer):
+		_manual_layer.queue_free()
+	_manual_layer = null
+	_open_document_id = ""
+	_launch_button.grab_focus()
+
+
+## True while a document is up — the smoke test's handle on it, and what
+## suspend/resume restore.
+func manual_open() -> bool:
+	return is_instance_valid(_manual_ui)
+
+
+## Which document is open, "" when none is.
+func open_document() -> String:
+	return _open_document_id if manual_open() else ""
+
+
 # --- Stepping out and back -------------------------------------------------
 
 ## Step away to a setup surface that covers the whole screen (the display
@@ -216,12 +337,19 @@ func _make_label(text: String, font_size: int, color: Color) -> Label:
 ## torn down — so returning is instant.
 func suspend() -> void:
 	visible = false
+	# A CanvasLayer is not a CanvasItem, so it does NOT inherit this node's
+	# visibility: without hiding it explicitly the manual would keep drawing over
+	# a chooser that F6 opened from underneath it.
+	if is_instance_valid(_manual_layer):
+		_manual_layer.visible = false
 
 
 ## Come back from that step: re-read what it changed and take focus again, since
 ## hiding dropped it.
 func resume() -> void:
 	visible = true
+	if is_instance_valid(_manual_layer):
+		_manual_layer.visible = true
 	refresh()
 	_launch_button.grab_focus()
 
