@@ -125,6 +125,8 @@ before any other window opens. It's the one place that gathers everything you se
 | **SCENARIO** | Which run to fly, with a blurb for the selected one. Today there is exactly one — **DEMO RUN**, the shipped sandbox (tumbling frigate on a Freehold claim, a rival cutter, a patrol). Scenarios are a data list (`GameState.SCENARIOS`), so a second run is a catalog entry, not new UI. |
 | **SET UP DISPLAYS  (F6)** | Opens the same **Display Setup** chooser described under *Simpit / multi-display setup*, as a step you come back from — confirm it and you're back on the card with the new assignment shown. The status line reads the live mapping (`3 screens  MAIN→0  TACTICAL→1 …`) and turns amber when this monitor setup has never been assigned. |
 | **SET UP CONTROLS  (F7)** | Opens the same in-game **remapper** described under *Remapping the controls*. The status line lists the sticks currently detected, or says you're on the keyboard mapping. |
+| **PILOT'S MANUAL** | Opens the ship's handbook — her systems, her limits and the four checklists. See below. |
+| **TERMINAL PROCEDURES** | Opens the harbour's document — the approach lane and its plate, clearance, charges and local notices. A separate publication because it has a separate publisher. See below. |
 | **LAUNCH** | Starts the run: places the display windows and lets the world run. It's focused at boot, so **Enter** launches. If this monitor setup has never been assigned, the display chooser comes up first (the DISPLAYS line warns that it will), then the run starts. |
 | **QUIT** | Same as **Esc**. |
 
@@ -136,6 +138,43 @@ don't open until **LAUNCH**, so plugging in a stick or re-assigning screens cost
 you nothing. The switch panel is the one thing deliberately held back: its bridge
 writes power and hatch state straight through, so it stays parked until the run
 starts and then syncs to whatever position every switch is physically in.
+
+### The ship's documents
+
+The card opens **two documents**, because the ship carries two and they have two
+different publishers. Both are read in the same viewer
+(`scenes/displays/ManualViewer.gd`) — a contents list, one chapter at a time —
+and both are written as operating documents rather than as a guide.
+
+| Button | Publisher | What's in it |
+| --- | --- | --- |
+| **PILOT'S MANUAL** | The builder. True of the Kestrel wherever she's flown. | The ship: description, flight controls, power, sensors, cutting torch, cargo hatch, landing gear, **landing limitations** (what the legs will take), hull, scope, instruments; **how a derelict hull behaves under the torch**; and the four checklists — **departure, arrival, cutting, collecting**. |
+| **TERMINAL PROCEDURES** | The harbour, the claim office, the commercial agent. Changes without the handbook changing, and differs berth to berth. | The approach lane and its plate, speed limits and compliance, clearance and traffic, the berth and how an arrival is assessed, the arrival and departure procedures, claim conditions, the schedule of prices, and the system chart. |
+
+**The division is authorship, not subject.** The builder can state what the legs
+will accept at touchdown and how a loaded frame behaves when you cut it — a
+tool's manual describes what the tool does to the work. It cannot state where a
+harbour will let you put the ship down, what it charges, or how a rival will
+behave: those are dictated by others. So the marker names, ring and corridor
+sizes and speed limits appear **only** in the terminal procedures, the airframe
+figures appear **only** in the handbook, and an arrival is flown from both — the
+handbook for the ship's configuration, the plate for the lane.
+`tools/PilotManualSmoke.tscn` asserts that neither document publishes the other's
+material.
+
+**Every control either names is the one you have bound right now.** The chapters
+are written with binding placeholders that resolve through
+`scenes/ui/BindingLabel.gd`, which reads the live Input Map, so remapping in
+**F7** and reopening shows the new binding — and a control with nothing bound to
+it reads **`NOT ASSIGNED`** in amber rather than quietly naming a key you don't
+have. Both documents are launch-screen surfaces: read them before you fly, then
+**Esc** or **CLOSE** back to the card.
+
+Each document's chapters are a data catalog
+(`scenes/displays/PilotManualContent.gd`,
+`scenes/displays/TerminalProceduresContent.gd`), so a new chapter is an entry
+there and nothing else. Every figure in both is quoted from code — see the
+`CLAUDE.md` note about keeping them in step.
 
 ---
 
@@ -584,7 +623,7 @@ running game predates a change.
 | --- | --- |
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
-| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `title` lays the launch title card over the view. |
+| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
@@ -595,6 +634,7 @@ running game predates a change.
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
 | `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
+| `PilotManualSmoke.tscn` | Headless smoke for both of the ship's documents: each catalog is well-formed, sections are contiguous, and the required procedures are present; **neither document publishes the other's material** (the handbook names no harbour marker, the terminal procedures restate no airframe figure, and every harbour chapter names its issuing office); **every binding placeholder in the content names a real Input Map action** (so renaming an action fails the build instead of leaving a hole in a checklist); the resolver agrees with the effective profiles and reports an unassigned control as `NOT ASSIGNED` rather than an empty gap; every chapter renders with no placeholder left unsubstituted; and the card opens either document on a layer above itself but below the chooser and remapper, swaps rather than stacks when the other is opened, hides it for a setup step, and frees it on LAUNCH. |
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
 | `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |

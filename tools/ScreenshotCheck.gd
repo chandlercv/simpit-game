@@ -2,15 +2,20 @@ extends Node
 ## Renders the main hull-camera view for a hundred frames and saves a PNG so
 ## graphics changes can be eyeballed without a full playtest:
 ##
-##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close] [title]
+##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close] [title|manual|terminal] [<chapter-id>]
 ##
 ## Defaults to user://main_view.png. `close` parks the ship at cutting range;
-## `title` puts the launch title card over the view, the way it appears at boot.
+## `title` puts the launch title card over the view, the way it appears at boot;
+## `manual` opens the pilot's handbook over that card and `terminal` opens the
+## terminal procedures, which is the only way to eyeball their layout short of
+## launching the game. Add a chapter id to shoot a specific page.
 ## Runs windowed (rendering needs a real DisplayServer); WindowManager leaves
 ## tools scenes alone, so only the one window flashes up — and, for the same
 ## reason, the title card here is built directly rather than by the launch flow.
 
 const TitleCardScript := preload("res://scenes/displays/TitleCard.gd")
+const ManualContentScript := preload("res://scenes/displays/PilotManualContent.gd")
+const TerminalContentScript := preload("res://scenes/displays/TerminalProceduresContent.gd")
 
 
 func _ready() -> void:
@@ -21,13 +26,35 @@ func _ready() -> void:
 	# assertion in DockSmoke instead.
 	var scene: PackedScene = load("res://scenes/displays/MainViewWindow.tscn")
 	add_child(scene.instantiate())
-	if OS.get_cmdline_user_args().has("title"):
+	var args := OS.get_cmdline_user_args()
+	# A document is opened BY the card (it owns the layer), so `manual`/`terminal`
+	# imply `title` — asking for the page without the screen it hangs off would
+	# have to build it a second way, and then it wouldn't be the thing players see.
+	if args.has("title") or args.has("manual") or args.has("terminal"):
 		var layer := CanvasLayer.new()
 		layer.layer = 15
 		add_child(layer)
 		var card: Control = TitleCardScript.new()
 		layer.add_child(card)
 		card.start()
+		if args.has("manual") or args.has("terminal"):
+			var doc := "terminal" if args.has("terminal") else "manual"
+			card._open_document(doc)
+			# A chapter can be named to shoot it specifically, e.g.
+			# `manual checklist-arrival`; otherwise the manual's own first chapter.
+			# Matched against the catalog rather than a name pattern, so every
+			# chapter is reachable and a typo'd id is reported instead of silently
+			# shooting the front page.
+			var ids: PackedStringArray = []
+			var catalog: Array = (TerminalContentScript.CHAPTERS if doc == "terminal"
+					else ManualContentScript.CHAPTERS)
+			for chapter: Dictionary in catalog:
+				ids.append(String(chapter["id"]))
+			for arg in args:
+				if ids.has(arg):
+					card._manual_ui.show_chapter(arg)
+				elif not ["manual", "terminal", "title"].has(arg) and not arg.ends_with(".png"):
+					push_warning("no %s chapter '%s'; ids: %s" % [doc, arg, ", ".join(ids)])
 	_shoot.call_deferred()
 
 
