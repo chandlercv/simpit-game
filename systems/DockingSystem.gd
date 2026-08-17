@@ -387,7 +387,13 @@ func status() -> Dictionary:
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
 	var index: int = GameState.docking.get("gate", HOLD_GATE)
 	var final_leg: bool = GameState.docking_state == "FINAL"
-	var target: Vector3 = pad_world() if final_leg else gate_world(index)
+	# The thing being made is the pad, not a ring, whenever the gate index is past
+	# the last one — the convention gate_world() already follows. It is NOT the
+	# same question as "is the state FINAL": a touchdown sets LANDED with that
+	# index still standing, and every display rebuilds inside that instant, so
+	# reading GATES by the index there indexed one off the end of the array.
+	var on_pad := final_leg or index < 0 or index >= GATES.size()
+	var target: Vector3 = pad_world() if on_pad else gate_world(index)
 	var to_target: Vector3 = target - xform.origin
 	var dist := to_target.length()
 	var los := to_target / dist if dist > 0.0001 else -xform.basis.z
@@ -409,9 +415,9 @@ func status() -> Dictionary:
 		"berth": GameState.docking.get("berth", 0),
 		"atc": current_instruction(),
 		"gate": index,
-		"gate_name": "PAD" if final_leg else String(GATES[index]["name"]),
+		"gate_name": "PAD" if on_pad else String(GATES[index]["name"]),
 		"gate_position": target,
-		"gate_radius": PAD_RADIUS if final_leg else float(GATES[index]["radius"]),
+		"gate_radius": PAD_RADIUS if on_pad else float(GATES[index]["radius"]),
 		"range": dist,
 		"aim": aim,
 		"off_axis": off_axis,
