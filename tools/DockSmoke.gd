@@ -338,11 +338,33 @@ func _run() -> void:
 	_check(GameState.run_phase == "APPROACH", "...and does not book the berth")
 
 	await _fly_to_final()
+	# Every display rebuilds off the state change and reads status() to do it, so
+	# status() has to survive being called in EVERY state the pattern passes
+	# through — including LANDED, the instant between touchdown and the approach
+	# being torn down, where the gate index still points past the last ring.
+	# Read there, it indexed off the end of GATES and took out the panel mid-draw.
+	# Watched from the signal rather than polled, because the states a landing
+	# passes through are gone again inside the same frame.
+	var seen: Array[String] = []
+	var readable: Array[String] = []
+	var watcher := func(state: String) -> void:
+		seen.append(state)
+		# A typed assignment, so a status() that errored out (and so handed back
+		# nothing) fails here rather than quietly reading as an empty report.
+		var report: Dictionary = DockingSystem.status()
+		if state == "INACTIVE" or not String(report.get("gate_name", "")).is_empty():
+			readable.append(state)
+	GameState.docking_changed.connect(watcher)
 	_park_at(_just_above_deck(), Vector3(0, -1.0, 0))
 	var down := await _wait_until(
 			func() -> bool: return GameState.run_phase == "DOCKED", 8.0)
+	GameState.docking_changed.disconnect(watcher)
 	_check(down, "a gentle touchdown on the markings books the berth")
 	_check(_has_comms("TOUCHDOWN"), "the arrival is graded on the comms log")
+	_check(seen.has("LANDED"), "the landing passes through LANDED (%s)" % ", ".join(seen))
+	_check(seen == readable,
+			"...and the displays can read status() in every state it passes through (%s)"
+					% ", ".join(seen.filter(func(s: String) -> bool: return not readable.has(s))))
 
 	# --- Departure is flown too. ---
 	MarketSystem.request_undock()
