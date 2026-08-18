@@ -1,8 +1,10 @@
 extends VBoxContainer
-## Target lock list for the Tactical display: every sensor contact with live
-## bearing/range, click a row to lock it (same intent as clicking a scope
+## Target lock list on the MFD CONTACTS page: every sensor contact with live
+## bearing/range, tap a row to lock it (same intent as clicking a scope
 ## blip). The complete, omnidirectional list belongs here, not on the main
 ## HUD (plan Phase 2 rule of thumb).
+
+const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
 
 @export var accent: Color = Color(1.0, 0.72, 0.2)
 
@@ -22,7 +24,7 @@ func _rebuild() -> void:
 	_rows.clear()
 	var header := Label.new()
 	header.text = "CONTACTS — LOCK LIST"
-	header.add_theme_font_size_override("font_size", 14)
+	header.add_theme_font_size_override("font_size", 16)
 	header.add_theme_color_override("font_color", accent)
 	add_child(header)
 	for contact in GameState.contacts:
@@ -30,7 +32,10 @@ func _rebuild() -> void:
 		row.flat = true
 		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row.focus_mode = Control.FOCUS_NONE
-		row.add_theme_font_size_override("font_size", 13)
+		# A contact is locked by tapping its row on the MFD CONTACTS page, so the
+		# row is a touch target.
+		row.custom_minimum_size = Vector2(0, ButtonTheme.TOUCH_MIN_H)
+		row.add_theme_font_size_override("font_size", 16)
 		row.pressed.connect(GameState.set_tracked_contact.bind(contact["id"]))
 		add_child(row)
 		_rows[contact["id"]] = row

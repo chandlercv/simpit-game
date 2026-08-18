@@ -26,6 +26,7 @@ func _run() -> void:
 	var first: String = pages[0]
 	var last: String = pages[pages.size() - 1]
 	_check(pages.has("SCOOP"), "the SCOOP page is registered")
+	_check(pages.has("CHECKLIST"), "the CHECKLIST page is registered")
 	_check(unit.current_page() == "", "starts on the MENU home")
 
 	# From the home a rocker still gets you onto the pages, at either end.

@@ -351,6 +351,14 @@ func wreck_distance() -> float:
 	return ship_pos.distance_to(GameState.wreck["position"])
 
 
+## The current forward throttle command, 0..1 — the value toggle_approach() tests
+## against APPROACH_ARM_THROTTLE_MAX before it will arm. Read-only, for the
+## instruments: the MFD CHECKLIST page shows this item against its limit so a
+## refused approach names the reason before you press for it.
+func throttle_command() -> float:
+	return _manual_thrust.z
+
+
 ## Ship collision radius, or a fallback for an unbaked capsule — mirrors
 ## CollisionSystem so the surface standoff and the actual collision agree.
 func _ship_radius() -> float:

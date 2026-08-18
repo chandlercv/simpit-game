@@ -24,13 +24,24 @@ const SalvagePanelScript := preload("res://scenes/ui/SalvagePanel.gd")
 const AlignPanelScript := preload("res://scenes/ui/AlignPanel.gd")
 const ScoopPanelScript := preload("res://scenes/ui/ScoopPanel.gd")
 const DockPanelScript := preload("res://scenes/ui/DockPanel.gd")
+const ChecklistPanelScript := preload("res://scenes/ui/ChecklistPanel.gd")
 
 ## Page order (also the menu grid order). Empty string = the MENU home.
-## ALIGN and SCOOP sit together: they're the two halves of a salvage run (cut
-## the member free, then go collect it). DOCK follows MARKET, which is where
-## an approach is started from.
-const PAGES: Array[String] = ["POWER", "CARGO", "SALVAGE", "ALIGN", "SCOOP",
-		"MARKET", "DOCK", "CONTACTS"]
+## CHECKLIST comes first because it's the page you consult BEFORE doing a thing —
+## it's the one page that's about all the others. ALIGN and SCOOP sit together:
+## they're the two halves of a salvage run (cut the member free, then go collect
+## it). DOCK follows MARKET, which is where an approach is started from.
+const PAGES: Array[String] = ["CHECKLIST", "POWER", "CARGO", "SALVAGE", "ALIGN",
+		"SCOOP", "MARKET", "DOCK", "CONTACTS"]
+
+## MENU grid sizing. Nine pages at two columns is five rows, which at this
+## minimum height fills the unit in the 1280x800 canvas without scrolling; the
+## buttons then expand into whatever room is left over.
+const MENU_BUTTON_H := 120
+const MENU_FONT := 26
+## Gap between grid buttons — enough that a near-miss lands on nothing rather
+## than on the page next door.
+const MENU_SEPARATION := 16
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 @export var background: Color = Color(0.012, 0.038, 0.038)
@@ -129,16 +140,18 @@ func _build() -> void:
 
 	# Bezel: MENU button + current page title.
 	var bezel := HBoxContainer.new()
-	bezel.add_theme_constant_override("separation", 8)
+	bezel.add_theme_constant_override("separation", ButtonTheme.TOUCH_SEP)
 	outer.add_child(bezel)
-	_menu_button = ButtonTheme.make_button(accent, 8)
+	_menu_button = ButtonTheme.make_touch_button(accent)
 	_menu_button.text = "☰ MENU"
+	_menu_button.custom_minimum_size = Vector2(150, ButtonTheme.TOUCH_MIN_H)
 	_menu_button.pressed.connect(go_home)
 	bezel.add_child(_menu_button)
 	_title = Label.new()
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_title.add_theme_font_size_override("font_size", 16)
+	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_title.add_theme_font_size_override("font_size", 18)
 	_title.add_theme_color_override("font_color", accent)
 	bezel.add_child(_title)
 
@@ -157,20 +170,29 @@ func _build() -> void:
 		_pages[page] = panel
 
 
-## The MENU home: a grid of big page buttons.
+## The MENU home: a grid of big page buttons. These are the primary touch targets
+## on the whole panel — every page is reached through them — so they fill the unit
+## rather than sitting at a fixed size in the middle of it. Filling by size flag
+## also means they stay right when the unit is a different width, which it is
+## whenever the MFD content is reparented into a shared-screen tab (RoleTabHost).
 func _build_menu() -> void:
-	_menu = CenterContainer.new()
+	_menu = MarginContainer.new()
+	_menu.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.add_child(_menu)
 	var grid := GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", MENU_SEPARATION)
+	grid.add_theme_constant_override("v_separation", MENU_SEPARATION)
 	_menu.add_child(grid)
 	for page: String in PAGES:
-		var btn := ButtonTheme.make_button(accent, 20)
+		var btn := ButtonTheme.make_touch_button(accent)
 		btn.text = page
-		btn.custom_minimum_size = Vector2(200, 88)
-		btn.add_theme_font_size_override("font_size", 22)
+		btn.custom_minimum_size = Vector2(0, MENU_BUTTON_H)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", MENU_FONT)
 		btn.pressed.connect(show_page.bind(page))
 		grid.add_child(btn)
 
@@ -197,6 +219,10 @@ func _build_page(page: String) -> Control:
 			var dock := DockPanelScript.new()
 			dock.accent = accent
 			return dock
+		"CHECKLIST":
+			var checklist := ChecklistPanelScript.new()
+			checklist.accent = accent
+			return checklist
 		"MARKET":
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 8)

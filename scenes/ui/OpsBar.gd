@@ -1,8 +1,8 @@
 extends HBoxContainer
-## Salvage-ops controls for the Tactical display: approach/match-velocity
-## toggle and the cutter trigger. Mouse-driven buttons calling SalvageSystem
-## intents; button text mirrors GameState each frame so every window stays in
-## agreement about what the ship is doing.
+## Salvage-ops controls on the MFD SALVAGE page: approach/match-velocity toggle
+## and the cutter trigger. Touch buttons calling SalvageSystem intents; button
+## text mirrors GameState each frame so every window stays in agreement about
+## what the ship is doing.
 
 const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
 
@@ -73,8 +73,9 @@ func _update() -> void:
 		_cut_button.disabled = false
 
 
+## Sized for a finger: the approach and cut triggers are tapped mid-run.
 func _make_button() -> Button:
-	var button := ButtonTheme.make_button(accent)
+	var button := ButtonTheme.make_touch_button(accent)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(button)
 	return button

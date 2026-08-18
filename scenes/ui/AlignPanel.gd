@@ -9,11 +9,16 @@ extends Control
 ## cancel_align).
 
 const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
+const Instrument := preload("res://scenes/ui/Instrument.gd")
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 
 ## Reserve for the footer button row so the crosshair field never overlaps it.
-const FOOTER_H := 52.0
+const FOOTER_H := 76.0
+## Reserve above the field for the page header.
+const HEADER_H := 52.0
+## Meter labels, for measuring the track inset off the widest of them.
+const METER_LABELS: PackedStringArray = ["LOCK", "SLIP"]
 
 var _commit: Button
 var _cancel: Button
@@ -29,16 +34,16 @@ func _ready() -> void:
 	footer.offset_left = 8
 	footer.offset_right = -8
 	footer.offset_bottom = -8
-	footer.add_theme_constant_override("separation", 8)
+	footer.add_theme_constant_override("separation", ButtonTheme.TOUCH_SEP)
 	add_child(footer)
 
-	_commit = ButtonTheme.make_button(accent)
+	_commit = ButtonTheme.make_touch_button(accent)
 	_commit.text = "COMMIT"
 	_commit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_commit.pressed.connect(SalvageSystem.request_cut)
 	footer.add_child(_commit)
 
-	_cancel = ButtonTheme.make_button(Color(1.0, 0.5, 0.3))
+	_cancel = ButtonTheme.make_touch_button(Color(1.0, 0.5, 0.3))
 	_cancel.text = "CANCEL"
 	_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cancel.pressed.connect(SalvageSystem.cancel_align)
@@ -67,10 +72,8 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var mid_y := (size.y - FOOTER_H) / 2.0
 	if GameState.align_state != "ALIGNING" or GameState.align.is_empty():
-		draw_string(font, Vector2(0, mid_y), "NO ALIGNMENT ACTIVE",
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, Color(accent, 0.6))
-		draw_string(font, Vector2(0, mid_y + 24), "FIRE THE CUTTER FROM A MATCHED TARGET",
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, 12, Color(accent, 0.4))
+		Instrument.draw_notice(self, font, "NO ALIGNMENT ACTIVE",
+				"FIRE THE CUTTER FROM A MATCHED TARGET", accent, FOOTER_H)
 		return
 
 	var align: Dictionary = GameState.align
@@ -80,11 +83,11 @@ func _draw() -> void:
 	var member := GameState.get_member(GameState.selected_member_id)
 
 	# Header.
-	draw_string(font, Vector2(8, 22), "ALIGN — %s" % member.get("name", "TARGET"),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 16, accent)
+	draw_string(font, Vector2(8, 26), "ALIGN — %s" % member.get("name", "TARGET"),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, Instrument.HEADING, accent)
 
 	var center := Vector2(size.x / 2.0, mid_y)
-	var field: float = minf(size.x, size.y - FOOTER_H - 40.0) * 0.42
+	var field: float = maxf(minf(size.x, size.y - FOOTER_H - HEADER_H) * 0.42, 24.0)
 	var tol: float = SalvageSystem.ALIGN_LOCK_RADIUS * field
 	var target := center + Vector2(align["target"]) * field
 	var reticle := center + Vector2(align["reticle"]) * field
@@ -112,20 +115,13 @@ func _draw() -> void:
 
 	# Meters + quality readout under the field.
 	var bar_y := center.y + field + 16.0
-	_draw_meter(font, Vector2(8, bar_y), size.x - 16.0, "LOCK", lock, accent)
+	var pitch := Instrument.METER_PITCH
+	var label_w := Instrument.label_column(font, METER_LABELS)
+	Instrument.draw_meter(self, font, Vector2(8, bar_y), size.x - 16.0, "LOCK",
+			lock, accent, label_w)
 	var slip_col := Color(1.0, 0.4, 0.25) if slip > 0.35 else Color(accent, 0.7)
-	_draw_meter(font, Vector2(8, bar_y + 22.0), size.x - 16.0, "SLIP", slip, slip_col)
-	draw_string(font, Vector2(8, bar_y + 48.0), "QUALITY %d%%" % roundi(quality * 100.0),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, accent)
-
-
-## A labelled 0..1 bar: label on the left, filled track on the right.
-func _draw_meter(font: Font, pos: Vector2, width: float, label: String,
-		value: float, color: Color) -> void:
-	draw_string(font, pos + Vector2(0, 12), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
-	var track_x := pos.x + 52.0
-	var track_w := width - 52.0
-	var track := Rect2(track_x, pos.y + 2.0, track_w, 12.0)
-	draw_rect(track, Color(color, 0.12), true)
-	draw_rect(Rect2(track_x, pos.y + 2.0, track_w * clampf(value, 0.0, 1.0), 12.0), color, true)
-	draw_rect(track, Color(color, 0.5), false, 1.0)
+	Instrument.draw_meter(self, font, Vector2(8, bar_y + pitch), size.x - 16.0,
+			"SLIP", slip, slip_col, label_w)
+	draw_string(font, Vector2(8, bar_y + pitch * 2.0 + 4.0),
+			"QUALITY %d%%" % roundi(quality * 100.0),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, Instrument.ROW, accent)
