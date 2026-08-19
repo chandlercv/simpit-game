@@ -408,8 +408,8 @@ static func _collecting() -> Array[Dictionary]:
 				var ship: Dictionary = GameState.local_ship()
 				var mass := CargoSystem.cargo_mass()
 				var vol := CargoSystem.cargo_volume()
-				var room := mass < float(ship["cargo_mass_limit_t"]) \
-						and vol < float(ship["cargo_vol_limit_m3"])
+				var room := mass <= float(ship["cargo_mass_limit_t"]) \
+						and vol <= float(ship["cargo_vol_limit_m3"])
 				return _gate(room, "%.1f / %.1f T · %.1f / %.1f M³" % [
 					mass, float(ship["cargo_mass_limit_t"]),
 					vol, float(ship["cargo_vol_limit_m3"])]),
