@@ -15,10 +15,11 @@ const SELL_COLOR := Color(0.5, 1.0, 0.7)
 
 
 func _ready() -> void:
-	_title.add_theme_font_size_override("font_size", 15)
+	_title.add_theme_font_size_override("font_size", 17)
 	_title.add_theme_color_override("font_color", accent)
-	_footer.add_theme_font_size_override("font_size", 11)
+	_footer.add_theme_font_size_override("font_size", 13)
 	_footer.add_theme_color_override("font_color", Color(accent, 0.5))
+	_footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	GameState.market_changed.connect(_rebuild)
 	GameState.credits_changed.connect(func(_credits: int) -> void: _rebuild())
 	GameState.reputation_changed.connect(_rebuild)
@@ -118,14 +119,20 @@ func _faction_actions(faction_index: int) -> Control:
 func _add_cell(text: String, color: Color, header := false) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 13 if header else 12)
+	label.add_theme_font_size_override("font_size", 15 if header else 14)
 	label.add_theme_color_override("font_color", color)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_grid.add_child(label)
 
 
+## Full-height touch targets in a column only a quarter of the panel wide, so the
+## label wraps inside the button rather than being clipped or forcing the type
+## back down — height is what a fingertip needs, and the column already gives the
+## button its width.
 func _make_button(text: String, color: Color) -> Button:
-	var button := ButtonTheme.make_button(color, 6)
+	var button := ButtonTheme.make_button(color, 8)
 	button.text = text
-	button.add_theme_font_size_override("font_size", 12)
+	button.custom_minimum_size = Vector2(0, ButtonTheme.TOUCH_MIN_H)
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	button.add_theme_font_size_override("font_size", 14)
 	return button

@@ -26,15 +26,19 @@ extends Control
 ## The footer buttons call the same intents the keybinds and the switch panel do.
 
 const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
+const Instrument := preload("res://scenes/ui/Instrument.gd")
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 
 ## Reserve for the footer button row so the field never overlaps it.
-const FOOTER_H := 52.0
-## Vertical room for the checklist under the field.
-const CHECKLIST_H := 108.0
+const FOOTER_H := 76.0
+## The five rules ATC is watching, drawn on Instrument.ROW_PITCH.
+const GATE_ROWS := 5
+## Vertical room for the checklist under the field. Derived from the row pitch so
+## raising the type scale moves the reserve with it.
+const CHECKLIST_H := GATE_ROWS * Instrument.ROW_PITCH + 20.0
 ## Room for the two-line ATC banner above the field.
-const HEADER_H := 52.0
+const HEADER_H := 66.0
 
 ## Half-angle the cone field spans edge to edge — wide enough that a gate you
 ## are badly off-line for still shows up (and which way to turn) rather than
@@ -44,9 +48,12 @@ const FIELD_SPAN_DEG := 90.0
 ## Pad view: screen pixels per metre across the deck.
 const PAD_PX_PER_M := 9.0
 
-const GOOD := Color(0.45, 1.0, 0.55)
-const WARN := Color(1.0, 0.62, 0.25)
-const BAD := Color(1.0, 0.38, 0.32)
+const GOOD := Instrument.GOOD
+const WARN := Instrument.WARN
+const BAD := Instrument.BAD
+
+## The gate row labels, for measuring the value column off the widest of them.
+const GATE_LABELS: PackedStringArray = ["SPEED", "LANE", "GEAR", "HATCH", "CLEARANCE"]
 
 var _request: Button
 var _gear: Button
@@ -62,22 +69,22 @@ func _ready() -> void:
 	footer.offset_left = 8
 	footer.offset_right = -8
 	footer.offset_bottom = -8
-	footer.add_theme_constant_override("separation", 8)
+	footer.add_theme_constant_override("separation", ButtonTheme.TOUCH_SEP)
 	add_child(footer)
 
 	# Touch equivalents of the mapped controls, so the page is flyable on the
 	# 13" panel alone.
-	_request = ButtonTheme.make_button(accent)
+	_request = ButtonTheme.make_touch_button(accent)
 	_request.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_request.pressed.connect(DockingSystem.request_clearance)
 	footer.add_child(_request)
 
-	_gear = ButtonTheme.make_button(accent)
+	_gear = ButtonTheme.make_touch_button(accent)
 	_gear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_gear.pressed.connect(GameState.toggle_landing_gear)
 	footer.add_child(_gear)
 
-	_abort = ButtonTheme.make_button(Color(1.0, 0.55, 0.45))
+	_abort = ButtonTheme.make_touch_button(Color(1.0, 0.55, 0.45))
 	_abort.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_abort.pressed.connect(DockingSystem.abort_approach)
 	footer.add_child(_abort)
@@ -109,8 +116,8 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var st := DockingSystem.status()
 	if st.is_empty():
-		_draw_notice(font, "NO APPROACH RUNNING",
-				"DOCK FROM THE MARKET PAGE TO FLY A STATION PATTERN")
+		Instrument.draw_notice(self, font, "NO APPROACH RUNNING",
+				"DOCK FROM THE MARKET PAGE TO FLY A STATION PATTERN", accent, FOOTER_H)
 		return
 
 	_draw_atc(font, st)
@@ -131,10 +138,10 @@ func _draw() -> void:
 func _draw_atc(font: Font, st: Dictionary) -> void:
 	var atc: Dictionary = st.get("atc", {})
 	var station: String = st.get("station", "")
-	draw_string(font, Vector2(8, 16), station, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-			Color(accent, 0.6))
+	draw_string(font, Vector2(8, 16), station, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			Instrument.CORNER, Color(accent, 0.6))
 	draw_string(font, Vector2(-8, 16), "BERTH %d" % int(st.get("berth", 0)),
-			HORIZONTAL_ALIGNMENT_RIGHT, size.x, 11, Color(accent, 0.6))
+			HORIZONTAL_ALIGNMENT_RIGHT, size.x, Instrument.CORNER, Color(accent, 0.6))
 	if atc.is_empty():
 		return
 	var urgent: bool = atc.get("urgent", false)
@@ -142,10 +149,11 @@ func _draw_atc(font: Font, st: Dictionary) -> void:
 	if urgent:
 		# 2 Hz pulse between warn and full — legible at a glance, not a strobe.
 		col = WARN.lerp(Color(1, 1, 1), 0.5 + 0.5 * sin(Time.get_ticks_msec() / 160.0))
-	draw_string(font, Vector2(8, 34), String(atc.get("text", "")),
-			HORIZONTAL_ALIGNMENT_LEFT, size.x - 16.0, 14, col)
-	draw_string(font, Vector2(8, 48), String(atc.get("detail", "")),
-			HORIZONTAL_ALIGNMENT_LEFT, size.x - 16.0, 10, Color(accent, 0.55))
+	draw_string(font, Vector2(8, 40), String(atc.get("text", "")),
+			HORIZONTAL_ALIGNMENT_LEFT, size.x - 16.0, Instrument.HEADING, col)
+	draw_string(font, Vector2(8, 58), String(atc.get("detail", "")),
+			HORIZONTAL_ALIGNMENT_LEFT, size.x - 16.0, Instrument.DETAIL,
+			Color(accent, 0.55))
 
 
 ## The lane view: the next gate placed by true off-nose angle, its ring as the
@@ -172,12 +180,13 @@ func _draw_cone_field(font: Font, st: Dictionary, center: Vector2, field: float)
 
 	var offset := marker - center
 	if offset.length() > field:
-		_draw_arrowhead(center + offset.normalized() * field, offset.normalized(), 11.0, WARN)
+		Instrument.draw_arrowhead(self, center + offset.normalized() * field,
+				offset.normalized(), 11.0, WARN)
 	else:
-		_draw_diamond(marker, 7.0, GOOD if inside else WARN, 2.0)
+		Instrument.draw_diamond(self, marker, 7.0, GOOD if inside else WARN, 2.0)
 	draw_string(font, marker + Vector2(12, 4), "%s  %d M" % [
-		st["gate_name"], roundi(range_m)], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-			Color(accent, 0.9))
+		st["gate_name"], roundi(range_m)], HORIZONTAL_ALIGNMENT_LEFT, -1,
+			Instrument.ANNOT, Color(accent, 0.9))
 
 	# Traffic on the same field: crosses, red once one is inside the advisory
 	# band, so "where is he" is answered on the instrument you're already using.
@@ -193,7 +202,7 @@ func _draw_cone_field(font: Font, st: Dictionary, center: Vector2, field: float)
 		draw_line(at - Vector2(5, 5), at + Vector2(5, 5), col, 1.5)
 		draw_line(at - Vector2(5, -5), at + Vector2(5, -5), col, 1.5)
 		draw_string(font, at + Vector2(8, -2), "%d M" % roundi(maxf(t_gap, 0.0)),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, col)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, Instrument.TAG, col)
 
 
 ## Traffic bearings aren't in status() (it reports range and gap, which is what
@@ -232,7 +241,7 @@ func _draw_pad_view(font: Font, st: Dictionary, center: Vector2, field: float) -
 	var drift: Vector2 = st["drift"]
 	var at := center + drift * PAD_PX_PER_M * scale
 	var on_pad: bool = st["on_pad"]
-	_draw_diamond(at, 8.0, GOOD if on_pad else BAD, 2.0)
+	Instrument.draw_diamond(self, at, 8.0, GOOD if on_pad else BAD, 2.0)
 	draw_line(center, at, Color(accent, 0.4), 1.0)
 
 	# Sink-rate tape down the right edge, banded by what the legs will take.
@@ -250,68 +259,42 @@ func _draw_pad_view(font: Font, st: Dictionary, center: Vector2, field: float) -
 		rate_col = WARN
 	draw_line(Vector2(tape_x - 6, tape_top + tape_h * frac),
 			Vector2(tape_x + 6, tape_top + tape_h * frac), rate_col, 2.5)
-	draw_string(font, Vector2(tape_x - 60, tape_top + tape_h * frac - 4),
-			"%.1f M/S" % descent, HORIZONTAL_ALIGNMENT_RIGHT, 56, 11, rate_col)
+	draw_string(font, Vector2(tape_x - 84, tape_top + tape_h * frac - 4),
+			"%.1f M/S" % descent, HORIZONTAL_ALIGNMENT_RIGHT, 80, Instrument.ANNOT,
+			rate_col)
 
 	draw_string(font, Vector2(8, center.y + field - 4),
 			"ALT %.1f M   OFF %.1f M   TILT %d°" % [
 				maxf(float(st["altitude"]), 0.0), float(st["lateral"]),
 				roundi(float(st["tilt"]))],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, Instrument.ANNOT,
 			GOOD if st["level"] and on_pad else WARN)
 
 
 ## Every rule ATC is watching, live. A go-around should never be a surprise —
 ## the row that is about to cause it is already red.
 func _draw_checklist(font: Font, st: Dictionary, y: float) -> void:
+	var pitch := Instrument.ROW_PITCH
+	var label_w := Instrument.label_column(font, GATE_LABELS)
 	var speed_ok: bool = st["speed_ok"]
-	_draw_gate(font, y, "SPEED", "%.0f / %.0f M/S" % [st["speed"], st["speed_limit"]],
-			speed_ok)
+	Instrument.draw_gate(self, font, y, "SPEED", "%.0f / %.0f M/S" % [
+		st["speed"], st["speed_limit"]], speed_ok, accent, label_w)
 	var lane_ok: bool = st["lane_ok"]
-	_draw_gate(font, y + 18.0, "LANE", "%.0f / %.0f M" % [
-		st["lane_deviation"], st["lane_limit"]], lane_ok)
+	Instrument.draw_gate(self, font, y + pitch, "LANE", "%.0f / %.0f M" % [
+		st["lane_deviation"], st["lane_limit"]], lane_ok, accent, label_w)
 	var gear_ok: bool = st["gear_ok"]
 	var gear_text := "DOWN & LOCKED" if gear_ok else (
 			"IN TRANSIT %d%%" % roundi(float(st["gear_position"]) * 100.0)
 			if float(st["gear_position"]) > 0.0 else "UP")
-	_draw_gate(font, y + 36.0, "GEAR", gear_text, gear_ok)
-	_draw_gate(font, y + 54.0, "HATCH", "SECURED" if st["hatch_ok"] else "OPEN",
-			st["hatch_ok"])
+	Instrument.draw_gate(self, font, y + pitch * 2.0, "GEAR", gear_text, gear_ok,
+			accent, label_w)
+	Instrument.draw_gate(self, font, y + pitch * 3.0, "HATCH",
+			"SECURED" if st["hatch_ok"] else "OPEN", st["hatch_ok"], accent, label_w)
 	var cleared: bool = st["cleared"]
 	var clearance := "CLEARED"
 	if st["hold"]:
 		clearance = "HOLDING"
 	elif not cleared:
 		clearance = "AWAITING"
-	_draw_gate(font, y + 72.0, "CLEARANCE", clearance, cleared)
-
-
-func _draw_notice(font: Font, title: String, detail: String) -> void:
-	var mid := (size.y - FOOTER_H) / 2.0
-	draw_string(font, Vector2(0, mid), title, HORIZONTAL_ALIGNMENT_CENTER, size.x,
-			18, Color(accent, 0.6))
-	draw_string(font, Vector2(0, mid + 24), detail, HORIZONTAL_ALIGNMENT_CENTER,
-			size.x, 12, Color(accent, 0.4))
-
-
-## One checklist row: name, live value against its limit, and a pass mark.
-func _draw_gate(font: Font, y: float, label: String, value: String, ok: bool) -> void:
-	var col := GOOD if ok else WARN
-	draw_string(font, Vector2(8, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-			Color(accent, 0.75))
-	draw_string(font, Vector2(92, y), value, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, col)
-	draw_string(font, Vector2(-8, y), "OK" if ok else "✗", HORIZONTAL_ALIGNMENT_RIGHT,
-			size.x, 12, col)
-
-
-func _draw_diamond(c: Vector2, r: float, color: Color, width: float) -> void:
-	draw_polyline(PackedVector2Array([
-			c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r),
-			c + Vector2(-r, 0), c + Vector2(0, -r)]), color, width, true)
-
-
-func _draw_arrowhead(tip: Vector2, dir: Vector2, r: float, color: Color) -> void:
-	var d := dir.normalized()
-	var n := Vector2(-d.y, d.x)
-	draw_colored_polygon(PackedVector2Array([
-			tip, tip - d * r * 1.7 + n * r * 0.8, tip - d * r * 1.7 - n * r * 0.8]), color)
+	Instrument.draw_gate(self, font, y + pitch * 4.0, "CLEARANCE", clearance, cleared,
+			accent, label_w)

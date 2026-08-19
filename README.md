@@ -33,7 +33,7 @@ with its own input stream.
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
 | **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP**, and **BELLY** (straight down past the hull — the landing view) — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -169,6 +169,22 @@ are written with binding placeholders that resolve through
 it reads **`NOT ASSIGNED`** in amber rather than quietly naming a key you don't
 have. Both documents are launch-screen surfaces: read them before you fly, then
 **Esc** or **CLOSE** back to the card.
+
+**In flight, the checklists are on the MFD instead.** The handbook's four
+procedures — departure, arrival, cutting, collecting — are also carried on the
+MFD **CHECKLIST** page, one row per item, marked off against what the ship is
+actually doing: hatch secured, gear down and locked, CUTTER at the interlock
+minimum, approach `MATCHED`, the scoop's four gates, the touchdown limits. Those
+rows read the same evaluations the interlocks themselves test
+(`DockingSystem.status()`, `DriftSystem.collection_status()`, `GameState`), so a
+green tick and a refused command can't disagree — and a row you can't satisfy is
+naming the reason before you press for it. The handful of items nothing aboard
+can judge (attitude flown by hand, stowage seen in the log) are **tapped off**;
+every other row is live and deliberately **not** tappable, so a tick always means
+the ship agrees rather than that you ticked it hopefully. An item that doesn't
+apply yet reads `—`, not a failure. The page states no figures of its own — every
+limit it prints is read from the constant that enforces it — so the handbook stays
+the prose of record and the page can't drift away from it.
 
 Each document's chapters are a data catalog
 (`scenes/displays/PilotManualContent.gd`,
@@ -446,7 +462,7 @@ remapper at all:
 | Display | Controls |
 | --- | --- |
 | **Tactical** | Read-only. **SCOPE** / **CHART** mode buttons; mouse pan/zoom on the chart. |
-| **MFDs** | Tap **MENU** to open a page. **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock. |
+| **MFDs** | Tap **MENU** to open a page. **CHECKLIST** tap a procedure, then BACK / ▲ / ▼ / RESET (and tap a hand-marked item to tick it); **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock. |
 | **Camera** | View is picked by a mapped control (no on-screen buttons). |
 
 Any input surface can drive the same intent — e.g. the four power channels are
@@ -623,7 +639,7 @@ running game predates a change.
 | --- | --- |
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
-| `ScreenshotCheck.tscn` | Render the Main hull-camera view to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). |
+| `ScreenshotCheck.tscn` | Render a display to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). **`mfd` shoots the MFD display instead**, at its real 1280×800 canvas — the MENU home by default, a named page with `mfd DOCK`, a named procedure with `mfd CHECKLIST cutting`, and combined with `berth` (`mfd DOCK berth`) to catch the DOCK page with its gate checklist live rather than reading NO APPROACH RUNNING. This is how MFD layout and type sizing get judged short of the physical panel. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
@@ -636,6 +652,7 @@ running game predates a change.
 | `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
 | `PilotManualSmoke.tscn` | Headless smoke for both of the ship's documents: each catalog is well-formed, sections are contiguous, and the required procedures are present; **neither document publishes the other's material** (the handbook names no harbour marker, the terminal procedures restate no airframe figure, and every harbour chapter names its issuing office); **every binding placeholder in the content names a real Input Map action** (so renaming an action fails the build instead of leaving a hole in a checklist); the resolver agrees with the effective profiles and reports an unassigned control as `NOT ASSIGNED` rather than an empty gap; every chapter renders with no placeholder left unsubstituted; and the card opens either document on a layer above itself but below the chooser and remapper, swaps rather than stacks when the other is opened, hides it for a setup step, and frees it on LAUNCH. |
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
+| `ChecklistSmoke.tscn` | Headless smoke for the MFD **CHECKLIST** page: the catalog is well-formed and carries all four procedures with contiguous sections; **every live read is called against real state** and must return a status and a value (so a renamed `GameState` field fails the build instead of blanking a row); rows follow the ship when the real intents are driven (hatch, gear travel, power channels); a limit is **read from the constant that enforces it** rather than transcribed; no live row can be hand-ticked, and RESET / a site reset clear the ones that can; and the shared vertical budget holds — each checklist reserve fits its rows at the current type scale, and the DOCK / SCOOP / ALIGN pages still draw on a unit far smaller than any real MFD. |
 | `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |
 | `AxisKeyNormalizeSmoke.tscn` | Headless smoke for the remapper's axis-key normalization: a saved axis/nub spec listed in the swapped (REV-encoded) order folds back to its row's canonical key with reverse set, so it stays visible on its row instead of vanishing under a phantom key. |

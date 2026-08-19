@@ -2,6 +2,28 @@ extends RefCounted
 ## Shared bordered/tinted StyleBoxFlat builders so hover alpha and content
 ## margins stay consistent across OpsBar, MarketPanel, and SensorModeBar.
 
+## Touch targets on the MFD panel, in the MFD window's 1280x800 virtual canvas.
+## The MFDs are worked with a finger on a screen small enough that the canvas is
+## scaled down, so a button sized for a mouse lands under a fingertip. These are
+## what make_touch_button() applies; make_button() is unchanged, which is what
+## keeps the mouse-driven displays (Tactical, title card, remapper) as they were.
+const TOUCH_MIN_H := 56.0
+const TOUCH_MARGIN := 14
+const TOUCH_FONT := 18
+## Gap to leave between adjacent touch targets, so a near-miss hits nothing
+## rather than hitting the neighbour.
+const TOUCH_SEP := 12
+
+
+## make_button sized for a fingertip. Returns a plain Button like make_button
+## does, so it drops into any call site unchanged.
+static func make_touch_button(color: Color) -> Button:
+	var button := make_button(color, TOUCH_MARGIN)
+	button.custom_minimum_size = Vector2(0, TOUCH_MIN_H)
+	button.add_theme_font_size_override("font_size", TOUCH_FONT)
+	return button
+
+
 static func make_button(color: Color, content_margin := 8) -> Button:
 	var button := Button.new()
 	button.focus_mode = Control.FOCUS_NONE

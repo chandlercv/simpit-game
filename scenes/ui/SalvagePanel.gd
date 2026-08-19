@@ -33,7 +33,7 @@ func _ready() -> void:
 
 	var header := Label.new()
 	header.text = "CUT TARGETS — TAP TO SELECT"
-	header.add_theme_font_size_override("font_size", 14)
+	header.add_theme_font_size_override("font_size", 16)
 	header.add_theme_color_override("font_color", accent)
 	add_child(header)
 
@@ -47,7 +47,8 @@ func _ready() -> void:
 	scroll.add_child(_list)
 
 	_empty = Label.new()
-	_empty.add_theme_font_size_override("font_size", 13)
+	_empty.add_theme_font_size_override("font_size", 15)
+	_empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_empty.add_theme_color_override("font_color", Color(accent, 0.55))
 	_list.add_child(_empty)
 
@@ -74,7 +75,10 @@ func _rebuild() -> void:
 		row.flat = true
 		row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row.focus_mode = Control.FOCUS_NONE
-		row.add_theme_font_size_override("font_size", 13)
+		# A cut target is picked by tapping this row, so it is a touch target and
+		# is sized like one.
+		row.custom_minimum_size = Vector2(0, ButtonTheme.TOUCH_MIN_H)
+		row.add_theme_font_size_override("font_size", 16)
 		var gone: bool = member["cut"] or member["destroyed"]
 		row.disabled = gone
 		if not gone:

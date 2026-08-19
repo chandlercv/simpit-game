@@ -401,7 +401,18 @@ The Tactical [b]CHART[/b] mode presents a system schematic. Its content is not b
 		"body": """[color=#66ccff]THE FOUR DISPLAYS[/color]
 [b]MAIN[/b] — the hull camera with the flight HUD superimposed. The camera may be trained away from the nose without turning the ship.
 [b]TACTICAL[/b] — presentation only. SCOPE (contact plot or structural diagram, hull condition, structural risk) and CHART, selected with {{act:tactical_view_cycle}}.
-[b]MFD[/b] — two independent units. Pages: POWER, CARGO, SALVAGE, ALIGN, SCOOP, MARKET, DOCK, CONTACTS. The page index is reached with {{act:mfd_a_menu}} and {{act:mfd_b_menu}}. The primary unit presents ALIGN during an alignment, SCOOP while the hatch is open, and DOCK during an approach, returning to the previous page on completion.
+[b]MFD[/b] — two independent units. Pages: CHECKLIST, POWER, CARGO, SALVAGE, ALIGN, SCOOP, MARKET, DOCK, CONTACTS. The page index is reached with {{act:mfd_a_menu}} and {{act:mfd_b_menu}}. The primary unit presents ALIGN during an alignment, SCOOP while the hatch is open, and DOCK during an approach, returning to the previous page on completion.
+
+[color=#66ccff]CHECKLIST PAGE[/color]
+The procedures of SECTION 4 are carried on the CHECKLIST page, one line to each item, marked against the condition of the ship. Select a procedure from the page index; return to it with BACK.
+
+An item the ship is able to test carries its live value beside its limit and is marked [color=#59f28c]OK[/color] when satisfied. An item that does not yet apply — a touchdown limit before the ship is over a pad, the gear stow before the bay is cleared — is marked with a dash and is not counted against the procedure.
+
+A small number of items cannot be tested from aboard: attitude held by hand during an approach, and stowage, which is annunciated and then over. These carry a box and are marked off by the operator. No other item can be marked by hand.
+
+[color=#8c9eb8]NOTE — The page reads the same conditions the interlocks themselves test. An item shown unsatisfied is the item that will refuse the command.[/color]
+
+[color=#8c9eb8]NOTE — Marks made by hand are cleared when the ship begins a new run.[/color]
 [b]CAMERA[/b] — a second external view of own ship: REAR, SIDE, CHASE, TOP, BELLY. Stepped with {{act:view_cycle}}, or selected directly — {{act:view_rear}}, {{act:view_side}}, {{act:view_chase}}, {{act:view_top}}, {{act:view_belly}}.
 
 [color=#f2bf59]CAUTION — BELLY is the landing view.[/color] The pad lies directly beneath the ship on short final and the hull camera is trained forward. Without the belly view the touchdown point cannot be seen.

@@ -20,10 +20,10 @@ const SOURCE_COLORS := {
 
 func _ready() -> void:
 	_title.text = "COMMS LOG"
-	_title.add_theme_font_size_override("font_size", 15)
+	_title.add_theme_font_size_override("font_size", 17)
 	_title.add_theme_color_override("font_color", accent)
-	_log.add_theme_font_size_override("normal_font_size", 13)
-	_log.add_theme_font_size_override("bold_font_size", 13)
+	_log.add_theme_font_size_override("normal_font_size", 15)
+	_log.add_theme_font_size_override("bold_font_size", 15)
 	for entry: Dictionary in GameState.comms:
 		_append(entry)
 	GameState.comms_posted.connect(_append)

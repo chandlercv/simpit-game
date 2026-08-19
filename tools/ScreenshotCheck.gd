@@ -1,14 +1,21 @@
 extends Node
-## Renders the main hull-camera view for a hundred frames and saves a PNG so
-## graphics changes can be eyeballed without a full playtest:
+## Renders a display for a hundred frames and saves a PNG so graphics changes can
+## be eyeballed without a full playtest:
 ##
 ##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close] [title|manual|terminal] [<chapter-id>]
+##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> mfd [<page>] [<procedure>]
 ##
 ## Defaults to user://main_view.png. `close` parks the ship at cutting range;
 ## `title` puts the launch title card over the view, the way it appears at boot;
 ## `manual` opens the pilot's handbook over that card and `terminal` opens the
 ## terminal procedures, which is the only way to eyeball their layout short of
 ## launching the game. Add a chapter id to shoot a specific page.
+##
+## `mfd` shoots the MFD display instead of the Main view, at its real 1280x800
+## canvas — the MENU home by default, or a named page (`mfd DOCK`), and for the
+## CHECKLIST page a named procedure (`mfd CHECKLIST cutting`). This is how MFD
+## layout and type sizing get judged short of the physical panel.
+##
 ## Runs windowed (rendering needs a real DisplayServer); WindowManager leaves
 ## tools scenes alone, so only the one window flashes up — and, for the same
 ## reason, the title card here is built directly rather than by the launch flow.
@@ -19,6 +26,11 @@ const TerminalContentScript := preload("res://scenes/displays/TerminalProcedures
 
 
 func _ready() -> void:
+	var args := OS.get_cmdline_user_args()
+	if args.has("mfd"):
+		_build_mfd(args)
+		_shoot.call_deferred()
+		return
 	get_window().size = Vector2i(1720, 720)
 	# Main display only. The Camera display can't be shot here: it borrows the Main
 	# world through WindowManager, which deliberately leaves tools scenes alone, so
@@ -26,7 +38,6 @@ func _ready() -> void:
 	# assertion in DockSmoke instead.
 	var scene: PackedScene = load("res://scenes/displays/MainViewWindow.tscn")
 	add_child(scene.instantiate())
-	var args := OS.get_cmdline_user_args()
 	# A document is opened BY the card (it owns the layer), so `manual`/`terminal`
 	# imply `title` — asking for the page without the screen it hangs off would
 	# have to build it a second way, and then it wouldn't be the thing players see.
@@ -56,6 +67,55 @@ func _ready() -> void:
 				elif not ["manual", "terminal", "title"].has(arg) and not arg.ends_with(".png"):
 					push_warning("no %s chapter '%s'; ids: %s" % [doc, arg, ", ".join(ids)])
 	_shoot.call_deferred()
+
+
+## The MFD display, at the 1280x800 canvas it is authored in, with its Root
+## content harvested out of the scene's Window the way WindowManager does — a
+## Window instantiated as a child would pop a second OS window and shoot empty.
+func _build_mfd(args: PackedStringArray) -> void:
+	get_window().size = Vector2i(1280, 800)
+	# `berth` flies a real approach (see _park_on_final), which needs the world
+	# and the station in it — so the Main view goes in underneath, and the MFD's
+	# own opaque background then covers it. It is the only way to shoot the DOCK
+	# page with its gate checklist live rather than reading NO APPROACH RUNNING.
+	if args.has("berth"):
+		var main: Node = (load("res://scenes/displays/MainViewWindow.tscn") as PackedScene).instantiate()
+		add_child(main)
+		# Its HUD sits on a CanvasLayer, which draws over the MFD regardless of
+		# tree order — the world is wanted here, the other display's instruments
+		# are not.
+		for node in main.find_children("*", "CanvasLayer", true, false):
+			(node as CanvasLayer).visible = false
+	var window: Window = load("res://scenes/displays/MfdWindow.tscn").instantiate()
+	var root: Control = window.get_node("Root")
+	window.remove_child(root)
+	root.owner = null   # else reparenting warns that MfdWindow's ownership is now inconsistent
+	add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	window.free()
+
+	# A page name puts both units on it, so the shot shows the page rather than
+	# whichever two the units happen to default to. With no page named, both go
+	# to the MENU home — the grid is the thing most worth looking at.
+	var pages: Array[String] = MfdUnit.PAGES
+	var wanted := ""
+	for arg in args:
+		if pages.has(arg):
+			wanted = arg
+			break
+	for unit in get_tree().get_nodes_in_group("mfd_unit"):
+		if wanted == "":
+			unit.go_home()
+			continue
+		unit.show_page(wanted)
+		# ...and on CHECKLIST, a procedure name opens that procedure, since its
+		# index is a different view from any of its lists.
+		if wanted != "CHECKLIST":
+			continue
+		var panel: Control = unit._pages["CHECKLIST"]
+		for i in panel._lists.size():
+			if args.has(String(panel._lists[i]["id"])):
+				panel._open_list(i)
 
 
 func _shoot() -> void:

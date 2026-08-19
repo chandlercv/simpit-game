@@ -4,6 +4,8 @@ extends Control
 ## over free-drag per the plan (spacedesk ~30fps + latency); every widget here
 ## answers raw touch and mouse alike since touch emulation is off project-wide.
 
+const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
+
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 
 const JETTISON_COLOR := Color(1.0, 0.55, 0.3)
@@ -18,12 +20,12 @@ var _jettison: TapButton
 
 
 func _ready() -> void:
-	_header.add_theme_font_size_override("font_size", 15)
+	_header.add_theme_font_size_override("font_size", 17)
 	_header.add_theme_color_override("font_color", accent)
 	_detail.add_theme_color_override("font_color", Color(accent, 0.8))
 	_jettison = TapButton.new()
 	_jettison.accent = JETTISON_COLOR
-	_jettison.custom_minimum_size = Vector2(0, 44)
+	_jettison.custom_minimum_size = Vector2(0, ButtonTheme.TOUCH_MIN_H)
 	_jettison.tapped.connect(_on_jettison)
 	_detail.get_parent().add_child(_jettison)
 	# Mapped cargo controls (InputRouter) reach the grid through this group.
@@ -129,8 +131,8 @@ class TapButton:
 		var color := accent if enabled else Color(accent, 0.35)
 		draw_rect(Rect2(Vector2.ZERO, size), Color(accent, 0.12 if enabled else 0.04))
 		draw_rect(Rect2(Vector2.ZERO, size), color, false, 1.0)
-		draw_string(ThemeDB.fallback_font, Vector2(0, size.y / 2.0 + 5), label,
-				HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, color)
+		draw_string(ThemeDB.fallback_font, Vector2(0, size.y / 2.0 + 6), label,
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, color)
 
 
 class Tile:
