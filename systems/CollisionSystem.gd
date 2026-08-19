@@ -20,6 +20,26 @@ extends Node
 ## segment-vs-segment test covers ship-vs-sphere today and capsule-vs-capsule
 ## (oriented rivals, tailored wreck) later with no change to this pass.
 ##
+## WHY THE NARROWPHASE IS STILL OURS. Delegating segment-vs-hull to
+## PhysicsServer3D was evaluated with numbers, not opinion, and rejected. The
+## server does work headless, so it was a real option — but this GJK costs
+## ~187 us/tick against the whole station and derelict (27 hulls, 691 verts)
+## with NO broadphase, i.e. about 1% of a 60 Hz budget, and real ticks pay far
+## less because _test_body rejects on the bounding sphere first. Against that,
+## the swap wanted a server-mirror layer, hull registration moved from world to
+## local space across Wreck/Station/DebrisField, and — the sharp one — server
+## queries only resolve after the space has STEPPED, where ours answer the same
+## tick a body is registered. Every smoke test that registers a body and asserts
+## on it immediately would have had to absorb that latency.
+##
+## The bargain: we keep the code, so it has to earn the trust a mature library
+## would have brought. tools/GjkFuzz.tscn is that payment — property brackets
+## plus a differential check against Godot's own convex collision.
+##
+## REVISIT THIS if a real narrowphase bug ever reaches play again. One escape
+## was affordable and is now pinned; a second means the fuzz is not catching
+## what this code gets wrong, and the swap should happen instead of a third fix.
+##
 ## Damage today is recoverable hull wear, surfaced on HullHeatmap and the comms
 ## log exactly like ThreatSystem's collapse damage. `_apply_impact` is the single
 ## consequence hook, deliberately factored so crippling (system-degrading) damage
