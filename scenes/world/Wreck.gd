@@ -45,7 +45,7 @@ func _exit_tree() -> void:
 			body["id"] = -1
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_time += delta
 	# Advance this site's tumble (spin about ω in parent space) and refresh every
 	# intact member's world geometry + collision body against the new orientation.

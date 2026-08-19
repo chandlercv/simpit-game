@@ -40,7 +40,8 @@ const HARBOUR_ONLY := ["ALPHA", "BRAVO", "CHARLIE", "DELTA"]
 
 ## ...and the mirror of it. These are properties of the airframe, and the harbour
 ## does not restate them — it assesses arrivals, it does not certify airframes.
-const BUILDER_ONLY := ["45°/s", "4.0 m/s²", "manual_accel", "0.35 of a member"]
+const BUILDER_ONLY := ["45°/s", "4.0 m/s²", "manual_accel", "0.35 of a member",
+	"stability augmentation", "DRIVE integrity"]
 
 var _failures: Array[String] = []
 ## Signal probe. A member, not a lambda-captured local: a GDScript lambda captures

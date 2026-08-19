@@ -23,6 +23,12 @@ const SCAN_RANGE := 300.0
 const SCAN_TIME := 5.0
 const MIN_CUTTER_POWER := 0.2
 const MIN_SENSOR_POWER := 0.1
+## Minimum FBW authority to open (or keep) the pre-cut alignment. While
+## ALIGNING the router routes pitch/yaw to the torch, so the pilot has no
+## authority to cancel residual spin by hand — with the stabilisation degraded
+## the seam sweeps the reticle at a rate nothing can null, which makes the
+## mini-game unwinnable rather than hard. The interlock refuses it up front.
+const MIN_ALIGN_AUTHORITY := 0.5
 
 ## Throttle interlock band for the approach autopilot. The throttle folds into
 ## thrust.z and doesn't self-center, so the lever may rest anywhere up to this
@@ -112,25 +118,10 @@ var _rng := RandomNumberGenerator.new()
 ## Resting risk level; each structural cut ratchets it up.
 var _risk_base := 0.15
 
-## Manual flight input for this frame, fed by InputRouter (Phase 5).
-## thrust is local (x right, y up, z forward), rot is (pitch, yaw, roll),
-## all components -1..1.
-var _manual_thrust := Vector3.ZERO
-var _manual_rot := Vector3.ZERO
-
 ## Alignment aim for this frame, fed by InputRouter from the flight pitch/yaw axes
 ## while ALIGNING, already oriented to the reticle field (x = screen-right,
 ## y = screen-down), each -1..1. Consumed by _update_align.
 var _align_input := Vector2.ZERO
-
-## Forward/back throttle command law. SPEED (default) treats the throttle as a
-## target fraction of max_speed and closes on it — cruise-control style, no
-## need to ride the lever to hold a speed. THRUST is the legacy behavior,
-## where the throttle is felt directly as acceleration. Toggled in flight via
-## a bindable button (throttle_cmd_toggle); independent of the per-device
-## lever/gamepad binding curve set in the F7 remapper (ControlsSetup).
-enum ThrottleCmdMode { SPEED, THRUST }
-var _throttle_cmd_mode := ThrottleCmdMode.SPEED
 
 
 func _ready() -> void:
@@ -189,8 +180,7 @@ func cycle_member(delta: int) -> void:
 ## input while the approach autopilot is flying disengages it — the stick
 ## always wins.
 func set_manual_flight(thrust: Vector3, rot: Vector3) -> void:
-	_manual_thrust = thrust
-	_manual_rot = rot
+	ShipMotion.set_command(thrust, rot)
 	# Forward travel within the interlock band is a resting throttle, not a grab
 	# for control; only the excess past the band (plus any lateral/vertical or
 	# rotation input) disengages, so arming with the lever open stays stable.
@@ -212,7 +202,7 @@ func toggle_approach() -> void:
 		if GameState.get_member(GameState.selected_member_id).is_empty():
 			GameState.post_comms("OPS", "APPROACH INHIBITED — SELECT A CUT TARGET FIRST")
 			return
-		if _manual_thrust.z > APPROACH_ARM_THROTTLE_MAX:
+		if ShipMotion.throttle_command() > APPROACH_ARM_THROTTLE_MAX:
 			GameState.post_comms("OPS",
 					"APPROACH INHIBITED — THROTTLE PAST %d%%, EASE BACK TO ARM"
 					% int(APPROACH_ARM_THROTTLE_MAX * 100.0))
@@ -227,12 +217,10 @@ func toggle_approach() -> void:
 		GameState.post_comms("OPS", "STATION-KEEPING RELEASED — HOLDING")
 
 
-## Bindable (throttle_cmd_toggle): flip between SPEED and THRUST throttle
-## command law. See ThrottleCmdMode above.
+## Bindable (throttle_cmd_toggle): forwards to the motion pipeline, which owns
+## the throttle command law. See ShipMotion.ThrottleCmdMode.
 func toggle_throttle_cmd_mode() -> void:
-	_throttle_cmd_mode = (ThrottleCmdMode.THRUST if _throttle_cmd_mode == ThrottleCmdMode.SPEED
-			else ThrottleCmdMode.SPEED)
-	GameState.post_comms("OPS", "THROTTLE — %s COMMAND" % ThrottleCmdMode.keys()[_throttle_cmd_mode])
+	ShipMotion.toggle_throttle_cmd_mode()
 
 
 ## The cutter trigger (ops_cut / CUT button) is context-sensitive: from a matched
@@ -264,6 +252,10 @@ func request_cut() -> void:
 		return
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		GameState.post_comms("OPS", "CUT ABORT — CUTTER UNPOWERED (RAISE CUTTER ALLOCATION)")
+		return
+	if ShipMotion.authority() < MIN_ALIGN_AUTHORITY:
+		GameState.post_comms("OPS",
+				"CUT ABORT — STABILISATION DEGRADED (CHECK FLIGHT ASSIST AND THRUST ALLOCATION)")
 		return
 	_begin_align(member)
 
@@ -356,7 +348,7 @@ func wreck_distance() -> float:
 ## instruments: the MFD CHECKLIST page shows this item against its limit so a
 ## refused approach names the reason before you press for it.
 func throttle_command() -> float:
-	return _manual_thrust.z
+	return ShipMotion.throttle_command()
 
 
 ## Ship collision radius, or a fallback for an unbaked capsule — mirrors
@@ -421,7 +413,7 @@ func trigger_collapse() -> void:
 ## CollisionSystem: the approach autopilot drove the ship into a solid body on
 ## the path. The kinematic controller recomputes velocity toward the standoff
 ## every frame, discarding the collision bounce, so it would grind indefinitely.
-## Break to manual — _update_manual_flight integrates velocity, so the bounce
+## Break to manual — ShipMotion.step integrates velocity, so the bounce
 ## carries the ship clear and damps out.
 func abort_approach_on_collision() -> void:
 	if GameState.approach_state == "HOLDING":
@@ -496,12 +488,12 @@ func _random_tumble() -> Vector3:
 ## --- Per-frame simulation --------------------------------------------------
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# The station's docking pattern is hand-flown on the same stick, so manual
 	# flight has to integrate there too — but nothing else in this system means
 	# anything away from the claim: there is no wreck to scan, align on or cut.
 	if GameState.run_phase == "APPROACH":
-		_update_manual_flight(delta)
+		ShipMotion.step(delta)
 		return
 	if GameState.run_phase != "ON_SITE":
 		return
@@ -540,7 +532,7 @@ func _update_approach(delta: float) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var transform: Transform3D = ship["transform"]
 	if GameState.approach_state == "HOLDING":
-		_update_manual_flight(delta)
+		ShipMotion.step(delta)
 		return
 	# Fly to the *selected* member: its baked world centroid (published into the
 	# graph by Wreck.gd) is the park target, so the ship stations off that member
@@ -568,63 +560,11 @@ func _update_approach(delta: float) -> void:
 	var closing: Vector3 = approach_dir * speed if remaining > 0.01 else Vector3.ZERO
 	var velocity: Vector3 = member_vel + closing
 	transform.origin += velocity * delta
-	ship["transform"] = transform
-	ship["velocity"] = velocity
+	ShipMotion.seize(transform, velocity)
 	if GameState.approach_state == "APPROACHING" \
 			and remaining <= MATCH_SLACK and speed < 0.6:
 		_set_approach("MATCHED")
 		GameState.post_comms("OPS", "VELOCITY MATCHED — STANDOFF ON %s" % member["name"])
-
-
-## Newtonian-lite manual flight (Phase 5): rate-controlled attitude, thruster
-## acceleration gated by THRUST power, mild flight-assist damping and a speed
-## ceiling so the pit stays flyable without a full sim.
-##
-## The throttle (forward/back) axis runs its own control law via
-## _apply_throttle_axis, independent of strafe/vertical: SPEED mode (default)
-## commands a target fraction of max_speed and closes on it, like cruise
-## control; THRUST mode is the legacy direct-acceleration behavior. Strafe and
-## vertical stay acceleration-based in both cases, and — like reverse — rate at
-## only secondary_thrust_fraction of the main thruster (see ShipDefinition).
-func _update_manual_flight(delta: float) -> void:
-	var ship: Dictionary = GameState.local_ship()
-	var transform: Transform3D = ship["transform"]
-	var velocity: Vector3 = ship["velocity"]
-	if _manual_rot.length_squared() > 0.001:
-		var rate := deg_to_rad(GameState.ship_def.rotation_rate_deg)
-		transform.basis = (transform.basis
-				* Basis.from_euler(_manual_rot * rate * delta)).orthonormalized()
-	var accel: float = GameState.ship_def.manual_accel * maxf(GameState.power("THRUST"), 0.0)
-	if _manual_thrust.length_squared() > 0.001:
-		var secondary_accel := accel * GameState.ship_def.secondary_thrust_fraction
-		var lateral := Vector3(_manual_thrust.x, _manual_thrust.y, 0.0)
-		velocity += transform.basis * lateral * secondary_accel * delta
-	else:
-		# Flight assist: bleed residual drift so station-keeping is feasible.
-		velocity *= exp(-0.35 * delta)
-	velocity = _apply_throttle_axis(transform, velocity, accel, delta)
-	velocity = velocity.limit_length(GameState.ship_def.max_speed)
-	transform.origin += velocity * delta
-	ship["transform"] = transform
-	ship["velocity"] = velocity
-
-
-## Advance `velocity`'s forward/back component only, per the active throttle
-## command mode (see ThrottleCmdMode). Reverse is capped at
-## secondary_thrust_fraction of forward — clamping the command rather than the
-## result, so it scales both the THRUST-mode acceleration and the SPEED-mode
-## target uniformly, whatever secondary_thrust_fraction is tuned to.
-func _apply_throttle_axis(transform: Transform3D, velocity: Vector3, accel: float, delta: float) -> Vector3:
-	var forward_dir: Vector3 = -transform.basis.z
-	var reverse_cap: float = GameState.ship_def.secondary_thrust_fraction
-	var z_cmd: float = clampf(_manual_thrust.z, -reverse_cap, 1.0)
-	var fwd_speed := velocity.dot(forward_dir)
-	var new_fwd_speed: float
-	if _throttle_cmd_mode == ThrottleCmdMode.THRUST:
-		new_fwd_speed = fwd_speed + z_cmd * accel * delta
-	else:
-		new_fwd_speed = move_toward(fwd_speed, z_cmd * GameState.ship_def.max_speed, accel * delta)
-	return velocity + forward_dir * (new_fwd_speed - fwd_speed)
 
 
 ## The 2-axis crosshair mini-game (see the ALIGN_* consts). Drifts the seam target,
@@ -638,6 +578,9 @@ func _update_align(delta: float) -> void:
 		return
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		_abort_align("CUTTER POWER LOST")
+		return
+	if ShipMotion.authority() < MIN_ALIGN_AUTHORITY:
+		_abort_align("STABILISATION DEGRADED")
 		return
 	if GameState.cargo_hatch_open:
 		_abort_align("CARGO HATCH OPEN")

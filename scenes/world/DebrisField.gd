@@ -69,7 +69,7 @@ func _exit_tree() -> void:
 	_bodies.clear()
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	for i in _debris.get_child_count():
 		var chunk: Node3D = _debris.get_child(i)
 		chunk.rotate_object_local(_spins[i].normalized(), _spins[i].length() * delta)

@@ -2,15 +2,15 @@ extends Node
 ## Consequences for running into things.
 ##
 ## Space flight in this game is hand-integrated: SalvageSystem writes the ship's
-## transform/velocity into GameState each frame and there are no Godot physics
-## bodies (Ship.gd only mirrors the transform). So collision is a
-## post-integration proximity pass — after the ship has moved for the frame and
+## transform/velocity into GameState each physics tick and there are no Godot
+## physics bodies (Ship.gd only mirrors the transform). So collision is a
+## post-integration proximity pass — after the ship has moved for the tick and
 ## after ThreatSystem has moved its contacts, we test the ship against every
 ## solid body (the wreck frame, the cosmetic debris chunks, and moving ships like
 ## the rival/patrol). On overlap the ship is pushed out of penetration (no
 ## tunnelling), the inward velocity is reflected/bled, and the hull section that
 ## faced the hit loses integrity proportional to closing speed. Runs last in the
-## autoload order (after ThreatSystem) so it reads the frame's final positions.
+## autoload order (after ThreatSystem) so it reads the tick's final positions.
 ##
 ## The ship is a CAPSULE (two local endpoints + radius, from ShipDefinition), so
 ## it fits the elongated hull and — because the endpoints are ship-local and
@@ -19,6 +19,26 @@ extends Node
 ## every body is treated as a (possibly zero-length) segment + radius and one
 ## segment-vs-segment test covers ship-vs-sphere today and capsule-vs-capsule
 ## (oriented rivals, tailored wreck) later with no change to this pass.
+##
+## WHY THE NARROWPHASE IS STILL OURS. Delegating segment-vs-hull to
+## PhysicsServer3D was evaluated with numbers, not opinion, and rejected. The
+## server does work headless, so it was a real option — but this GJK costs
+## ~187 us/tick against the whole station and derelict (27 hulls, 691 verts)
+## with NO broadphase, i.e. about 1% of a 60 Hz budget, and real ticks pay far
+## less because _test_body rejects on the bounding sphere first. Against that,
+## the swap wanted a server-mirror layer, hull registration moved from world to
+## local space across Wreck/Station/DebrisField, and — the sharp one — server
+## queries only resolve after the space has STEPPED, where ours answer the same
+## tick a body is registered. Every smoke test that registers a body and asserts
+## on it immediately would have had to absorb that latency.
+##
+## The bargain: we keep the code, so it has to earn the trust a mature library
+## would have brought. tools/GjkFuzz.tscn is that payment — property brackets
+## plus a differential check against Godot's own convex collision.
+##
+## REVISIT THIS if a real narrowphase bug ever reaches play again. One escape
+## was affordable and is now pinned; a second means the fuzz is not catching
+## what this code gets wrong, and the swap should happen instead of a third fix.
 ##
 ## Damage today is recoverable hull wear, surfaced on HullHeatmap and the comms
 ## log exactly like ThreatSystem's collapse damage. `_apply_impact` is the single
@@ -52,18 +72,34 @@ const HULL_FLOOR := 0.05
 ## One damage event per body per window; grinding against a surface at low
 ## closing speed does almost nothing after the initial hit.
 const IMPACT_COOLDOWN := 0.8
+## Ceiling (m/s) on how fast a penetrating body is pushed back out. A body can
+## be born deeply overlapping something — a severed piece starts inside the
+## frame it was just cut from, and its collision sphere encloses neighbouring
+## members a long spar never actually touches — and correcting that in one tick
+## is a teleport (measured at 3.96 m for the spine truss). Separating at a bounded
+## rate instead reads as the piece easing clear of the hull.
+const MAX_SEPARATION_SPEED := 6.0
+
+## Cap on the spin (rad/s) a single contact can impart, so a grind along a
+## surface stays a shove and not a spin cycle. A healthy FBW nulls an imparted
+## spin in a couple of tenths of a second; a degraded one leaves it with the
+## pilot, which is the intended cost.
+const MAX_IMPART_SPIN := 1.5
 
 ## Body key -> seconds of impact cooldown remaining.
 var _cooldowns: Dictionary = {}
+## This tick's length, for the rate-limited separation below.
+var _delta := 0.0
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# Collisions bite wherever the ship is actually being flown — at the claim and
 	# in the station's docking pattern, where clipping a hab drum or a tug is the
 	# whole reason the lane is tight.
 	if not GameState.flight_active():
 		_cooldowns.clear()
 		return
+	_delta = delta
 	for key: String in _cooldowns.keys():
 		_cooldowns[key] -= delta
 		if _cooldowns[key] <= 0.0:
@@ -72,10 +108,14 @@ func _process(delta: float) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var xform: Transform3D = ship["transform"]
 	var velocity: Vector3 = ship["velocity"]
+	var omega: Vector3 = ShipMotion.ship_omega()
 	var origin: Vector3 = xform.origin
 	var ship_radius := _ship_radius()
 	var moved := false
-	for body: Dictionary in _collidables():
+	# Built once and shared with the movable passes below: _collidables()
+	# allocates a fresh dict per body, and the static pass needs the same list.
+	var bodies := _collidables()
+	for body: Dictionary in bodies:
 		# Rebuild the ship capsule from the running origin so multiple bodies in
 		# one frame push the ship consistently (basis is fixed for the frame).
 		var ship_a: Vector3 = origin + xform.basis * GameState.ship_def.collision_a
@@ -93,19 +133,19 @@ func _process(delta: float) -> void:
 		origin += normal * float(contact["depth"])  # push out of penetration
 		if closing > 0.0:
 			velocity += normal * closing * (1.0 + RESTITUTION)  # reflect inward part
+			omega += _impact_spin(ship_a, ship_b, origin, body, normal, closing)
 			_impart_body_velocity(body, normal, closing)
 		moved = true
 		_apply_impact(body, xform, normal, closing)
 	if moved:
 		xform.origin = origin
-		ship["transform"] = xform
-		ship["velocity"] = velocity
+		ShipMotion.seize(xform, velocity, omega)
 		# A bounce during an active approach means something is on the path (rival/
 		# debris) — the kinematic autopilot can't model the contact and would drive
 		# straight back in and grind, so hand control back to the pilot.
 		if GameState.approach_state != "HOLDING":
 			SalvageSystem.abort_approach_on_collision()
-	_resolve_movable_pairs()
+	_resolve_movable_bodies(bodies)
 
 
 ## Union of solid bodies this frame. Everything solid — the wreck's per-member
@@ -193,6 +233,23 @@ func _apply_impact(body: Dictionary, xform: Transform3D, normal: Vector3,
 		body["name"], section, roundi(dmg * 100.0)])
 
 
+## Spin imparted to the ship by a contact: the linear bounce's delta-v taken
+## as applied at the contact point, as a moment about the ship's origin over
+## the ship's radius of gyration (ShipDefinition.collision_spin_radius). The
+## contact point is approximated as the capsule spine's closest approach to
+## the body, pushed out to the capsule surface — not a true GJK witness point;
+## this is a believable kick, not a solver. A dead-centre hit has its moment
+## arm along the normal and imparts nothing, which is what a pilot expects.
+func _impact_spin(ship_a: Vector3, ship_b: Vector3, origin: Vector3,
+		body: Dictionary, normal: Vector3, closing: float) -> Vector3:
+	var rg: float = maxf(GameState.ship_def.collision_spin_radius, 0.1)
+	var spine: Vector3 = _closest_points_between_segments(
+			ship_a, ship_b, body["a"], body["b"])[0]
+	var contact := spine - normal * _ship_radius()
+	var dv: Vector3 = normal * closing * (1.0 + RESTITUTION)
+	return ((contact - origin).cross(dv) / (rg * rg)).limit_length(MAX_IMPART_SPIN)
+
+
 ## Kick a movable body (a drifting salvage piece, a knocked debris chunk) on
 ## ship contact. The ship's own bounce above deliberately keeps its old
 ## infinite-target-mass shorthand regardless of what it hit; this is the
@@ -208,19 +265,53 @@ func _impart_body_velocity(body: Dictionary, normal: Vector3, closing: float) ->
 			- normal * closing * (1.0 + RESTITUTION) * frac
 
 
-## Movable bodies (salvage pieces, knocked debris) can also knock each other —
-## a sphere-sphere pass over just that subset, separate from the ship-vs-body
-## test above (which still uses the tight hull/capsule test where a hull is
-## present). Kept to spheres: these bodies are constantly translating, so
-## baking/re-transforming a hull for this pass isn't worth it.
-func _resolve_movable_pairs() -> void:
+## Everything a movable body (a drifting salvage piece, a knocked debris chunk)
+## can hit, in two passes.
+##
+## Movable vs MOVABLE is sphere-sphere and splits by inverse mass — these bodies
+## are constantly translating, so baking a hull for them isn't worth it.
+##
+## Movable vs STATIC (station structure, the derelict's intact members, traffic)
+## is the infinite-mass case: the mover takes the whole push-out and the whole
+## bounce. It runs through the SAME tight narrowphase the ship uses — a piece is
+## just a degenerate capsule — so a piece meets a bay wall on its real hull, not
+## on a bounding sphere that would stop it metres short.
+func _resolve_movable_bodies(bodies: Array[Dictionary]) -> void:
 	var movable: Array[Dictionary] = []
 	for obstacle: Dictionary in GameState.obstacles:
 		if float(obstacle.get("mass", 0.0)) > 0.0:
 			movable.append(obstacle)
+	if movable.is_empty():
+		return
 	for i in movable.size():
 		for j in range(i + 1, movable.size()):
 			_resolve_pair(movable[i], movable[j])
+	for body: Dictionary in bodies:
+		if float(body.get("mass", 0.0)) > 0.0:
+			continue  # handled by the movable-vs-movable pass above
+		for mover: Dictionary in movable:
+			_resolve_static(mover, body)
+
+
+## One movable body against one immovable one. Writes the correction into the
+## live obstacle dict; the owning system (DriftSystem for salvage pieces) reads
+## `position` and `vel` back out on its next tick, the same owner/collider split
+## the ship's own bounce uses.
+func _resolve_static(mover: Dictionary, body: Dictionary) -> void:
+	var pos: Vector3 = mover["position"]
+	var radius: float = float(mover["radius"])
+	var away: Vector3 = pos - (body["a"] as Vector3)
+	var fallback := away.normalized() if away.length() > 0.001 else Vector3.UP
+	var contact := _test_body(pos, pos, radius, body, fallback)
+	if contact.is_empty():
+		return
+	var normal: Vector3 = contact["normal"]
+	var push: float = minf(float(contact["depth"]), MAX_SEPARATION_SPEED * _delta)
+	mover["position"] = pos + normal * push
+	var vel: Vector3 = mover.get("vel", Vector3.ZERO)
+	var closing := -vel.dot(normal)
+	if closing > 0.0:
+		mover["vel"] = vel + normal * closing * (1.0 + RESTITUTION)
 
 
 ## Standard impulse-based sphere response: separate along the contact normal

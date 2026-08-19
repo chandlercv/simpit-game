@@ -174,9 +174,7 @@ func complete_undock() -> void:
 ## still be wherever the station pattern left it, hundreds of metres from the
 ## claim it just jumped to.
 func _place_ship_at_claim() -> void:
-	var ship: Dictionary = GameState.local_ship()
-	ship["transform"] = Transform3D.IDENTITY
-	ship["velocity"] = Vector3.ZERO
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3.ZERO)
 
 
 ## --- Internals --------------------------------------------------------------

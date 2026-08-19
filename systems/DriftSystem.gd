@@ -53,7 +53,7 @@ func _ready() -> void:
 	GameState.site_reset.connect(_on_site_reset)
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
 	for piece: Dictionary in GameState.salvage_pieces:
@@ -213,14 +213,20 @@ func collection_status(piece: Dictionary) -> Dictionary:
 
 
 ## Advance one piece's drift and keep its obstacle/contact glued to it. Velocity
-## is read from the OBSTACLE, not the piece dict, because CollisionSystem may
-## have written a fresh impulse into obstacle["vel"] last frame (ship ram or a
-## movable-pair knock) — same owner/collider split as the ship's own velocity.
+## AND position are read from the OBSTACLE, not the piece dict, because
+## CollisionSystem may have written a fresh impulse into obstacle["vel"] and a
+## push-out into obstacle["position"] last tick (ship ram, a movable-pair knock,
+## or contact with the station/derelict) — same owner/collider split as the
+## ship's own velocity. Reading the position back is what makes a piece SOLID
+## against static geometry: without it this line would overwrite the push-out
+## from the piece's own transform every tick and the piece would sink through.
 func _integrate_piece(piece: Dictionary, delta: float) -> void:
 	var obstacle := GameState.get_obstacle(int(piece["obstacle_id"]))
 	var vel: Vector3 = (obstacle["vel"] if not obstacle.is_empty() else piece["velocity"])
 	vel = vel.limit_length(MAX_DRIFT_SPEED)
 	var xform: Transform3D = piece["transform"]
+	if not obstacle.is_empty():
+		xform.origin = obstacle["position"]
 	xform.origin += vel * delta
 	var omega: Vector3 = piece["omega"]
 	if omega.length() > 0.0001:

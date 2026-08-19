@@ -104,6 +104,8 @@ This is not a new ship. Integrity at the start of a tour is BOW 0.96, PORT 0.88,
 
 [color=#f2705c]WARNING — No repair facility is available on this circuit.[/color] Hull damage is permanent for the duration of the tour. No section will fall below 0.05 and no accumulation of damage will disable the ship, but nothing will restore what has been lost. The hull diagram is a running record of the tour.
 
+[color=#f2705c]WARNING — DRIVE integrity governs the stability augmentation.[/color] The reaction control runs are carried in the DRIVE section. Authority is unimpaired at 0.80 and above, falls in proportion below it, and is lost entirely at 0.30. Heavy landings, flight over the gear limit with the legs out, and structural collapse all wear this section. See [b]Flight controls[/b].
+
 [color=#8c9eb8]NOTE — The Kestrel carries no propellant. Thrust is limited by electrical allocation alone, and there is no refuelling requirement.[/color]""",
 	},
 	{
@@ -111,18 +113,32 @@ This is not a new ship. Integrity at the start of a tour is BOW 0.96, PORT 0.88,
 		"group": "SECTION 2 — SYSTEMS",
 		"title": "Flight controls",
 		"body": """[color=#66ccff]ATTITUDE[/color]
-The attitude controls command rate, not force. Full deflection produces 45°/s. Returning the controls to centre stops the rotation at once. The ship holds the attitude at which it was left.
+The ship carries rotational momentum. The attitude controls do not turn the hull directly: they command a rate, and the stability augmentation holds the hull to it.
+
+Full deflection commands 45°/s. Returning the controls to centre commands zero, and the augmentation removes the remaining rate — in about a fifth of a second at full authority. Rotation imparted by a collision is removed the same way.
 
 Pitch .......... {{axis:pitch_down,pitch_up}}
 Yaw ............ {{axis:yaw_left,yaw_right}}
 Roll ........... {{axis:roll_left,roll_right}}
 
-[color=#8c9eb8]NOTE — No attitude hold or stabilisation is fitted. There is no residual rotation to correct.[/color]
+[color=#66ccff]STABILITY AUGMENTATION[/color]
+The augmentation is fitted to both axes of motion. On the attitude axes it holds the commanded rate and removes residual rotation. On the translation axes it bleeds off any axis the pilot is [b]not[/b] commanding, at one of two rates:
+
+[b]STATION-KEEPING[/b] — every translation control released, including the throttle. Approximately 30% of remaining velocity per second, on all three axes. The ship coasts to a stop.
+[b]FLYING[/b] — any translation control under command. Approximately 10% per second, on the uncommanded axes only. A sidestep is not wiped out the moment the control is released, but it will not be held indefinitely either.
+
+[color=#8c9eb8]NOTE — Displacing the ship sideways and holding the offset is flown, not trimmed. Under way the augmentation will slowly return the ship to its heading; re-apply lateral thrust to hold a standoff off the lane.[/color]
+
+It is engaged at power-up. {{act:fbw_mode_cycle}} switches it off and on. The Main display annunciates [b]ASSIST OFF[/b] or [b]ASSIST DEGRADED[/b] whenever it is not delivering full authority; nothing is annunciated when it is.
+
+Authority is the product of two figures. THRUST allocation carries it unimpaired at 0.40 and above and in proportion below. DRIVE integrity carries it unimpaired at 0.80 and above, in proportion below, and not at all at 0.30. See [b]Description — HULL[/b].
+
+[color=#f2bf59]CAUTION — The augmentation shares the THRUST channel with the manoeuvring thrusters.[/color] Allocation drawn down to feed the torch is taken out of stability authority at the same time.
+
+[color=#f2705c]WARNING — With the augmentation off or unpowered, the controls command torque and nothing else.[/color] Every rate started must be stopped by the pilot on the opposite control. The ship remains flyable in this condition and will not right itself.
 
 [color=#66ccff]TRANSLATION[/color]
 Translation is not rate-commanded. Thrust accelerates the ship and the resulting velocity persists.
-
-Flight assist bleeds off approximately 30% of velocity per second, but operates only while the thrust controls are at rest. Any translation demand, [b]including throttle[/b], suspends it. With the controls released the ship will coast to a stop; with the throttle open it will not.
 
 Lateral ........ {{axis:strafe_left,strafe_right}}
 Vertical ....... {{axis:thrust_down,thrust_up}}
@@ -138,7 +154,7 @@ The throttle has two command laws, selected with {{act:throttle_cmd_toggle}}.
 Reverse is limited to 50% of the lever's forward authority under either law.
 
 [color=#66ccff]APPROACH AUTOPILOT[/color]
-The approach autopilot is the only autopilot fitted. It closes on the selected structural member and holds station on it while the derelict rotates, then indicates MATCHED.
+The approach autopilot is the only autopilot fitted; the stability augmentation above is not one, and holds no course. The autopilot closes on the selected structural member and holds station on it while the derelict rotates, then indicates MATCHED.
 
 [color=#f2bf59]CAUTION — The autopilot translates only. It will not turn the ship,[/color] and it cannot match the derelict's rotation. Pointing the ship at the member remains a pilot task throughout.
 
@@ -229,6 +245,10 @@ The following are tested in order. The first failure is annunciated and the trig
 5. [b]Approach state MATCHED[/b] — [i]"CUT ABORT — NOT IN CUTTING RANGE (MATCH VELOCITY FIRST)"[/i]
 6. [b]CUTTER allocation 0.20 or greater[/b] — [i]"CUT ABORT — CUTTER UNPOWERED (RAISE CUTTER ALLOCATION)"[/i]
 
+[color=#f2bf59]CAUTION — Alignment requires at least half stability authority.[/color] Aiming the cutting head takes the pitch and yaw controls away from flying the ship, so residual rotation cannot be corrected while it is in progress. Below half authority the alignment is refused, and authority lost during one ends it:
+[i]"CUT ABORT — STABILISATION DEGRADED (CHECK FLIGHT ASSIST AND THRUST ALLOCATION)"[/i]
+[i]"ALIGNMENT LOST — STABILISATION DEGRADED"[/i]
+
 [color=#8c9eb8]NOTE — No separate cutting range is judged by the pilot. The MATCHED indication is the range condition: the autopilot establishes the standoff the torch requires. The torch cannot be fired under manual control at any distance.[/color]
 
 [color=#66ccff]ALIGNMENT[/color]
@@ -265,6 +285,10 @@ An alignment or a cut in progress is terminated by loss of the MATCHED condition
 		"body": """A severed member is not taken aboard automatically. It separates as a free body carrying the derelict's rotation together with a separation impulse from the torch, and must be recovered.
 
 No grapple, magnet or manipulator is fitted. The hatch is an aperture in the nose and recovery is performed by flying the aperture onto the piece.
+
+A severed piece is solid. It will strike the derelict, the structure of a harbour, and other pieces, and will rebound from them; it does not pass through them. A piece driven against structure by the ship will come to rest against it.
+
+[color=#f2bf59]CAUTION — A piece rebounds from whatever it is driven into, including this ship.[/color] Recovery requires relative velocity below 1.5 m/s, so a piece pushed hard into the frame it was cut from must be allowed to settle before it can be taken aboard.
 
 Hatch control: {{act:cargo_hatch_open}}, the {{sw:COWL}} switch, or the hatch control on the MFD [b]SCOOP[/b] page, which the primary MFD presents automatically when the hatch is opened.
 

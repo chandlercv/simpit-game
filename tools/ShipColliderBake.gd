@@ -1,7 +1,10 @@
 extends Node
 ## Author-time bake of the ship's collision capsule from its model, written back
-## into the ship's .tres so the runtime never measures the 3D scene (collision
-## lives in the logic layer, which must work headless — see CollisionSystem).
+## into the ship's .tres so the runtime never has to measure the SHIP's 3D scene.
+## Only the ship's: obstacle hulls (station, wreck members, debris) are baked
+## from live meshes at runtime and re-published as they move, so collision
+## DEGRADES headless rather than being scene-independent — see
+## CollisionSystem.wreck_surface_distance's INF fallback.
 ##
 ##   godot --headless res://tools/ShipColliderBake.tscn
 ##

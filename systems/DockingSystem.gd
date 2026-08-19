@@ -641,7 +641,7 @@ func end_approach() -> void:
 ## --- Per-frame simulation ---------------------------------------------------
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# The gear is ship equipment, so its speed rating bites wherever you're
 	# flying — including hauling salvage around the claim with it hanging out.
 	if not GameState.flight_active():
@@ -1040,8 +1040,7 @@ func _touchdown(ship: Dictionary, xform: Transform3D, offset: Vector3, up: Vecto
 	GameState.docking["quality"] = quality
 	var parked := xform
 	parked.origin = pad_world() + up * GEAR_HEIGHT
-	ship["transform"] = parked
-	ship["velocity"] = Vector3.ZERO
+	ShipMotion.seize(parked, Vector3.ZERO)
 	_set_state("LANDED")
 	var grade := "GREASED" if rate <= FIRM_RATE else ("FIRM" if rate <= HARD_RATE else "HARD")
 	GameState.post_comms("ATC", "TOUCHDOWN — %s ARRIVAL, %.1f M/S SINK, %d%% ON THE MARKS" % [
@@ -1066,10 +1065,9 @@ func _bounce(ship: Dictionary, xform: Transform3D, up: Vector3, reason: String,
 	var down: float = -velocity.dot(up)
 	if down > 0.0:
 		velocity += up * down * 1.4
-	ship["velocity"] = velocity * 0.5
 	var lifted := xform
 	lifted.origin += up * (GEAR_HEIGHT + 1.0 - (xform.origin - pad_world()).dot(up))
-	ship["transform"] = lifted
+	ShipMotion.seize(lifted, velocity * 0.5)
 	if damage > 0.0:
 		_damage_hull("DRIVE", damage)
 		_damage_hull("CORE", damage * 0.5)
@@ -1097,11 +1095,11 @@ func _bounce(ship: Dictionary, xform: Transform3D, up: Vector3, reason: String,
 func _settle_on_deck(ship: Dictionary, xform: Transform3D, up: Vector3) -> void:
 	var resting := xform
 	resting.origin += up * (GEAR_HEIGHT - (xform.origin - pad_world()).dot(up))
-	ship["transform"] = resting
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
 	var sink: float = -velocity.dot(up)
 	if sink > 0.0:
-		ship["velocity"] = velocity + up * sink
+		velocity += up * sink
+	ShipMotion.seize(resting, velocity)
 
 
 ## --- ATC plumbing -----------------------------------------------------------
@@ -1565,25 +1563,21 @@ func _route_point(route: Dictionary, t: float) -> Vector3:
 ## Put the ship on the outer approach, pointed at the hold marker and stopped —
 ## the transit burn's arrival, not a teleport into the middle of the pattern.
 func _place_ship_at_entry() -> void:
-	var ship: Dictionary = GameState.local_ship()
 	var origin := to_world(ENTRY_LOCAL)
 	var facing: Vector3 = gate_world(HOLD_GATE) - origin
 	var basis := _station_xform.basis
 	if facing.length() > 0.001:
 		basis = Basis.looking_at(facing.normalized(), pad_up())
-	ship["transform"] = Transform3D(basis, origin)
-	ship["velocity"] = Vector3.ZERO
+	ShipMotion.seize(Transform3D(basis, origin), Vector3.ZERO)
 
 
 ## Undocking: the ship is standing on the pad on its legs, parked on the lane's
 ## heading, with the gear already down and locked (it has been holding the ship
 ## up all the while it was berthed).
 func _place_ship_on_pad() -> void:
-	var ship: Dictionary = GameState.local_ship()
 	var up := pad_up()
-	ship["transform"] = Transform3D(Basis.looking_at(-pad_forward(), up),
-			pad_world() + up * GEAR_HEIGHT)
-	ship["velocity"] = Vector3.ZERO
+	ShipMotion.seize(Transform3D(Basis.looking_at(-pad_forward(), up),
+			pad_world() + up * GEAR_HEIGHT), Vector3.ZERO)
 	GameState.gear_down = true
 	GameState.gear_position = 1.0
 	GameState.landing_gear_changed.emit(true)

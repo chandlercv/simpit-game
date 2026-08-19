@@ -18,6 +18,9 @@ var _risk_at_cut := {}
 
 func _ready() -> void:
 	Engine.time_scale = 20.0
+	# Keep each physics step at 1/60 s of game time under the accelerated clock
+	# (steps per real second scale up; the sim's integration step does not).
+	Engine.physics_ticks_per_second = roundi(60.0 * Engine.time_scale)
 	InputRouter.set_process(false)
 	# InputRouter.set_process(false) only stops InputRouter's OWN _process — its
 	# raw-HID children (SwitchPanelBridge etc.) keep polling real connected
@@ -185,8 +188,8 @@ func _collect_piece(member_name: String, timeout: float) -> bool:
 		var offset := Vector3(0, 0, 1.0)
 		ship["transform"] = Transform3D(Basis.looking_at(offset.normalized()), piece_pos - offset)
 		ship["velocity"] = piece_vel
-		await get_tree().process_frame
-		elapsed += get_process_delta_time()
+		await get_tree().physics_frame
+		elapsed += get_physics_process_delta_time()
 	GameState.set_cargo_hatch(false)
 	return _find_piece(member_name).is_empty()
 

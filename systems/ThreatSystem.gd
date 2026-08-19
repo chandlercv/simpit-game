@@ -83,7 +83,7 @@ func reset_run() -> void:
 	_collapsed = false
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
 	_update_rival(delta)

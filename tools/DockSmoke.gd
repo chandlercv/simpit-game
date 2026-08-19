@@ -32,6 +32,9 @@ var _failures: Array[String] = []
 
 func _ready() -> void:
 	Engine.time_scale = 10.0
+	# Keep each physics step at 1/60 s of game time under the accelerated clock
+	# (steps per real second scale up; the sim's integration step does not).
+	Engine.physics_ticks_per_second = roundi(60.0 * Engine.time_scale)
 	InputRouter.set_process(false)
 	for child in InputRouter.get_children():
 		child.set_process(false)
@@ -498,7 +501,7 @@ func _run() -> void:
 	var world: Node3D = load("res://scenes/world/DebrisField.tscn").instantiate()
 	add_child(world)
 	for _i in 6:
-		await get_tree().process_frame
+		await get_tree().physics_frame
 	var station: Node3D = world.get_node("Station")
 	_check(DockingSystem.station_transform().origin.distance_to(station.global_position) < 0.01,
 			"Station.gd registers its own placement with the rules")
@@ -645,6 +648,7 @@ func _park_at(position: Vector3, velocity: Vector3) -> void:
 	xform.origin = position
 	ship["transform"] = xform
 	ship["velocity"] = velocity
+	ship["omega"] = Vector3.ZERO
 
 
 ## Ship origin a hair below the height at which the legs are on the deck, so the
@@ -668,6 +672,7 @@ func _place_level(at: Vector3) -> void:
 	ship["transform"] = Transform3D(
 			Basis.looking_at(DockingSystem.pad_forward(), DockingSystem.pad_up()), at)
 	ship["velocity"] = Vector3.ZERO
+	ship["omega"] = Vector3.ZERO
 
 
 func _teleport(position: Vector3) -> void:
@@ -676,6 +681,7 @@ func _teleport(position: Vector3) -> void:
 
 func _stop_ship() -> void:
 	GameState.local_ship()["velocity"] = Vector3.ZERO
+	GameState.local_ship()["omega"] = Vector3.ZERO
 
 
 ## A point along the leg currently being flown, `t` of the way down it.
@@ -699,23 +705,38 @@ func _fly_to_cleared() -> void:
 
 ## Hop the ship through every remaining ring in order.
 func _run_gates() -> void:
+	# Enter the physics-signal context before the first write: physics_frame is
+	# emitted immediately BEFORE the systems process a step, so a pose written
+	# from a render-frame context would be overwritten by the next iteration's
+	# write before any system ever saw it.
+	await get_tree().physics_frame
 	for i in range(int(GameState.docking.get("gate", 1)), DockingSystem.GATES.size()):
 		_teleport(DockingSystem.gate_world(i))
-		await get_tree().process_frame
+		await get_tree().physics_frame
 
 
 ## Every gate except the last, so a check can control exactly how the final one
 ## is crossed.
 func _run_gates_to_last() -> void:
+	# Enter the physics-signal context before the first write: physics_frame is
+	# emitted immediately BEFORE the systems process a step, so a pose written
+	# from a render-frame context would be overwritten by the next iteration's
+	# write before any system ever saw it.
+	await get_tree().physics_frame
 	for i in range(int(GameState.docking.get("gate", 1)), DockingSystem.GATES.size() - 1):
 		_teleport(DockingSystem.gate_world(i))
-		await get_tree().process_frame
+		await get_tree().physics_frame
 
 
 func _run_gates_outbound() -> void:
+	# Enter the physics-signal context before the first write: physics_frame is
+	# emitted immediately BEFORE the systems process a step, so a pose written
+	# from a render-frame context would be overwritten by the next iteration's
+	# write before any system ever saw it.
+	await get_tree().physics_frame
 	for i in range(int(GameState.docking.get("gate", 0)), -1, -1):
 		_teleport(DockingSystem.gate_world(i))
-		await get_tree().process_frame
+		await get_tree().physics_frame
 
 
 ## Cleared, gear down, and through every gate — parked on final over the pad.
@@ -745,8 +766,8 @@ func _hold(position: Vector3, velocity: Vector3, predicate: Callable,
 		_park_at(position, velocity)
 		if predicate.call():
 			return true
-		await get_tree().process_frame
-		elapsed += get_process_delta_time()
+		await get_tree().physics_frame
+		elapsed += get_physics_process_delta_time()
 	return predicate.call()
 
 
