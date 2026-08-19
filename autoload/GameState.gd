@@ -460,11 +460,10 @@ func remove_contact(id: int) -> void:
 ## `mass` > 0 marks the body MOVABLE: CollisionSystem may write its `vel` field
 ## on impact (ship or another movable body knocking it) instead of treating it
 ## as an immovable wall. The owner (DriftSystem for salvage pieces, DebrisField
-## for chunks) integrates position from `vel` each frame; a mass-0 body (the
-## wreck's own members) never gets pushed — and never pushes a movable body
-## either: the movable-pair pass skips it entirely, BY DESIGN, so a fresh-cut
-## piece can separate out through its parent member instead of being pinned
-## inside the frame it was cut from (DriftSmoke pins this).
+## for chunks) integrates position from `vel` and `position` each frame. A mass-0
+## body (station structure, the derelict's intact members) is IMMOVABLE, not
+## absent: it never gets pushed, but it does push — a movable body meets it on
+## its tight hull and bounces off (CollisionSystem._resolve_static).
 func register_obstacle(obstacle_name: String, position: Vector3, radius: float,
 		hull := PackedVector3Array(), is_wreck := false, mass := 0.0) -> int:
 	var id := _next_contact_id

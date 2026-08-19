@@ -52,6 +52,14 @@ const HULL_FLOOR := 0.05
 ## One damage event per body per window; grinding against a surface at low
 ## closing speed does almost nothing after the initial hit.
 const IMPACT_COOLDOWN := 0.8
+## Ceiling (m/s) on how fast a penetrating body is pushed back out. A body can
+## be born deeply overlapping something — a severed piece starts inside the
+## frame it was just cut from, and its collision sphere encloses neighbouring
+## members a long spar never actually touches — and correcting that in one tick
+## is a teleport (measured at 3.96 m for the spine truss). Separating at a bounded
+## rate instead reads as the piece easing clear of the hull.
+const MAX_SEPARATION_SPEED := 6.0
+
 ## Cap on the spin (rad/s) a single contact can impart, so a grind along a
 ## surface stays a shove and not a spin cycle. A healthy FBW nulls an imparted
 ## spin in a couple of tenths of a second; a degraded one leaves it with the
@@ -60,6 +68,8 @@ const MAX_IMPART_SPIN := 1.5
 
 ## Body key -> seconds of impact cooldown remaining.
 var _cooldowns: Dictionary = {}
+## This tick's length, for the rate-limited separation below.
+var _delta := 0.0
 
 
 func _physics_process(delta: float) -> void:
@@ -69,6 +79,7 @@ func _physics_process(delta: float) -> void:
 	if not GameState.flight_active():
 		_cooldowns.clear()
 		return
+	_delta = delta
 	for key: String in _cooldowns.keys():
 		_cooldowns[key] -= delta
 		if _cooldowns[key] <= 0.0:
@@ -81,7 +92,10 @@ func _physics_process(delta: float) -> void:
 	var origin: Vector3 = xform.origin
 	var ship_radius := _ship_radius()
 	var moved := false
-	for body: Dictionary in _collidables():
+	# Built once and shared with the movable passes below: _collidables()
+	# allocates a fresh dict per body, and the static pass needs the same list.
+	var bodies := _collidables()
+	for body: Dictionary in bodies:
 		# Rebuild the ship capsule from the running origin so multiple bodies in
 		# one frame push the ship consistently (basis is fixed for the frame).
 		var ship_a: Vector3 = origin + xform.basis * GameState.ship_def.collision_a
@@ -111,7 +125,7 @@ func _physics_process(delta: float) -> void:
 		# straight back in and grind, so hand control back to the pilot.
 		if GameState.approach_state != "HOLDING":
 			SalvageSystem.abort_approach_on_collision()
-	_resolve_movable_pairs()
+	_resolve_movable_bodies(bodies)
 
 
 ## Union of solid bodies this frame. Everything solid — the wreck's per-member
@@ -231,19 +245,53 @@ func _impart_body_velocity(body: Dictionary, normal: Vector3, closing: float) ->
 			- normal * closing * (1.0 + RESTITUTION) * frac
 
 
-## Movable bodies (salvage pieces, knocked debris) can also knock each other —
-## a sphere-sphere pass over just that subset, separate from the ship-vs-body
-## test above (which still uses the tight hull/capsule test where a hull is
-## present). Kept to spheres: these bodies are constantly translating, so
-## baking/re-transforming a hull for this pass isn't worth it.
-func _resolve_movable_pairs() -> void:
+## Everything a movable body (a drifting salvage piece, a knocked debris chunk)
+## can hit, in two passes.
+##
+## Movable vs MOVABLE is sphere-sphere and splits by inverse mass — these bodies
+## are constantly translating, so baking a hull for them isn't worth it.
+##
+## Movable vs STATIC (station structure, the derelict's intact members, traffic)
+## is the infinite-mass case: the mover takes the whole push-out and the whole
+## bounce. It runs through the SAME tight narrowphase the ship uses — a piece is
+## just a degenerate capsule — so a piece meets a bay wall on its real hull, not
+## on a bounding sphere that would stop it metres short.
+func _resolve_movable_bodies(bodies: Array[Dictionary]) -> void:
 	var movable: Array[Dictionary] = []
 	for obstacle: Dictionary in GameState.obstacles:
 		if float(obstacle.get("mass", 0.0)) > 0.0:
 			movable.append(obstacle)
+	if movable.is_empty():
+		return
 	for i in movable.size():
 		for j in range(i + 1, movable.size()):
 			_resolve_pair(movable[i], movable[j])
+	for body: Dictionary in bodies:
+		if float(body.get("mass", 0.0)) > 0.0:
+			continue  # handled by the movable-vs-movable pass above
+		for mover: Dictionary in movable:
+			_resolve_static(mover, body)
+
+
+## One movable body against one immovable one. Writes the correction into the
+## live obstacle dict; the owning system (DriftSystem for salvage pieces) reads
+## `position` and `vel` back out on its next tick, the same owner/collider split
+## the ship's own bounce uses.
+func _resolve_static(mover: Dictionary, body: Dictionary) -> void:
+	var pos: Vector3 = mover["position"]
+	var radius: float = float(mover["radius"])
+	var away: Vector3 = pos - (body["a"] as Vector3)
+	var fallback := away.normalized() if away.length() > 0.001 else Vector3.UP
+	var contact := _test_body(pos, pos, radius, body, fallback)
+	if contact.is_empty():
+		return
+	var normal: Vector3 = contact["normal"]
+	var push: float = minf(float(contact["depth"]), MAX_SEPARATION_SPEED * _delta)
+	mover["position"] = pos + normal * push
+	var vel: Vector3 = mover.get("vel", Vector3.ZERO)
+	var closing := -vel.dot(normal)
+	if closing > 0.0:
+		mover["vel"] = vel + normal * closing * (1.0 + RESTITUTION)
 
 
 ## Standard impulse-based sphere response: separate along the contact normal

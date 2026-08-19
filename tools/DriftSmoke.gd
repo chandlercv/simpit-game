@@ -90,24 +90,34 @@ func _run() -> void:
 	GameState.remove_obstacle(a_id)
 	GameState.remove_obstacle(b_id)
 
-	# --- Movable-vs-static is a pass-through BY DESIGN. Station structure and
-	# the derelict's own members register with mass 0, and the movable-pair
-	# pass skips mass-0 bodies entirely — so a drifting piece slides through
-	# the frame it was just cut from instead of being pinned inside its parent
-	# member's envelope. The ship still collides with both sides. This check
-	# documents that decision; if solid piece-vs-frame contact is ever wanted,
-	# it must replace this check, not sneak past it. ---
+	# --- Movable-vs-static is SOLID. Station structure and the derelict's own
+	# members register with mass 0 — immovable, not absent — so a drifting piece
+	# meets them and bounces instead of sliding through the frame it was cut
+	# from. The mover takes the whole push-out and the whole bounce (infinite
+	# mass on the static side), and the test runs on the static body's tight
+	# hull, the same narrowphase the ship uses. ---
 	var static_id := GameState.register_obstacle(
 			"STATIC FRAME", Vector3(0, 0, -60), 2.0)
+	# Started already overlapping (2.5 m apart against a 3.0 m minimum), for the
+	# same reason as the pair check above: a bare obstacle has no owning system
+	# to integrate it, so motion can't be relied on to close the gap.
 	var mover_id := GameState.register_obstacle(
-			"BODY C", Vector3(0, 0, -59), 1.0, PackedVector3Array(), false, 1.0)
-	GameState.get_obstacle(mover_id)["vel"] = Vector3(0, 0, -4)  # into the static
-	await get_tree().physics_frame
-	await get_tree().physics_frame
+			"BODY C", Vector3(0, 0, -57.5), 1.0, PackedVector3Array(), false, 1.0)
+	GameState.get_obstacle(mover_id)["vel"] = Vector3(0, 0, -4)  # driving into it
+	# Separation is rate-limited (CollisionSystem.MAX_SEPARATION_SPEED), so a
+	# 0.5 m overlap takes several ticks to clear — wait for it rather than
+	# assuming a fixed number of frames.
+	await _wait_until(func() -> bool:
+		return (GameState.get_obstacle(mover_id)["position"] as Vector3).distance_to(
+				Vector3(0, 0, -60)) >= 3.0, 3.0)
 	var mover_vel: Vector3 = GameState.get_obstacle(mover_id)["vel"]
-	_check(mover_vel == Vector3(0, 0, -4),
-			"a movable body passes through a mass-0 body unimpeded (vel %s)"
-					% mover_vel)
+	_check(mover_vel.z > 0.0,
+			"a movable body bounces off a mass-0 body instead of passing through (vel.z %.2f)"
+					% mover_vel.z)
+	var sep: float = (GameState.get_obstacle(mover_id)["position"] as Vector3).distance_to(
+			Vector3(0, 0, -60))
+	_check(sep >= 2.99,
+			"...and is pushed clear of its surface, not left inside it (%.2f m of 3.0)" % sep)
 	GameState.remove_obstacle(static_id)
 	GameState.remove_obstacle(mover_id)
 

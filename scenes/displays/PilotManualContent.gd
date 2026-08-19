@@ -286,6 +286,10 @@ An alignment or a cut in progress is terminated by loss of the MATCHED condition
 
 No grapple, magnet or manipulator is fitted. The hatch is an aperture in the nose and recovery is performed by flying the aperture onto the piece.
 
+A severed piece is solid. It will strike the derelict, the structure of a harbour, and other pieces, and will rebound from them; it does not pass through them. A piece driven against structure by the ship will come to rest against it.
+
+[color=#f2bf59]CAUTION — A piece rebounds from whatever it is driven into, including this ship.[/color] Recovery requires relative velocity below 1.5 m/s, so a piece pushed hard into the frame it was cut from must be allowed to settle before it can be taken aboard.
+
 Hatch control: {{act:cargo_hatch_open}}, the {{sw:COWL}} switch, or the hatch control on the MFD [b]SCOOP[/b] page, which the primary MFD presents automatically when the hatch is opened.
 
 [color=#66ccff]CONDITIONS FOR RECOVERY[/color]
