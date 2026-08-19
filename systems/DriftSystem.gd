@@ -53,7 +53,7 @@ func _ready() -> void:
 	GameState.site_reset.connect(_on_site_reset)
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
 	for piece: Dictionary in GameState.salvage_pieces:

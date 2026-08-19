@@ -13,6 +13,9 @@ var _failures: Array[String] = []
 
 func _ready() -> void:
 	Engine.time_scale = 10.0
+	# Keep each physics step at 1/60 s of game time under the accelerated clock
+	# (steps per real second scale up; the sim's integration step does not).
+	Engine.physics_ticks_per_second = roundi(60.0 * Engine.time_scale)
 	_run.call_deferred()
 
 

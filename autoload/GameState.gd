@@ -365,6 +365,10 @@ func _ready() -> void:
 	ships[LOCAL_PEER_ID] = {
 		"transform": Transform3D.IDENTITY,
 		"velocity": Vector3.ZERO,
+		# Angular velocity, world frame, rad/s. ShipMotion integrates it; the
+		# stick commands a rate the FBW slews this toward, and collision can
+		# write spin into it. seize() zeroes it with every kinematic override.
+		"omega": Vector3.ZERO,
 		# Per-section integrity 0..1; collapse events (ThreatSystem) damage it.
 		"hull_sections": {
 			"BOW": 0.96, "PORT": 0.88, "STBD": 0.92,
@@ -457,7 +461,10 @@ func remove_contact(id: int) -> void:
 ## on impact (ship or another movable body knocking it) instead of treating it
 ## as an immovable wall. The owner (DriftSystem for salvage pieces, DebrisField
 ## for chunks) integrates position from `vel` each frame; a mass-0 body (the
-## wreck's own members) never gets pushed.
+## wreck's own members) never gets pushed — and never pushes a movable body
+## either: the movable-pair pass skips it entirely, BY DESIGN, so a fresh-cut
+## piece can separate out through its parent member instead of being pinned
+## inside the frame it was cut from (DriftSmoke pins this).
 func register_obstacle(obstacle_name: String, position: Vector3, radius: float,
 		hull := PackedVector3Array(), is_wreck := false, mass := 0.0) -> int:
 	var id := _next_contact_id
@@ -804,8 +811,13 @@ func _write_comms_log(entry: Dictionary) -> void:
 	_comms_log.flush()
 
 
-func _process(delta: float) -> void:
+## Gear travel is simulation state (the gear interlocks and the landing rules
+## read it), so it advances on the physics tick with the rest of the sim.
+func _physics_process(delta: float) -> void:
 	_advance_gear(delta)
+
+
+func _process(delta: float) -> void:
 	_tick_accum += delta
 	while _tick_accum >= 1.0 / TICK_RATE_HZ:
 		_tick_accum -= 1.0 / TICK_RATE_HZ

@@ -111,6 +111,13 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   **GEAR IN TRANSIT nn%** during its 3-second travel, then **GEAR DOWN**. Fly
   faster than the gear is rated for with it out and it becomes a pulsing red
   **GEAR OVERSPEED** — the legs are taking the load and wearing.
+- **Assist annunciator** — under the gear indicator, and *silent while nominal*
+  (an annunciator that's always lit tells you nothing). Reads **ASSIST OFF** when
+  you've switched the stability augmentation off yourself, or **ASSIST DEGRADED
+  nn%** when it can't deliver full authority — starved THRUST allocation, a worn
+  DRIVE section, or both. It pulses red once authority drops below the half the
+  alignment mini-game requires, which is the point at which the degradation
+  starts costing you salvage rather than just feel.
 
 ---
 
@@ -227,13 +234,17 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
 4. **Power the cutter.** Raise the **CUTTER** power channel to at least 0.2 on
    an MFD **POWER** page.
 5. **Align the cutting head.** With the approach `MATCHED`, fire the cutter to
-   open the alignment mini-game (it does **not** cut yet). The seam target `⊕` is a
-   real point on the member, so it drifts across your view **because the wreck is
-   tumbling** — since you matched the wreck's drift but not its spin, holding the
-   cut takes hands-on tracking. Steer your torch reticle `✛` — with **pitch/yaw** —
-   onto the seam and hold it inside the tolerance ring to fill the **lock**. Watch
-   it on the Main HUD crosshair or the MFD **ALIGN** page. Let the torch wander too
-   far and the **slip** meter fills and the alignment aborts (no cut).
+   open the alignment mini-game (it does **not** cut yet). Aiming takes
+   **pitch/yaw away from flying the ship**, so it needs at least half stability
+   authority to open — starve THRUST to feed the torch, or fly a badly worn DRIVE
+   section, and the alignment is refused (and aborts if authority drops during
+   one). The seam target `⊕` is a real point on the member, so it drifts across
+   your view **because the wreck is tumbling** — since you matched the wreck's
+   drift but not its spin, holding the cut takes hands-on tracking. Steer your
+   torch reticle `✛` — with **pitch/yaw** — onto the seam and hold it inside the
+   tolerance ring to fill the **lock**. Watch it on the Main HUD crosshair or the
+   MFD **ALIGN** page. Let the torch wander too far and the **slip** meter fills
+   and the alignment aborts (no cut).
 6. **Commit the cut.** The lock auto-commits at full, or press the cutter again to
    commit early at the current quality. The cutting beam from the ship's **right
    wing** bites into the member, which severs over time — and **detaches as a real,
@@ -260,68 +271,78 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
 8. **Watch structural risk.** Cutting load-bearing members spikes risk and
    ratchets the resting baseline up; cosmetic panels barely move it. If the
    frame collapses, every uncut member is lost.
-9. **Fly the approach and land.** On an MFD **MARKET** page, dock at a faction
-   (this leaves the claim — the cargo hatch must be secured first). The transit
-   burn only gets you to the station's outer approach: **the berth is flown for**
-   (`APPROACH` phase). Work it on the MFD **DOCK** page, which the primary MFD
-   opens for you:
-   - **Hold at marker ALPHA.** Fly to the hold ring and *stop* (under 3 m/s).
-     ATC refuses a clearance while you're still moving, and sequences you behind
-     the station's traffic — a lane tug, a shuttle and a slow ore barge working
-     the same volume. They are solid, and so is the station.
-   - **Run the lane.** Cleared, you fly **BRAVO → CHARLIE → DELTA** in order,
-     *through* each ring, staying inside the leg's corridor (22 m, then 15 m
-     through the slot between two hab drums, then 10 m) and under the pattern
-     speed. Miss a ring, leave the corridor, or sit over the limit and you're
-     **sent around** to hold again.
-   - **Hitting something is billed, not waved off.** A go-around is for the
-     instructions you were given; contact is damage. Scrape a bay wall or clip a
-     tug and you pay for it — hull, a **damages invoice** from the station
-     (roughly a quarter of a run's takings for a light scrape, half for a bad
-     one), and **standing** — but you keep your clearance and carry on flying.
-     Anything you can't pay comes out of your reputation instead.
-     A knock also buys a few seconds' **amnesty** on the speed and corridor
-     rules: the impact shoves you off your line, and being waved off for a
-     deviation the station's own wall gave you would make "contact keeps your
-     clearance" meaningless. Even a graze too gentle to damage anything gets
-     called out, so you are never knocked silently.
-     Repeated go-arounds bleed standing, but only **up to a cap per visit** — a
-     pattern you are struggling with should cost you a reputation, not erase
-     one.
-   - **Gear down before the final gate.** The landing gear (keyboard **X**, or
-     the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
-     you act on early — arriving at DELTA with it up is a go-around, as is an
-     open cargo hatch.
-   - **Turn the corner.** The descent corridor is a **funnel**: it is wide where
-     you cross DELTA — you arrive there with horizontal speed and a vertical drop
-     to fly, so the overshoot is part of the manoeuvre — and tightens to 6 m by
-     the time you are down between the bay walls, where there is something to hit.
-   - **Land it.** Descend into the berth and put it on the pad: inside the deck
-     markings, wings level, under the sink rate the legs will take. **You land on
-     the legs, level** — the touchdown check rejects more than 20° of tilt, so
-     pitching the nose down at the pad both fails it and puts the bow into the
-     deck. The pad is directly beneath you and the hull camera looks forward, so
-     fly the last stretch on the Camera display's **BELLY** view (keyboard **5**),
-     the MFD **DOCK** page's pad view, and the HUD landing ladder. The touchdown
-     is **scored** — a greaser earns standing with the faction, a hard arrival
-     costs hull, and anything worse bounces you back into the pattern.
+   *Collapse also wears the hull — and hull damage is no longer just a record.*
+9. **Mind the DRIVE section.** The ship carries real rotational momentum: the
+   stick commands a rate and the **stability augmentation** holds it, nulling
+   residual spin (including whatever a collision imparts). Its authority is the
+   product of **THRUST allocation** and **DRIVE integrity**, so a heavy landing,
+   flying over the gear limit with the legs out, or a collapse event all cash out
+   later as a ship that no longer stops turning when you centre the stick. Lose it
+   entirely and the controls command torque and nothing else — still flyable, but
+   every rate you start is one you have to stop. You can also switch it off
+   yourself (`fbw_mode_cycle`).
+10. **Fly the approach and land.** On an MFD **MARKET** page, dock at a faction
+    (this leaves the claim — the cargo hatch must be secured first). The transit
+    burn only gets you to the station's outer approach: **the berth is flown for**
+    (`APPROACH` phase). Work it on the MFD **DOCK** page, which the primary MFD
+    opens for you:
+    - **Hold at marker ALPHA.** Fly to the hold ring and *stop* (under 3 m/s).
+      ATC refuses a clearance while you're still moving, and sequences you behind
+      the station's traffic — a lane tug, a shuttle and a slow ore barge working
+      the same volume. They are solid, and so is the station.
+    - **Run the lane.** Cleared, you fly **BRAVO → CHARLIE → DELTA** in order,
+      *through* each ring, staying inside the leg's corridor (22 m, then 15 m
+      through the slot between two hab drums, then 10 m) and under the pattern
+      speed. Miss a ring, leave the corridor, or sit over the limit and you're
+      **sent around** to hold again.
+    - **Hitting something is billed, not waved off.** A go-around is for the
+      instructions you were given; contact is damage. Scrape a bay wall or clip a
+      tug and you pay for it — hull, a **damages invoice** from the station
+      (roughly a quarter of a run's takings for a light scrape, half for a bad
+      one), and **standing** — but you keep your clearance and carry on flying.
+      Anything you can't pay comes out of your reputation instead.
+      A knock also buys a few seconds' **amnesty** on the speed and corridor
+      rules: the impact shoves you off your line, and being waved off for a
+      deviation the station's own wall gave you would make "contact keeps your
+      clearance" meaningless. Even a graze too gentle to damage anything gets
+      called out, so you are never knocked silently.
+      Repeated go-arounds bleed standing, but only **up to a cap per visit** — a
+      pattern you are struggling with should cost you a reputation, not erase
+      one.
+    - **Gear down before the final gate.** The landing gear (keyboard **X**, or
+      the switch panel's **GEAR** lever) takes 3 seconds to travel, so it's a call
+      you act on early — arriving at DELTA with it up is a go-around, as is an
+      open cargo hatch.
+    - **Turn the corner.** The descent corridor is a **funnel**: it is wide where
+      you cross DELTA — you arrive there with horizontal speed and a vertical drop
+      to fly, so the overshoot is part of the manoeuvre — and tightens to 6 m by
+      the time you are down between the bay walls, where there is something to hit.
+    - **Land it.** Descend into the berth and put it on the pad: inside the deck
+      markings, wings level, under the sink rate the legs will take. **You land on
+      the legs, level** — the touchdown check rejects more than 20° of tilt, so
+      pitching the nose down at the pad both fails it and puts the bow into the
+      deck. The pad is directly beneath you and the hull camera looks forward, so
+      fly the last stretch on the Camera display's **BELLY** view (keyboard **5**),
+      the MFD **DOCK** page's pad view, and the HUD landing ladder. The touchdown
+      is **scored** — a greaser earns standing with the faction, a hard arrival
+      costs hull, and anything worse bounces you back into the pattern.
 
-   Then sell your hold at that faction's prices. **Anything still adrift when you
-   leave the claim is abandoned** — you jump back to a fresh wreck, not to the
-   pieces you left floating — so scoop before you depart. Away from the claim the
-   `SCOOP` page stops flying the rendezvous and reads **COLLECTION SUSPENDED**,
-   counting what you left behind.
+    Then sell your hold at that faction's prices. **Anything still adrift when you
+    leave the claim is abandoned** — you jump back to a fresh wreck, not to the
+    pieces you left floating — so scoop before you depart. Away from the claim the
+    `SCOOP` page stops flying the rendezvous and reads **COLLECTION SUSPENDED**,
+    counting what you left behind.
 
-   *Don't want the mini-game?* ATC will fly you in: **AUTO-BERTH** on the MARKET
-   or DOCK page books the berth for a handling fee and a hit to your standing —
-   deliberately a worse deal than flying it well, and refused once you're on
-   final.
-10. **Fly the departure.** Leaving is flown too. Undocking lifts you off the pad
-   into a departure hold; ATC sequences you out around the same traffic, and you
-   run the lane in reverse (**DELTA → CHARLIE → BRAVO → ALPHA**). The **gear stays
-   down until the berth bay is behind you**, and ATC won't release you for the jump
-   until it's stowed again. Break a rule on the way out and you get a reprimand
-   and a standing cost rather than a go-around — you're leaving either way.
+    *Don't want the mini-game?* ATC will fly you in: **AUTO-BERTH** on the MARKET
+    or DOCK page books the berth for a handling fee and a hit to your standing —
+    deliberately a worse deal than flying it well, and refused once you're on
+    final.
+11. **Fly the departure.** Leaving is flown too. Undocking lifts you off the pad
+    into a departure hold; ATC sequences you out around the same traffic, and you
+    run the lane in reverse (**DELTA → CHARLIE → BRAVO → ALPHA**). The **gear stays
+    down until the berth bay is behind you**, and ATC won't release you for the jump
+    until it's stowed again. Break a rule on the way out and you get a reprimand
+    and a standing cost rather than a go-around — you're leaving either way.
 
 **Power budget:** four channels — **THRUST, CUTTER, SENSORS, LIFE** — each
 0..1. The reactor can't run everything at full; the MFD **POWER** page header
@@ -440,8 +461,10 @@ defaults:
 | **B** | Open/close cargo hatch | | **X** | Landing gear up / down |
 | **Z** | Request clearance / acknowledge ATC | | | |
 
-MFD paging, cargo, market, and the power-channel axes ship **unbound** on the
-keyboard — bind them in the remapper if you want keys for them. Every default
+MFD paging, cargo, market, the throttle command-law toggle
+(`throttle_cmd_toggle`) and the flight-assist switch (`fbw_mode_cycle`) ship
+**unbound** on the keyboard — bind them in the remapper if you want keys for
+them. Every default
 here is also HOTAS-bindable, and a key + a HOTAS bind can coexist on one function.
 
 During the pre-cut alignment mini-game the **pitch/yaw keys** (I / K, J / L) aim
@@ -644,6 +667,7 @@ running game predates a change.
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
+| `FlightSmoke.tscn` | Headless smoke for the flight model's **failure** cases — the ones a working fly-by-wire hides. A perfect assist is indistinguishable from the old no-momentum model, so these drive authority *down* and assert the residual survives: a spin imparted at zero authority keeps turning the ship, a switched-off assist leaves drift alone, direct thruster torque still flies a dead-stick ship, and the alignment interlock refuses (and aborts) below half authority. |
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
 | `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
 | `DockSmoke.tscn` | Headless smoke for the docking/landing mini-game (DockingSystem): the transit burn hands over to a flown approach; the hold gates a clearance on being stopped and on the lane being clear of traffic; markers must be flown through in order, and a miss, a corridor departure or sustained overspeed sends you around; the gear travels in real time, is required at the final gate and interlocks the cutter; a hot touchdown bounces and a clean one books the berth; auto-berth is a paid alternative inbound and refused on final; the departure is flown too; and the 3D station agrees with the lane data it is built from. |

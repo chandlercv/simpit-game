@@ -16,6 +16,9 @@ var _failures: Array[String] = []
 
 func _ready() -> void:
 	Engine.time_scale = 10.0
+	# Keep each physics step at 1/60 s of game time under the accelerated clock
+	# (steps per real second scale up; the sim's integration step does not).
+	Engine.physics_ticks_per_second = roundi(60.0 * Engine.time_scale)
 	InputRouter.set_process(false)
 	# InputRouter.set_process(false) only stops InputRouter's OWN _process — its
 	# raw-HID children (SwitchPanelBridge etc.) keep polling real connected
@@ -117,9 +120,11 @@ func _drive_align(on_target: bool, timeout: float) -> bool:
 		var target := Vector2(align["target"])
 		var aim: Vector2
 		if on_target:
-			# Command exactly the move that lands the reticle on the seam this frame
-			# (no overshoot), so it tracks the drift dead-centre for high quality.
-			var rate: float = SalvageSystem.ALIGN_RETICLE_RATE * maxf(get_process_delta_time(), 0.0001)
+			# Command exactly the move that lands the reticle on the seam this
+			# physics step (no overshoot), so it tracks the drift dead-centre for
+			# high quality. The mini-game integrates on the physics tick, so the
+			# aim must be recomputed at that cadence with that step.
+			var rate: float = SalvageSystem.ALIGN_RETICLE_RATE * maxf(get_physics_process_delta_time(), 0.0001)
 			aim = ((target - reticle) / rate).clampf(-1.0, 1.0)
 		else:
 			# Drive to the far corner from the seam to hold well past the slip radius.
@@ -127,8 +132,8 @@ func _drive_align(on_target: bool, timeout: float) -> bool:
 			if aim == Vector2.ZERO:
 				aim = Vector2.ONE
 		SalvageSystem.set_align_input(aim)
-		await get_tree().process_frame
-		elapsed += get_process_delta_time()
+		await get_tree().physics_frame
+		elapsed += get_physics_process_delta_time()
 	SalvageSystem.set_align_input(Vector2.ZERO)
 	return GameState.align_state != "ALIGNING"
 

@@ -459,6 +459,8 @@ func _process(_delta: float) -> void:
 		DockingSystem.request_clearance()
 	if Input.is_action_just_pressed("throttle_cmd_toggle"):
 		SalvageSystem.toggle_throttle_cmd_mode()
+	if Input.is_action_just_pressed("fbw_mode_cycle"):
+		ShipMotion.toggle_fbw()
 	_process_panel_commands()
 
 

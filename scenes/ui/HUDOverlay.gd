@@ -107,6 +107,7 @@ func _draw() -> void:
 	_draw_ops_state()
 	_draw_hatch_indicator()
 	_draw_gear_indicator()
+	_draw_assist_indicator()
 	if camera == null:
 		return
 	var frame := Rect2(Vector2.ZERO, size)
@@ -272,6 +273,24 @@ func _draw_hatch_indicator() -> void:
 	var a := 0.55 + 0.45 * sin(_time * TAU * 1.2)
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 28), "CARGO HATCH OPEN",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(SALVAGE_COLOR, a))
+
+
+## Stability-augmentation state, stacked under the hatch/gear annunciators.
+## Silent while nominal: an annunciator that is always lit says nothing. Shown
+## switched OFF (a pilot's choice, steady) or DEGRADED (authority below rated —
+## pulsing red once it is too low to open an alignment, since that is the point
+## at which it starts costing salvage).
+func _draw_assist_indicator() -> void:
+	var engaged: bool = ShipMotion.fbw_engaged()
+	var auth: float = ShipMotion.authority()
+	if engaged and auth >= 0.99:
+		return
+	var text := "ASSIST OFF" if not engaged else "ASSIST DEGRADED %d%%" % roundi(auth * 100.0)
+	var color := SALVAGE_COLOR
+	if engaged and auth < SalvageSystem.MIN_ALIGN_AUTHORITY:
+		color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 68), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 
 
 ## Pre-cut alignment crosshair, anchored over the member you're cutting so the

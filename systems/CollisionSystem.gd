@@ -2,15 +2,15 @@ extends Node
 ## Consequences for running into things.
 ##
 ## Space flight in this game is hand-integrated: SalvageSystem writes the ship's
-## transform/velocity into GameState each frame and there are no Godot physics
-## bodies (Ship.gd only mirrors the transform). So collision is a
-## post-integration proximity pass — after the ship has moved for the frame and
+## transform/velocity into GameState each physics tick and there are no Godot
+## physics bodies (Ship.gd only mirrors the transform). So collision is a
+## post-integration proximity pass — after the ship has moved for the tick and
 ## after ThreatSystem has moved its contacts, we test the ship against every
 ## solid body (the wreck frame, the cosmetic debris chunks, and moving ships like
 ## the rival/patrol). On overlap the ship is pushed out of penetration (no
 ## tunnelling), the inward velocity is reflected/bled, and the hull section that
 ## faced the hit loses integrity proportional to closing speed. Runs last in the
-## autoload order (after ThreatSystem) so it reads the frame's final positions.
+## autoload order (after ThreatSystem) so it reads the tick's final positions.
 ##
 ## The ship is a CAPSULE (two local endpoints + radius, from ShipDefinition), so
 ## it fits the elongated hull and — because the endpoints are ship-local and
@@ -52,12 +52,17 @@ const HULL_FLOOR := 0.05
 ## One damage event per body per window; grinding against a surface at low
 ## closing speed does almost nothing after the initial hit.
 const IMPACT_COOLDOWN := 0.8
+## Cap on the spin (rad/s) a single contact can impart, so a grind along a
+## surface stays a shove and not a spin cycle. A healthy FBW nulls an imparted
+## spin in a couple of tenths of a second; a degraded one leaves it with the
+## pilot, which is the intended cost.
+const MAX_IMPART_SPIN := 1.5
 
 ## Body key -> seconds of impact cooldown remaining.
 var _cooldowns: Dictionary = {}
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# Collisions bite wherever the ship is actually being flown — at the claim and
 	# in the station's docking pattern, where clipping a hab drum or a tug is the
 	# whole reason the lane is tight.
@@ -72,6 +77,7 @@ func _process(delta: float) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var xform: Transform3D = ship["transform"]
 	var velocity: Vector3 = ship["velocity"]
+	var omega: Vector3 = ShipMotion.ship_omega()
 	var origin: Vector3 = xform.origin
 	var ship_radius := _ship_radius()
 	var moved := false
@@ -93,13 +99,13 @@ func _process(delta: float) -> void:
 		origin += normal * float(contact["depth"])  # push out of penetration
 		if closing > 0.0:
 			velocity += normal * closing * (1.0 + RESTITUTION)  # reflect inward part
+			omega += _impact_spin(ship_a, ship_b, origin, body, normal, closing)
 			_impart_body_velocity(body, normal, closing)
 		moved = true
 		_apply_impact(body, xform, normal, closing)
 	if moved:
 		xform.origin = origin
-		ship["transform"] = xform
-		ship["velocity"] = velocity
+		ShipMotion.seize(xform, velocity, omega)
 		# A bounce during an active approach means something is on the path (rival/
 		# debris) — the kinematic autopilot can't model the contact and would drive
 		# straight back in and grind, so hand control back to the pilot.
@@ -191,6 +197,23 @@ func _apply_impact(body: Dictionary, xform: Transform3D, normal: Vector3,
 	GameState.hull_impact.emit(section, dmg)
 	GameState.post_comms("SYSTEM", "COLLISION — %s IMPACT, %s HULL -%d%%" % [
 		body["name"], section, roundi(dmg * 100.0)])
+
+
+## Spin imparted to the ship by a contact: the linear bounce's delta-v taken
+## as applied at the contact point, as a moment about the ship's origin over
+## the ship's radius of gyration (ShipDefinition.collision_spin_radius). The
+## contact point is approximated as the capsule spine's closest approach to
+## the body, pushed out to the capsule surface — not a true GJK witness point;
+## this is a believable kick, not a solver. A dead-centre hit has its moment
+## arm along the normal and imparts nothing, which is what a pilot expects.
+func _impact_spin(ship_a: Vector3, ship_b: Vector3, origin: Vector3,
+		body: Dictionary, normal: Vector3, closing: float) -> Vector3:
+	var rg: float = maxf(GameState.ship_def.collision_spin_radius, 0.1)
+	var spine: Vector3 = _closest_points_between_segments(
+			ship_a, ship_b, body["a"], body["b"])[0]
+	var contact := spine - normal * _ship_radius()
+	var dv: Vector3 = normal * closing * (1.0 + RESTITUTION)
+	return ((contact - origin).cross(dv) / (rg * rg)).limit_length(MAX_IMPART_SPIN)
 
 
 ## Kick a movable body (a drifting salvage piece, a knocked debris chunk) on

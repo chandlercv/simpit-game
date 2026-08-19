@@ -22,6 +22,7 @@ DisplayConfig="*res://autoload/DisplayConfig.gd"
 WindowManager="*res://autoload/WindowManager.gd"
 InputConfig="*res://autoload/InputConfig.gd"
 InputRouter="*res://autoload/InputRouter.gd"
+ShipMotion="*res://systems/ShipMotion.gd"
 CargoSystem="*res://systems/CargoSystem.gd"
 MarketSystem="*res://systems/MarketSystem.gd"
 SalvageSystem="*res://systems/SalvageSystem.gd"
@@ -109,6 +110,10 @@ ops_cut={
 "events": []
 }
 throttle_cmd_toggle={
+"deadzone": 0.2,
+"events": []
+}
+fbw_mode_cycle={
 "deadzone": 0.2,
 "events": []
 }
@@ -275,3 +280,8 @@ power_life_hi={
 [input_devices]
 
 pointing/emulate_mouse_from_touch=false
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=32
