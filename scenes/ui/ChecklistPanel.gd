@@ -69,7 +69,6 @@ func _ready() -> void:
 	GameState.tick_changed.connect(func(_t: int) -> void: _refresh())
 	# A new run is a fresh checklist — a tick carried over from the last one is
 	# worse than no tick at all.
-	GameState.run_phase_changed.connect(func(_p: String) -> void: _clear_ticks())
 	GameState.site_reset.connect(_clear_ticks)
 
 
