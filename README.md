@@ -111,6 +111,15 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   **GEAR IN TRANSIT nn%** during its 3-second travel, then **GEAR DOWN**. Fly
   faster than the gear is rated for with it out and it becomes a pulsing red
   **GEAR OVERSPEED** — the legs are taking the load and wearing.
+- **Drive annunciator** — under the assist annunciator, and silent while the
+  drive is making its rated thrust. **IMPULSE** or **BOOST** appears beside the
+  **VEL** readout while a reaction stage is burning, so spending propellant is
+  never silent; **DRIVE R / L / STARTING / OFF** names the selector position when
+  it isn't making full thrust; and a pulsing red **LH2 DEPLETED** calls the empty
+  hydrogen tank, which costs 60% of the ship's acceleration and is not something
+  to discover on short final. There are two quite different ways to end up with
+  no thrust — a shut-down drive and a dead bus — and they read differently on
+  purpose.
 - **Assist annunciator** — under the gear indicator, and *silent while nominal*
   (an annunciator that's always lit tells you nothing). Reads **ASSIST OFF** when
   you've switched the stability augmentation off yourself, or **ASSIST DEGRADED
@@ -155,8 +164,8 @@ and both are written as operating documents rather than as a guide.
 
 | Button | Publisher | What's in it |
 | --- | --- | --- |
-| **PILOT'S MANUAL** | The builder. True of the Kestrel wherever she's flown. | The ship: description, flight controls, power, sensors, cutting torch, cargo hatch, landing gear, **landing limitations** (what the legs will take), hull, scope, instruments; **how a derelict hull behaves under the torch**; and the four checklists — **departure, arrival, cutting, collecting**. |
-| **TERMINAL PROCEDURES** | The harbour, the claim office, the commercial agent. Changes without the handbook changing, and differs berth to berth. | The approach lane and its plate, speed limits and compliance, clearance and traffic, the berth and how an arrival is assessed, the arrival and departure procedures, claim conditions, the schedule of prices, and the system chart. |
+| **PILOT'S MANUAL** | The builder. True of the Kestrel wherever she's flown. | The ship: description, flight controls, **electrical & power** (alternator, battery, the bus), **drive & propellant** (the selector's positions, the two tanks, the starter), **drive failures** (what to do when she stops making thrust), sensors, cutting torch, cargo hatch, landing gear, **landing limitations** (what the legs will take), hull, scope, instruments; **how a derelict hull behaves under the torch**; and the four checklists — **departure, arrival, cutting, collecting**. |
+| **TERMINAL PROCEDURES** | The harbour, the claim office, the commercial agent. Changes without the handbook changing, and differs berth to berth. | The approach lane and its plate, speed limits and compliance, clearance and traffic, the berth and how an arrival is assessed, the arrival and departure procedures, claim conditions, the schedule of prices (cargo **and propellant**), and the system chart. |
 
 **The division is authorship, not subject.** The builder can state what the legs
 will accept at touchdown and how a loaded frame behaves when you cut it — a
@@ -199,6 +208,12 @@ Each document's chapters are a data catalog
 there and nothing else. Every figure in both is quoted from code — see the
 `CLAUDE.md` note about keeping them in step.
 
+**Both print.** `pwsh tools/build_manuals.ps1` renders the two catalogs to
+print-styled HTML and then to PDF, resolving the binding placeholders through the
+real reader so a printed step names the control you actually have bound. Output
+lands in `build/manuals/` and is gitignored — the catalogs are the source of
+truth, and a committed PDF would be a third in-tree copy of every figure in them.
+
 ---
 
 ## Core gameplay loop
@@ -229,8 +244,10 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
    on it. The match belongs to that member: **select a different target and you
    drop back to `HOLDING` and must re-arm the approach to reposition** onto the new
    one.
-   *The throttle must be eased back under ~40% to arm the autopilot, and any
-   real stick/throttle input while it's flying hands control back to you.*
+   *The throttle must be eased back under ~40% to arm the autopilot, the drive
+   has to actually be making thrust (it flies on the drive, so a shut-down drive
+   or a dry hydrogen tank on `L` refuses the engagement), and any real
+   stick/throttle input while it's flying hands control back to you.*
 4. **Power the cutter.** Raise the **CUTTER** power channel to at least 0.2 on
    an MFD **POWER** page.
 5. **Align the cutting head.** With the approach `MATCHED`, fire the cutter to
@@ -330,8 +347,11 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
       is **scored** — a greaser earns standing with the faction, a hard arrival
       costs hull, and anything worse bounces you back into the pattern.
 
-    Then sell your hold at that faction's prices. **Anything still adrift when you
-    leave the claim is abandoned** — you jump back to a fresh wreck, not to the
+    Then **shut the drive down (magneto OFF), open the cargo hatch** and sell your
+    hold at that faction's prices — the hold discharges *through* the hatch, so a
+    buttoned-up ship has nothing to hand over. This is also where you buy
+    propellant. Then **ALT off, BAT off** and she's quiet on the pad.
+    **Anything still adrift when you leave the claim is abandoned** — you jump back to a fresh wreck, not to the
     pieces you left floating — so scoop before you depart. Away from the claim the
     `SCOOP` page stops flying the rendezvous and reads **COLLECTION SUSPENDED**,
     counting what you left behind.
@@ -340,42 +360,91 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
     or DOCK page books the berth for a handling fee and a hit to your standing —
     deliberately a worse deal than flying it well, and refused once you're on
     final.
-11. **Fly the departure.** Leaving is flown too. Undocking lifts you off the pad
-    into a departure hold; ATC sequences you out around the same traffic, and you
-    run the lane in reverse (**DELTA → CHARLIE → BRAVO → ALPHA**). The **gear stays
-    down until the berth bay is behind you**, and ATC won't release you for the jump
-    until it's stowed again. Break a rule on the way out and you get a reprimand
-    and a standing cost rather than a go-around — you're leaving either way.
+11. **Fly the departure.** Leaving is flown too. First, though, the ship has to be
+    woken up: **BAT on, ALT on, hatch secured, then the drive started** — magneto to
+    **START**, ten seconds, then back to a running position. Nothing moves until
+    that's done, and it's the price of having shut her down on arrival.
+
+    Undocking then lifts you off the pad into a departure hold; ATC sequences you
+    out around the same traffic, and you run the lane in reverse (**DELTA →
+    CHARLIE → BRAVO → ALPHA**). **Raise the gear as soon as the pad is clear** —
+    there's no longer any point outbound where it has to stay down, and the lane is
+    flown faster than the legs are rated for — but ATC won't release you for the
+    jump until it's stowed. Break a rule on the way out and you get a reprimand and
+    a standing cost rather than a go-around — you're leaving either way.
 
 **Power budget:** four channels — **THRUST, CUTTER, SENSORS, LIFE** — each
-0..1. The reactor can't run everything at full; the MFD **POWER** page header
-turns red on overdraw. THRUST gates approach/manual acceleration, CUTTER gates
-cutting, SENSORS gates scan speed.
+0..1. THRUST gates approach/manual acceleration, CUTTER gates cutting, SENSORS
+gates scan speed.
+
+The reactor is always lit; the **alternator** turns its output into electricity
+(2.5 units' worth) and the **battery** buffers the difference between that and
+what the channels are drawing. Draw more than the alternator makes and the
+battery covers it and runs down — 120 seconds at a one-unit deficit — so overdraw
+is now a real cost rather than a red header. Draw less and the surplus recharges
+it. **THRUST's draw depends on what the drive is doing:** the electrodynamic
+stage is expensive and the nuclear-thermal stage is nearly free, so running the
+hydrogen tank dry raises the bus load at the same moment it costs you thrust.
+
+**Settings and delivery are two different things.** Nothing electrical ever
+rewrites an allocation you set: a starved bus shows the slider where you put it
+and the smaller figure being delivered against it (`80→31%`), and full output
+returns the instant supply does. Edits made on a dark ship stick and take effect
+when the lights come back.
+
+**Propulsion:** the drive is a hybrid, and which parts of it are running is a
+decision you make on the switch panel's five-position magneto (or two mapped
+keys). Speed is capped by the ship's **Higgs coupling** — a drag that only bites
+because of the compact fusion reactor she carries — and the only way past that
+cap is to throw real reaction mass out the back.
+
+| Selector | Stages | Burns | Thrust | Max speed | Bus load |
+| --- | --- | --- | --- | --- | --- |
+| **OFF** | none | — | none | — | none |
+| **R** | electrodynamic field | nothing | 40% | 25 m/s | high |
+| **L** | nuclear thermal | LH2 | 60% | 35 m/s | low |
+| **BOTH** | both | LH2 | 100% | 35 m/s | high |
+| **+ boost** (held) | + combustion | LH2 **and** LOX | 100% | 50 m/s | as beneath |
+| **START** | the starter — 10 s, then turn back to a running position | | | | |
+
+**There's no automatic reversion.** A stage runs when it's *selected* and
+*supplied*, and nothing steps in for one that isn't — so at **L** with a dry
+hydrogen tank you get **no thrust at all** until you select R or BOTH. At BOTH
+the field stage is already selected and you keep flying on it, at 40%. Running
+dry never strands you, but it won't fly you home by itself either, and the
+recovery costs amps you may not have. Liquid oxygen is useless without hydrogen;
+both are bought at a berth (8 CR and 30 CR per unit) and neither is replenished
+in flight.
 
 **Manual flight throttle:** by default the throttle (forward/back) commands a
-target speed, not raw thrust — ease it to 50% and the ship accelerates to,
-then holds, 50% of max speed; let go and it holds station on that axis. A
-mapped **Throttle Cmd Mode** button swaps this for the legacy direct-thrust
-feel (throttle = acceleration, no cruise control). Strafe, vertical, and
-reverse are all secondary thrusters off the same drive — each rated at 50% of
-the main thruster's forward performance (`ShipDefinition.secondary_thrust_fraction`,
-one knob for the whole maneuvering profile).
+target speed, not raw thrust — ease it to 50% and the ship accelerates to, then
+holds, 50% of *whatever maximum the drive can currently hold*; let go and it
+holds station on that axis. A mapped **Throttle Cmd Mode** button swaps this for
+the legacy direct-thrust feel (throttle = acceleration, no cruise control).
+Strafe, vertical, and reverse are all secondary thrusters off the same drive —
+each rated at 50% of the main thruster's forward performance
+(`ShipDefinition.secondary_thrust_fraction`, one knob for the whole maneuvering
+profile).
 
 Each channel can be driven from the switch panel (see the switch table below):
 FUEL PUMP→THRUST, AVIONICS→SENSORS, DE-ICE→CUTTER, PITOT HEAT→LIFE. The first
 three toggle a shared **high (80%) / low (20%)** setting; PITOT HEAT runs LIFE
 full (100%) on / low off. Any channel can also be set to any value on an MFD
 **POWER** page, from a mapped analog axis (used as a slider), or nudged up/down
-by a mapped key/button. The two master electrical switches
-override the whole mix: **MASTER ALT
-off** rigs for escape (THRUST 100% and LIFE 100%, cutter and sensors to 0);
-**MASTER BAT off** kills everything. While either master is off the live mix is
-locked and the master override owns it, but the physical channel switches still
-register — the mix comes back matching the panel's current switch positions when
-the master returns (touch-slider edits made while locked are ignored). Running
-dark this way also halves the ship's visibility to
-passive scanners — the claim-holder's patrol has to close to half its usual range
-before it can fine you (a quarter if both masters are off).
+by a mapped key/button — and the four channels now ship **bound by default** on
+the number row.
+
+The two master switches decide what the bus can *supply*, not what the mix is.
+**MASTER ALT off** stops the alternator generating, so the ship runs on the
+battery until it's flat and then goes quiet. **MASTER BAT off** removes the
+buffer: delivery is capped at whatever the alternator is making right now and a
+heavier load is shared out proportionally. Both off is a dark ship — and it's
+also the state you leave her in on the pad. Running dark halves the ship's
+visibility to passive scanners — the claim-holder's patrol has to close to half
+its usual range before it can fine you (a quarter if both masters are off).
+
+**The masters don't stop the drive.** That's the selector's job, and the two are
+independent (see *Propulsion* below).
 
 
 ---
@@ -423,8 +492,9 @@ the comms log, but only these are wired to gameplay today:
 
 | Switch | Effect |
 | --- | --- |
-| **MASTER BAT** | Off = cut all reactor power (zeros every channel); On = restore the mix matching the current channel-switch positions. While off, the live mix can't be changed and the ship's visibility to passive scanners drops 50%. |
-| **MASTER ALT** | Off = rig for escape — THRUST 100% and LIFE 100%, CUTTER/SENSORS 0 — overriding the switch settings; On = restore the mix matching the current channel-switch positions. While off, the live mix can't be changed and passive-scanner visibility drops 50% (stacks with BAT → 25% if both off). |
+| **MASTER BAT** | The battery. Off = no buffer: delivery is capped at whatever the alternator is making right now, and a heavier load is shared out proportionally. Passive-scanner visibility drops 50%. |
+| **MASTER ALT** | The alternator. Off = it generates nothing and the ship runs on the battery until that's flat, then goes quiet. Passive-scanner visibility drops 50% (stacks with BAT → 25% if both off). |
+| **Magneto (OFF / R / L / BOTH / START)** | The **drive selector** — see *Propulsion* above. OFF shuts the drive down entirely; R runs the field stage, L the nuclear-thermal stage, BOTH runs both. START is the starter: leave it there **10 seconds**, then turn back to a running position. Selecting OFF costs a full start to undo. |
 | **FUEL PUMP** | THRUST power: On = high (80%), Off = low (20%). |
 | **AVIONICS** | SENSORS power: On = high, Off = low. |
 | **DE-ICE** | CUTTER power: On = high, Off = low. |
@@ -436,12 +506,12 @@ the comms log, but only these are wired to gameplay today:
 
 The four channel switches toggle between shared **high (80%)** and **low (20%)**
 settings; the MFD **POWER** page sliders (or a mapped power axis / nudge
-key) can still set any value in between (until the next switch flip). MASTER ALT / MASTER BAT off
-lock the live mix on every surface, though physical switch positions still
-register for when power returns.
+key) can still set any value in between (until the next switch flip). Neither
+master locks anything: an allocation you set is yours, and only what's *delivered*
+against it changes when the bus can't carry it.
 
-The remaining switches — PANEL, BEACON, STROBE, TAXI and the 5-position magneto
-(OFF/R/L/BOTH/START) — are decoded and logged but have no gameplay effect yet.
+The remaining switches — PANEL, BEACON, STROBE and TAXI — are decoded and logged
+but have no gameplay effect yet.
 
 ### Keyboard (default mapping — overridable in the remapper)
 
@@ -451,24 +521,54 @@ in `BUILTIN_PROFILES`, `autoload/InputRouter.gd`) — it's *data*, not hardcoded
 (`user://input_profiles/keyboard.json`) can override or clear any of it. The
 defaults:
 
+The map is laid out in **blocks by function**, so you learn regions rather than
+forty separate keys — and so a new control has an obvious home instead of landing
+on whatever key happened to be free:
+
+**Number row — the systems panel**, read left to right: the four power channels
+as −/+ pairs, then the two electrical masters, then the drive selector.
+
+| Key | Action | | Key | Action |
+| --- | --- | --- | --- | --- |
+| **1 / 2** | THRUST power − / + | | **7 / 8** | LIFE power − / + |
+| **3 / 4** | CUTTER power − / + | | **9** | MASTER BAT on/off |
+| **5 / 6** | SENSORS power − / + | | **0** | MASTER ALT on/off |
+| **− / =** | Drive selector back / forward (OFF · R · L · BOTH · START) | | | |
+
+**Left hand — flight. Right hand — attitude and glance.**
+
 | Key | Action | | Key | Action |
 | --- | --- | --- | --- | --- |
 | **W / S** | Thrust forward / back | | **I / K** | Pitch up / down |
 | **A / D** | Strafe left / right | | **J / L** | Yaw left / right |
 | **R / F** | Thrust up / down | | **Q / E** | Roll left / right |
-| **Arrow keys** | Glance camera | | **V** | Toggle approach (needs a target) |
-| **C** | Fire cutter / align + commit | | **M** | Cycle sensor mode |
-| **, / .** | Prev / next cut target | | **N** | Cycle locked contact |
-| **G / H** | MFD-A / MFD-B → MENU | | **T** | Toggle Tactical SCOPE / CHART |
-| **]** | Cycle external camera | | **1 / 2 / 3 / 4 / 5** | Camera REAR / SIDE / CHASE / TOP / BELLY |
-| **B** | Open/close cargo hatch | | **X** | Landing gear up / down |
-| **Z** | Request clearance / acknowledge ATC | | | |
+| **Space** | Drive boost (**held**) | | **Arrow keys** | Glance camera |
 
-MFD paging, cargo, market, the throttle command-law toggle
-(`throttle_cmd_toggle`) and the flight-assist switch (`fbw_mode_cycle`) ship
-**unbound** on the keyboard — bind them in the remapper if you want keys for
-them. Every default
-here is also HOTAS-bindable, and a key + a HOTAS bind can coexist on one function.
+**Bottom rows — ops verbs under the flight hand, selection under the other.**
+
+| Key | Action | | Key | Action |
+| --- | --- | --- | --- | --- |
+| **Z** | Request clearance / acknowledge ATC | | **N** | Cycle locked contact |
+| **X** | Landing gear up / down | | **M** | Cycle sensor mode |
+| **C** | Fire cutter / align + commit | | **, / .** | Prev / next cut target |
+| **V** | Toggle approach (needs a target) | | | |
+| **B** | Open/close cargo hatch | | | |
+
+**Displays.**
+
+| Key | Action | | Key | Action |
+| --- | --- | --- | --- | --- |
+| **T** | Toggle Tactical SCOPE / CHART | | **[** | Camera → BELLY (the landing view) |
+| **G / H** | MFD-A / MFD-B → MENU | | **]** | Cycle external camera |
+
+The camera keeps two keys rather than six: `]` steps every view and `[` jumps
+straight to **BELLY**, the one the landing procedure requires. REAR / SIDE /
+CHASE / TOP are reachable by stepping and ship **unbound**, rather than eating the
+number row the ship's systems now need. MFD paging, cargo, market, the throttle
+command-law toggle (`throttle_cmd_toggle`) and the flight-assist switch
+(`fbw_mode_cycle`) also ship unbound — bind any of them in the remapper. Every
+default here is also HOTAS-bindable, and a key + a HOTAS bind can coexist on one
+function.
 
 During the pre-cut alignment mini-game the **pitch/yaw keys** (I / K, J / L) aim
 the cutting head instead of flying the ship, so you steer the torch reticle onto
@@ -681,6 +781,8 @@ running game predates a change.
 | `PilotManualSmoke.tscn` | Headless smoke for both of the ship's documents: each catalog is well-formed, sections are contiguous, and the required procedures are present; **neither document publishes the other's material** (the handbook names no harbour marker, the terminal procedures restate no airframe figure, and every harbour chapter names its issuing office); **every binding placeholder in the content names a real Input Map action** (so renaming an action fails the build instead of leaving a hole in a checklist); the resolver agrees with the effective profiles and reports an unassigned control as `NOT ASSIGNED` rather than an empty gap; every chapter renders with no placeholder left unsubstituted; and the card opens either document on a layer above itself but below the chooser and remapper, swaps rather than stacks when the other is opened, hides it for a setup step, and frees it on LAUNCH. |
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
 | `ChecklistSmoke.tscn` | Headless smoke for the MFD **CHECKLIST** page: the catalog is well-formed and carries all four procedures with contiguous sections; **every live read is called against real state** and must return a status and a value (so a renamed `GameState` field fails the build instead of blanking a row); rows follow the ship when the real intents are driven (hatch, gear travel, power channels); a limit is **read from the constant that enforces it** rather than transcribed; no live row can be hand-ticked, and RESET / a site reset clear the ones that can; and the shared vertical budget holds — each checklist reserve fits its rows at the current type scale, and the DOCK / SCOOP / ALIGN pages still draw on a unit far smaller than any real MFD. |
-| `PowerSmoke.tscn` | Headless smoke for the switch-driven power model: channel switches drive their mapped channel, the masters override and lock the mix (restoring on return), and passive-scanner visibility halves per master off. |
+| `PowerSmoke.tscn` | Headless smoke for the alternator/battery power model: channel switches drive their mapped channel; a surplus charges the battery and a deficit discharges it; ALT off runs the ship off the battery until it's flat; BAT off caps delivery at the alternator's output; and — the assertion that matters most — **an electrical condition changes what is delivered and never what is set**, with edits made on a dark ship surviving and taking effect on restoration. Passive-scanner visibility still halves per master off. |
+| `PropellantSmoke.tscn` | Headless smoke for the hybrid drive: each selector position's thrust and ceiling; burn metered by commanded thrust; boost drawing on both tanks and refused without either; the starter (10 s at START, and **no thrust until the selector leaves it**); the electrical coupling that makes a dry tank a bus problem too; and buying propellant at a berth. It exists to pin down **the no-automatic-reversion rule** — at `L` with a dry hydrogen tank the ship makes no thrust at all, and nothing helpfully falls back for you. |
+| `ManualExport.tscn` | Renders both of the ship's documents to print-styled HTML (`godot --headless res://tools/ManualExport.tscn ++ [out_dir]`, default `build/manuals`). It runs in Godot rather than parsing the catalogs externally because resolving the binding placeholders needs the live Input Map — it instantiates the real `ManualViewer` off-tree and calls its own resolver. `tools/build_manuals.ps1` runs this and then prints the HTML to PDF with headless Chrome or Edge. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |
 | `AxisKeyNormalizeSmoke.tscn` | Headless smoke for the remapper's axis-key normalization: a saved axis/nub spec listed in the swapped (REV-encoded) order folds back to its row's canonical key with reverse set, so it stays visible on its row instead of vanishing under a phantom key. |

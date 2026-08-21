@@ -339,7 +339,7 @@ func _run() -> void:
 ## same shortcut AlignSmoke uses.
 func _setup_matched(id: int) -> void:
 	GameState.wreck["scanned"] = true
-	GameState.local_ship()["power"]["CUTTER"] = 1.0
+	GameState.set_power("CUTTER", 1.0)
 	GameState.approach_state = "HOLDING"
 	GameState.selected_member_id = -1
 	SalvageSystem.select_member(id)

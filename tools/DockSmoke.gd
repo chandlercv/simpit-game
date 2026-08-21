@@ -408,16 +408,20 @@ func _run() -> void:
 	_check(int(GameState.docking["gate"]) == DockingSystem.GATES.size() - 1,
 			"the outbound lane starts at the marker an arrival ends on")
 
-	# Stowing the gear inside the bay is a reprimand, not a go-around: it costs
-	# standing and leaves the ship flying.
+	# The gear may be raised the moment the pad is clear. The harbour used to hold
+	# it down over the pad→last-marker leg; it no longer does, so stowing it here
+	# costs nothing at all — neither a go-around nor standing.
 	var rep_before: float = GameState.reputation[GameState.market_factions[0]]
+	var waves_before: int = GameState.docking["wave_offs"]
 	GameState.set_landing_gear(false)
 	await _wait_until(GameState.gear_stowed, 6.0)
 	await _wait(0.4)
 	_check(GameState.docking_state == "DEPARTING",
-			"a rule broken outbound does not turn the ship round")
-	_check(GameState.reputation[GameState.market_factions[0]] < rep_before,
-			"...it costs standing with the station instead")
+			"raising the gear over the pad does not turn the ship round")
+	_check(int(GameState.docking["wave_offs"]) == waves_before,
+			"...and is not a go-around")
+	_check(is_equal_approx(GameState.reputation[GameState.market_factions[0]], rep_before),
+			"...and costs no standing either — when it comes up is the pilot's call")
 
 	# Fly the lane out. The release is held until the gear is actually stowed.
 	GameState.set_landing_gear(true)

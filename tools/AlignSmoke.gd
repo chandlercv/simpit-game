@@ -102,7 +102,7 @@ func _run() -> void:
 ## Scanned + selected + cutter powered + MATCHED on `id` (no 3D scene to fly).
 func _setup_matched(id: int) -> void:
 	GameState.wreck["scanned"] = true
-	GameState.local_ship()["power"]["CUTTER"] = 1.0
+	GameState.set_power("CUTTER", 1.0)
 	GameState.approach_state = "HOLDING"
 	GameState.selected_member_id = -1
 	SalvageSystem.select_member(id)

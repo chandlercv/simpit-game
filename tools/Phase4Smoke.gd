@@ -92,6 +92,14 @@ func _run() -> void:
 	var credits_before: int = GameState.credits
 	var rep_before: float = GameState.reputation[buyer]
 	var quote: int = MarketSystem.hold_value(0)
+	# The hold is discharged through the cargo hatch, so a buttoned-up ship has
+	# nothing to hand over — that refusal is what makes opening up the first item
+	# of the arrival procedure rather than a courtesy.
+	GameState.set_cargo_hatch(false)
+	MarketSystem.sell_hold()
+	_check(GameState.credits == credits_before,
+			"a sale is refused with the cargo hatch secured")
+	GameState.set_cargo_hatch(true)
 	MarketSystem.sell_hold()
 	_check(GameState.credits == credits_before + quote and quote > 0,
 			"hold sold for the quoted %d CR" % quote)
@@ -102,6 +110,12 @@ func _run() -> void:
 	# 6. Jump back: fresh site. Undocking now lifts into a piloted departure
 	# (DockSmoke flies it); this asserts the handover and then takes the release
 	# ATC would give a ship that had flown the lane out.
+	# Open to sell, secure to leave: the hatch that had to be open for the
+	# discharge has to be shut again before the ship will be let off the pad.
+	MarketSystem.request_undock()
+	_check(GameState.run_phase == "DOCKED",
+			"departure is refused while the hatch is still open for the discharge")
+	GameState.set_cargo_hatch(false)
 	MarketSystem.request_undock()
 	_check(await _wait_until(
 			func() -> bool: return GameState.docking_state == "DEPART_HOLD", 20.0),

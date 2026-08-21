@@ -28,6 +28,10 @@ func _ready() -> void:
 	# auto-berth offer, and the footer tracks inbound vs. outbound.
 	GameState.docking_changed.connect(func(_state: String) -> void: _rebuild())
 	GameState.cargo_changed.connect(_rebuild)
+	# The SELL control names the hatch and the propellant controls quote a live
+	# tank level, so both have to follow those two pieces of state.
+	GameState.cargo_hatch_changed.connect(func(_open: bool) -> void: _rebuild())
+	GameState.propellant_changed.connect(_rebuild)
 	_rebuild()
 
 
@@ -82,10 +86,22 @@ func _faction_actions(faction_index: int) -> Control:
 	box.add_theme_constant_override("separation", 4)
 	if GameState.run_phase == "DOCKED" and faction_index == GameState.docked_faction:
 		var value := MarketSystem.hold_value(faction_index)
-		var sell := _make_button("SELL HOLD (%d CR)" % value, SELL_COLOR)
-		sell.disabled = value == 0
+		# The hold discharges through the hatch, so say so on the control rather
+		# than letting the pilot press a live-looking button and be refused.
+		var sell := _make_button("SELL HOLD (%d CR)" % value
+				if GameState.cargo_hatch_open else "OPEN HATCH TO SELL", SELL_COLOR)
+		sell.disabled = value == 0 or not GameState.cargo_hatch_open
 		sell.pressed.connect(MarketSystem.sell_hold)
 		box.add_child(sell)
+		# Propellant is the other thing a berth sells. Each button quotes the cost
+		# of filling that tank from where it stands and goes inert once it is full.
+		for kind: String in MarketSystem.PROPELLANT_NAMES:
+			var quote := MarketSystem.propellant_quote(kind)
+			var fuel := _make_button("%s FULL" % kind if quote <= 0
+					else "%s TO FULL (%d CR)" % [kind, quote], accent)
+			fuel.disabled = quote <= 0 or GameState.credits < quote
+			fuel.pressed.connect(MarketSystem.buy_propellant.bind(kind))
+			box.add_child(fuel)
 		var depart := _make_button("DEPART FOR CLAIM", accent)
 		depart.pressed.connect(MarketSystem.request_undock)
 		box.add_child(depart)

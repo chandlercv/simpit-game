@@ -15,14 +15,24 @@ var value: float = 0.0:
 		value = clampf(v, 0.0, 1.0)
 		queue_redraw()
 
-## When true the slider ignores input and dims — the master electrical switches
-## lock the power mix, so touch edits mustn't fight the override (PowerSliders).
+## When true the slider ignores input and dims. Nothing in the power model sets
+## this today — a starved bus is shown with `delivered`, not by locking the
+## control, because the setting stays the pilot's either way.
 var disabled := false:
 	set(v):
 		disabled = v
 		if v:
 			_mouse_dragging = false
 			_touch_index = -1
+		queue_redraw()
+
+## What is actually being DELIVERED against `value`, or a negative number when
+## there is no separate figure to show. Drawn as a second, brighter fill inside
+## the handle's own so a starved channel reads as "you asked for this much and
+## are getting this much" rather than as a setting that moved on its own.
+var delivered: float = -1.0:
+	set(v):
+		delivered = v
 		queue_redraw()
 
 var _mouse_dragging := false
@@ -78,9 +88,19 @@ func _draw() -> void:
 		draw_line(Vector2(track.position.x - 5, y),
 				Vector2(track.position.x, y), Color(tint, 0.4), 1.0)
 	var fill_h := (track.size.y - 4.0) * value
+	# The setting, drawn faint when delivery is falling short of it, so the solid
+	# bar is always the power the ship is really making.
+	var starved := delivered >= 0.0 and delivered < value - 0.005
 	draw_rect(Rect2(track.position.x + 2.0, track.end.y - 2.0 - fill_h,
-			track.size.x - 4.0, fill_h), Color(tint, 0.75))
-	draw_string(font, Vector2(0, 18), "%d%%" % roundi(value * 100.0),
+			track.size.x - 4.0, fill_h), Color(tint, 0.3 if starved else 0.75))
+	if starved:
+		var got_h := (track.size.y - 4.0) * delivered
+		draw_rect(Rect2(track.position.x + 2.0, track.end.y - 2.0 - got_h,
+				track.size.x - 4.0, got_h), Color(tint, 0.85))
+	var readout := "%d%%" % roundi(value * 100.0)
+	if starved:
+		readout = "%d→%d%%" % [roundi(value * 100.0), roundi(delivered * 100.0)]
+	draw_string(font, Vector2(0, 18), readout,
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, tint)
 	draw_string(font, Vector2(0, size.y - 10), label,
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, Color(tint, 0.8))

@@ -30,6 +30,14 @@ const SWITCH_LEGENDS := {
 	"COWL": "COWL",
 	"GEAR_DOWN": "GEAR DOWN",
 	"GEAR_UP": "GEAR UP",
+	# The five-position magneto, which is the drive selector. Its detents are
+	# silkscreened OFF / R / L / BOTH / START, so the legends are the positions
+	# themselves rather than a name for the whole switch.
+	"ENGINE_OFF": "MAGNETO OFF",
+	"ENGINE_R": "MAGNETO R",
+	"ENGINE_L": "MAGNETO L",
+	"ENGINE_BOTH": "MAGNETO BOTH",
+	"ENGINE_START": "MAGNETO START",
 }
 
 

@@ -77,47 +77,82 @@ const BUILTIN_PROFILES := [
 	## with a `keys` array (physical keycode -> action), injected by _bind_hotas
 	## regardless of joypads. It's DATA, not hardcoded project.godot [input] events:
 	## the remapper shows it, a user keyboard.json OVERRIDES it entirely, and
-	## clearing every key in the remapper persists an empty override. Only flight /
-	## glance / ops / the common panel+camera+tactical commands get a default key;
-	## MFD paging, cargo, market and power axes ship unbound (bind in the remapper).
+	## clearing every key in the remapper persists an empty override.
+	##
+	## THE LAYOUT IS A SHAPE, NOT A PILE. Keys are reserved in contiguous blocks by
+	## function, so a pilot learns regions rather than 40 individual keys, and so a
+	## new action has an obvious home instead of landing on whatever was free:
+	##
+	##   NUMBER ROW ...... the systems panel, read left to right: the four power
+	##                     channels as -/+ pairs, then the two masters, then the
+	##                     drive selector. Everything you SET UP, in one row.
+	##   LEFT HAND ....... flight. WASD translates, R/F is vertical, Q/E rolls,
+	##                     and SPACE (thumb) holds the drive boost.
+	##   RIGHT HAND ...... attitude on IJKL, glance on the arrows.
+	##   BOTTOM LEFT ..... the ops verbs, under the flight hand: Z X C V B.
+	##   BOTTOM RIGHT .... selection, under the attitude hand: N M , .
+	##   T G H [ ] ....... displays: tactical, the two MFD menus, and the cameras.
+	##
+	## The camera keeps two keys, not six: ] steps every view and [ jumps straight
+	## to BELLY, which is the one the landing procedure requires. REAR/SIDE/CHASE/
+	## TOP are reachable by stepping and ship unbound rather than eating the number
+	## row that the ship's systems now need. MFD paging, cargo and market also ship
+	## unbound — bind any of them in the remapper (F7).
 	{
 		"name": "Keyboard (default)",
 		"guid": "keyboard",
 		"keys": [
+			# --- Number row: the systems panel -------------------------------------
+			# Digital presses nudge a channel by POWER_STEP (see _process_power_axes),
+			# so each pair reads as "less / more" of that channel.
+			{"key": KEY_1, "action": "power_thrust_lo"},
+			{"key": KEY_2, "action": "power_thrust_hi"},
+			{"key": KEY_3, "action": "power_cutter_lo"},
+			{"key": KEY_4, "action": "power_cutter_hi"},
+			{"key": KEY_5, "action": "power_sensors_lo"},
+			{"key": KEY_6, "action": "power_sensors_hi"},
+			{"key": KEY_7, "action": "power_life_lo"},
+			{"key": KEY_8, "action": "power_life_hi"},
+			{"key": KEY_9, "action": "master_bat"},
+			{"key": KEY_0, "action": "master_alt"},
+			{"key": KEY_MINUS, "action": "drive_mode_prev"},
+			{"key": KEY_EQUAL, "action": "drive_mode_next"},
+			# --- Left hand: flight -------------------------------------------------
 			{"key": KEY_W, "action": "thrust_forward"},
 			{"key": KEY_S, "action": "thrust_back"},
 			{"key": KEY_A, "action": "strafe_left"},
 			{"key": KEY_D, "action": "strafe_right"},
 			{"key": KEY_R, "action": "thrust_up"},
 			{"key": KEY_F, "action": "thrust_down"},
+			{"key": KEY_Q, "action": "roll_left"},
+			{"key": KEY_E, "action": "roll_right"},
+			{"key": KEY_SPACE, "action": "drive_boost"},
+			# --- Right hand: attitude and glance -----------------------------------
 			{"key": KEY_I, "action": "pitch_up"},
 			{"key": KEY_K, "action": "pitch_down"},
 			{"key": KEY_J, "action": "yaw_left"},
 			{"key": KEY_L, "action": "yaw_right"},
-			{"key": KEY_Q, "action": "roll_left"},
-			{"key": KEY_E, "action": "roll_right"},
 			{"key": KEY_LEFT, "action": "glance_left"},
 			{"key": KEY_RIGHT, "action": "glance_right"},
 			{"key": KEY_UP, "action": "glance_up"},
 			{"key": KEY_DOWN, "action": "glance_down"},
-			{"key": KEY_V, "action": "ops_approach"},
-			{"key": KEY_C, "action": "ops_cut"},
-			{"key": KEY_B, "action": "cargo_hatch_open"},
-			{"key": KEY_X, "action": "landing_gear"},
+			# --- Bottom left: the ops verbs ----------------------------------------
 			{"key": KEY_Z, "action": "dock_request"},
+			{"key": KEY_X, "action": "landing_gear"},
+			{"key": KEY_C, "action": "ops_cut"},
+			{"key": KEY_V, "action": "ops_approach"},
+			{"key": KEY_B, "action": "cargo_hatch_open"},
+			# --- Bottom right: selection -------------------------------------------
+			{"key": KEY_N, "action": "contact_cycle"},
 			{"key": KEY_M, "action": "sensor_mode_cycle"},
 			{"key": KEY_COMMA, "action": "salvage_prev"},
 			{"key": KEY_PERIOD, "action": "salvage_next"},
-			{"key": KEY_N, "action": "contact_cycle"},
+			# --- Displays ----------------------------------------------------------
+			{"key": KEY_T, "action": "tactical_view_cycle"},
 			{"key": KEY_G, "action": "mfd_a_menu"},
 			{"key": KEY_H, "action": "mfd_b_menu"},
-			{"key": KEY_T, "action": "tactical_view_cycle"},
+			{"key": KEY_BRACKETLEFT, "action": "view_belly"},
 			{"key": KEY_BRACKETRIGHT, "action": "view_cycle"},
-			{"key": KEY_1, "action": "view_rear"},
-			{"key": KEY_2, "action": "view_side"},
-			{"key": KEY_3, "action": "view_chase"},
-			{"key": KEY_4, "action": "view_top"},
-			{"key": KEY_5, "action": "view_belly"},
 		],
 	},
 ]
@@ -461,6 +496,10 @@ func _process(_delta: float) -> void:
 		SalvageSystem.toggle_throttle_cmd_mode()
 	if Input.is_action_just_pressed("fbw_mode_cycle"):
 		ShipMotion.toggle_fbw()
+	# The drive boost is HELD, not toggled: it burns both tanks fast enough that a
+	# latch would empty the LOX on a press you forgot about. Asserted every frame
+	# so releasing the key (or the panel losing the button) drops it.
+	GameState.set_drive_boost(Input.is_action_pressed("drive_boost"))
 	_process_panel_commands()
 
 
@@ -482,6 +521,19 @@ func _process_panel_commands() -> void:
 		_mfd_call("B", "page_step", 1)
 	if Input.is_action_just_pressed("mfd_b_page_prev"):
 		_mfd_call("B", "page_step", -1)
+
+	# Electrical masters and the drive selector — the panel equivalents of the
+	# Saitek MASTER BAT / MASTER ALT toggles and the five-position magneto, so a
+	# pilot without the switch panel can still run the departure and arrival
+	# procedures (both of which require all three).
+	if Input.is_action_just_pressed("master_bat"):
+		GameState.set_master_battery(not GameState.master_bat)
+	if Input.is_action_just_pressed("master_alt"):
+		GameState.set_master_alt(not GameState.master_alt)
+	if Input.is_action_just_pressed("drive_mode_next"):
+		GameState.step_drive_mode(1)
+	if Input.is_action_just_pressed("drive_mode_prev"):
+		GameState.step_drive_mode(-1)
 
 	# Salvage / sensors.
 	if Input.is_action_just_pressed("salvage_next"):

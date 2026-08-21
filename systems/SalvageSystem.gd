@@ -207,6 +207,14 @@ func toggle_approach() -> void:
 					"APPROACH INHIBITED — THROTTLE PAST %d%%, EASE BACK TO ARM"
 					% int(APPROACH_ARM_THROTTLE_MAX * 100.0))
 			return
+		# The autopilot only translates, and it translates on the drive. With the
+		# selector off a running position — or on the thermal stage alone with a dry
+		# hydrogen tank — it would command a burn nothing can deliver and sit there
+		# reporting APPROACHING forever, so refuse it up front.
+		if GameState.thrust_fraction() <= 0.0:
+			GameState.post_comms("OPS",
+					"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)")
+			return
 		_set_approach("APPROACHING")
 		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH %s"
 				% GameState.get_member(GameState.selected_member_id)["name"])

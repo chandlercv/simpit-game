@@ -132,3 +132,23 @@ func _route_intent(switch_name: String, on: bool) -> void:
 		"GEAR_UP":
 			if on:
 				GameState.set_landing_gear(false)
+		# The five-position magneto is the DRIVE SELECTOR. It decodes as five
+		# switches of which exactly one is on, so — like the gear lever — only the
+		# edge going ON carries the intent. START is a detent, not a momentary: the
+		# selector sits there while the starter runs and is then turned back to a
+		# running position, which is what completes the start.
+		"ENGINE_OFF":
+			if on:
+				GameState.set_drive_mode("OFF")
+		"ENGINE_R":
+			if on:
+				GameState.set_drive_mode("R")
+		"ENGINE_L":
+			if on:
+				GameState.set_drive_mode("L")
+		"ENGINE_BOTH":
+			if on:
+				GameState.set_drive_mode("BOTH")
+		"ENGINE_START":
+			if on:
+				GameState.set_drive_mode("START")

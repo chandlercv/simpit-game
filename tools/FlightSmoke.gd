@@ -113,7 +113,7 @@ func _run() -> void:
 	# --- 4. The align interlock reads authority. ---
 	SalvageSystem.reset_site()
 	GameState.wreck["scanned"] = true
-	ship["power"]["CUTTER"] = 1.0
+	GameState.set_power("CUTTER", 1.0)
 	var member_id: int = GameState.wreck["members"][0]["id"]
 	GameState.approach_state = "HOLDING"
 	SalvageSystem.select_member(member_id)

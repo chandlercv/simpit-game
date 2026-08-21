@@ -69,6 +69,13 @@ func _update_readouts() -> void:
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
 	var speed := velocity.length()
 	var vel_text := "VEL %5.1f M/S" % speed
+	# Which reaction stage is burning, so spending propellant is never silent.
+	# Quantity stays off the HUD (it is on the MFD POWER page) — this is only the
+	# fact that a tank is going down.
+	if GameState.boosting():
+		vel_text += "  BOOST"
+	elif GameState.thermal_stage_running():
+		vel_text += "  IMPULSE"
 	if GameState.approach_state != "HOLDING":
 		vel_text += "  — %s" % GameState.approach_state
 	# In the pattern the speed you were given is an instruction, so the readout
@@ -108,6 +115,7 @@ func _draw() -> void:
 	_draw_hatch_indicator()
 	_draw_gear_indicator()
 	_draw_assist_indicator()
+	_draw_drive_indicator()
 	if camera == null:
 		return
 	var frame := Rect2(Vector2.ZERO, size)
@@ -290,6 +298,29 @@ func _draw_assist_indicator() -> void:
 	if engaged and auth < SalvageSystem.MIN_ALIGN_AUTHORITY:
 		color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))
 	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 68), text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
+
+
+## Drive state, stacked under the assist annunciator. Silent while the drive is
+## making its rated thrust. There are two quite different ways to end up with no
+## thrust — the selector at OFF, or the thermal stage starved of hydrogen — and a
+## pilot has to be able to tell them apart, so each says which it is instead of a
+## shared "no thrust" light. LH2 DEPLETED pulses because it is the one that
+## arrives without being asked for and costs most of the ship's acceleration.
+func _draw_drive_indicator() -> void:
+	var text := ""
+	var color := SALVAGE_COLOR
+	if not GameState.drive_live():
+		text = "DRIVE %s" % ("STARTING" if GameState.drive_starting() else GameState.drive_mode)
+	elif GameState.lh2_fuel <= 0.0:
+		text = "LH2 DEPLETED"
+		color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))
+	elif GameState.thrust_fraction() < 1.0:
+		text = "DRIVE %s — %d%% THRUST" % [
+			GameState.drive_mode, roundi(GameState.thrust_fraction() * 100.0)]
+	if text.is_empty():
+		return
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 88), text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, color)
 
 

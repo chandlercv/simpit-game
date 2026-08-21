@@ -347,7 +347,8 @@ func _outbound() -> bool:
 
 
 ## True while the ship is still climbing out of the berth bay (the pad→DELTA
-## leg), which is where the gear has to stay down and the tight limits apply.
+## leg), which is where the tight speed limit applies. The gear used to be held
+## down over this leg as well; it no longer is, so this governs speed only.
 func _in_berth_bay() -> bool:
 	return GameState.docking_state == "DEPARTING" \
 			and int(GameState.docking.get("gate", 0)) >= GATES.size() - 1
@@ -551,9 +552,8 @@ func begin_departure(faction_index: int) -> void:
 	_leg_from = pad_world()
 	_set_state("DEPART_HOLD")
 	_atc("HOLD ON THE PAD — REQUEST DEPARTURE WHEN READY",
-			"%s, %s. GEAR STAYS DOWN UNTIL YOU ARE CLEAR OF MARKER %s." % [
-				GameState.ship_def.display_name, GameState.docking["station"],
-				GATES[GATES.size() - 1]["name"]])
+			"%s, %s. STOW YOUR GEAR AT YOUR DISCRETION; IT IS TO BE UP BEFORE RELEASE." % [
+				GameState.ship_def.display_name, GameState.docking["station"]])
 
 
 ## Mapped/touch intent: ask ATC for the clearance to run the lane. Refused while
@@ -907,14 +907,12 @@ func _clear_outbound() -> void:
 
 
 ## Flying the lane the other way. Same corridor and speed discipline, gates in
-## reverse, and two rules of its own: the gear stays down until the berth bay is
-## behind you, and it has to be stowed before ATC will release you for the jump.
+## reverse, and one rule of its own: the gear has to be stowed before ATC will
+## release you for the jump. WHEN it comes up on the way out is the pilot's
+## business — the harbour no longer holds it down inside the bay, so raising it
+## the moment the pad is clear costs nothing.
 func _update_departing(delta: float) -> void:
 	var origin: Vector3 = (GameState.local_ship()["transform"] as Transform3D).origin
-	# A leg is still inside the bay's walls until DELTA is behind you, so stowing
-	# early is a real mistake rather than a formality.
-	if _in_berth_bay() and not GameState.gear_locked_down():
-		_violation("GEAR RAISED INSIDE THE BERTH BAY")
 	if not _check_corridor(origin, delta):
 		return
 	# Already past the last marker and only the gear is holding the release: keep
@@ -938,8 +936,9 @@ func _update_departing(delta: float) -> void:
 	if index > HOLD_GATE:
 		GameState.docking["gate"] = index - 1
 		var next: Dictionary = GATES[index - 1]
-		# Clearing the last gate is also clearing the bay's walls, which is the
-		# moment the gear stops being required and starts being drag.
+		# Clearing the last gate clears the bay's walls. The gear is not required
+		# down anywhere outbound, but this is the last convenient reminder before
+		# the release check asks for it stowed.
 		var detail := "MAINTAIN %.0f M/S." % SPEED_CLEARED
 		if index == GATES.size() - 1:
 			detail = "CLEAR OF THE BAY — STOW YOUR GEAR AND MAINTAIN %.0f M/S." % SPEED_CLEARED

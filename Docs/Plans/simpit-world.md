@@ -10,6 +10,16 @@
   - Commerce raiders
     - What produced so much to salvage
 
+**Why the salvage is there, stated plainly.** The totalitarians did not value or
+honour their logistical chain, and they over-valued their "warrior" class. That
+one attitude produced all three of their characteristic failures: they
+over-emphasized the attack, under-emphasized sensors and observation, and
+**under-protected their transports**. The under-protected transports are the
+reason there is so much good salvage to be had — a war's worth of freighters,
+tenders and their escorts killed on routes nobody was defending properly, and
+still out there. The premise of the whole trade is a logistics failure, not a
+battle.
+
 #### Struggle Between Totalitarian vs. Democracy
 
 - Echoes of World War Two and Ukraine
@@ -72,28 +82,67 @@ Travel between planetary systems requires far more energy than an individual shi
 
 ## Ship Performance: Why There's a Speed Ceiling
 
-- **Waste heat, not drag.** A drive's exhaust/reaction losses scale faster than
-  a hull's radiator area can shed them. Every ship has a speed past which its
-  radiators can't dump heat as fast as the drive makes it — that's the real
-  ceiling, not some exotic drag-on-spacetime effect. It's an engineering limit
-  (radiator sizing), not a physics one, so it varies hull to hull rather than
-  being a universal constant.
-- **Salvage ships run hotter than their rating.** A salvager is built from
-  wreck parts — the drive and the radiators bolted to it were never designed
-  as a matched set — so its practical ceiling sits below a purpose-built
-  hull's. That's the in-fiction reason a player ship feels sluggish next to
-  the military-surplus wrecks it's cutting apart, and it's a legitimate
-  upgrade path (better-matched radiators, not a bigger engine).
-- **Ties to the Totalitarian/Democrat split.** Totalitarian yards built for
-  the "warrior" ethos and skimped on damage control (see WWII reference below)
-  — their surplus hulls tend to be overdriven for their radiators, fast in a
-  straight line but quick to cook themselves under sustained burn. Independent
-  and salvager builds lean conservative, trading peak speed for a ceiling they
-  can actually sit at all day.
-- **Reverse is deliberately weak.** No yard designs a drive to push backward
-  as hard as forward — reverse thrust is a braking/maneuvering tap off the
-  main drive, not a mirrored engine. A ship's reverse performance is a small
-  fraction of its forward performance, full stop.
+- **Higgs drag, not waste heat.** The Higgs field is the one frame everything is
+  ultimately referred to. At ordinary speeds a hull's coupling to it is just the
+  familiar mass term. Push harder and the coupling grows with velocity and
+  behaves like a drag. A ship's ceiling is simply the speed at which its thrust
+  and that drag balance.
+- **The compact fusion reactor is why anyone ever notices.** This is the causal
+  claim, and everything else follows from it: *without the reactor at the heart
+  of the ship, the Higgs interaction would never be limiting at these speeds.*
+  Running a compact fusion containment makes the coupling enormously more
+  observable — the ship drags against the field because of what it is carrying,
+  not because of how it is shaped. Every ship with one of these reactors has a
+  ceiling, and the ceiling is a property of **the reactor**, not of the airframe.
+  (It is also why a ceiling exists at all in a vacuum, which a plain "drag" story
+  never explains.)
+- **Salvage hulls still run below a purpose-built ceiling.** A salvager flies a
+  reactor pulled out of somebody else's ship, and she sits wherever that reactor
+  sits. That is the in-fiction reason a player ship feels sluggish next to the
+  military-surplus wrecks she is cutting apart, and it makes the upgrade path a
+  better-matched reactor rather than a bigger engine.
+- **Carrying propellant is how you beat the ceiling.** The drag-limited maximum
+  is what a *field* drive can do: it is pushing against the coupling and losing.
+  A drive that throws real reaction mass out of the back is adding momentum
+  instead of fighting the coupling, so it can sit above the field drive's
+  terminal velocity for exactly as long as the mass lasts. That is why propellant
+  is spent rather than allocated.
+- **Heat is still real — it just governs efficiency, not speed.** Waste heat is
+  why hulls carry radiator fins, and it stays a live constraint on **battery
+  efficiency, alternator efficiency, life support, sensor operation, cutter
+  operation** and on whatever systems come later. It is simply not what caps a
+  ship's speed. (Nothing in the simulation models heat yet; it is written down
+  here so the hooks exist when they are wanted, and it deliberately carries no
+  figures until something enforces them.)
+- **Reverse is deliberately weak.** No yard designs a drive to push backward as
+  hard as forward — reverse thrust is a braking/manoeuvring tap off the main
+  drive, not a mirrored engine. A ship's reverse performance is a small fraction
+  of its forward performance, full stop.
+
+## Power and Propulsion
+
+- **A fusion reactor is the ship's one energy source.** An **alternator** turns
+  its output into electricity for the bus; a **battery** buffers the difference
+  between what the alternator makes and what the ship is drawing. Alternator off
+  and you are running on the battery; battery off and you are limited to whatever
+  the alternator is making at that instant; both off and the ship is quiet.
+- **The drive is a hybrid** of a Mass-Effect / photonic / electrodynamic **field
+  stage** — reactionless, propellant-free, and electrically expensive — and two
+  reaction stages layered on top of it.
+- **Nuclear thermal.** Liquid hydrogen heated by the fusion reactor and expelled.
+  Real thrust, real reaction mass, a ceiling above the field drive's, and almost
+  no load on the bus, because it runs on the reactor's heat rather than its amps.
+- **Combustion.** Liquid oxygen burned with the same liquid hydrogen in a
+  conventional bipropellant chamber. The most thrust and the shortest endurance —
+  a boost, not a cruise. Oxygen is useless without hydrogen to burn it with.
+- **The stages are selected, not automatic.** A five-position selector picks
+  which are running, and nothing steps in for a stage the pilot did not select:
+  on the thermal stage alone, an empty hydrogen tank means no thrust at all until
+  the pilot selects the field stage. Running dry never strands a ship, but it does
+  not fly her home by itself either.
+- **The hydrogen ramjet** is the intake that feeds the thermal stage. At the
+  densities in this system it scavenges far too little to matter, which is why
+  hydrogen is bought and carried rather than collected.
 
 ## WWII (Reference)
 

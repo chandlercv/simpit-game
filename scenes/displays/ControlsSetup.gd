@@ -41,6 +41,15 @@ const AXIS_TARGETS := [
 ]
 const BUTTON_TARGETS := [
 	{"label": "Throttle Cmd Mode", "action": "throttle_cmd_toggle", "group": "THROTTLE"},
+	# The two electrical masters and the drive selector. On the simpit these are
+	# the panel's MASTER BAT/ALT toggles and its five-position magneto, but the
+	# departure and arrival procedures both require all three — so a pilot flying
+	# on the keyboard has to be able to reach them too.
+	{"label": "Master BAT", "action": "master_bat", "group": "ELECTRICAL"},
+	{"label": "Master ALT", "action": "master_alt", "group": "ELECTRICAL"},
+	{"label": "Drive Selector +", "action": "drive_mode_next", "group": "DRIVE"},
+	{"label": "Drive Selector −", "action": "drive_mode_prev", "group": "DRIVE"},
+	{"label": "Boost (hold)", "action": "drive_boost", "group": "DRIVE"},
 	{"label": "Approach", "action": "ops_approach", "group": "OPS"},
 	{"label": "Cut", "action": "ops_cut", "group": "OPS"},
 	{"label": "Open Cargo Hatch", "action": "cargo_hatch_open", "group": "OPS"},

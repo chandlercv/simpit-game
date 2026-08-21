@@ -17,6 +17,12 @@ signal external_view_changed(view: String)
 ## Tactical display mode changed (SCOPE / CHART), one of TACTICAL_VIEWS.
 signal tactical_view_changed(view: String)
 signal power_changed
+## Battery charge changed, as a 0..1 fraction of capacity.
+signal battery_changed(fraction: float)
+## Drive selector moved, one of DRIVE_MODES.
+signal drive_mode_changed(mode: String)
+## A propellant tank was filled or drawn down.
+signal propellant_changed
 ## Passive-scanner visibility multiplier changed (master electrical switches).
 signal signature_changed(value: float)
 signal comms_posted(entry: Dictionary)
@@ -117,6 +123,43 @@ const CHANNEL_SWITCHES: Dictionary = {
 ## Channels whose switch "high" isn't the shared power_high: LIFE runs full when
 ## its switch is on (life support isn't something you run at part power).
 const CHANNEL_HIGH_OVERRIDE: Dictionary = {"LIFE": 1.0}
+
+## Battery capacity, in unit-seconds of the same abstract units power_total()
+## sums — so a steady 1.0-unit deficit runs a full battery flat in this many
+## seconds. The battery is a BUFFER between what the alternator makes and what
+## the channels ask for; it is not a second reactor.
+const BATTERY_CAPACITY := 120.0
+
+## Ceiling on how fast surplus alternator output is returned to the battery, in
+## the same units. Recharging from flat therefore takes at least
+## BATTERY_CAPACITY / BATTERY_CHARGE_RATE seconds of running under-loaded.
+const BATTERY_CHARGE_RATE := 1.0
+
+## Charge fraction below which the low-battery call is made — once per crossing,
+## not every frame (see _advance_electrical).
+const BATTERY_LOW := 0.2
+
+## Drive selector positions, in the order the panel's magneto sweeps them, which
+## is also the order step_drive_mode() walks. They are NOT power settings: the
+## masters own the electrical bus, and this owns the drive.
+##   OFF   — nothing runs; the ship will not manoeuvre however healthy the bus is
+##   R     — the field stage alone: no propellant, 40% thrust, expensive in amps
+##   L     — the nuclear-thermal stage alone: burns LH2, 60% thrust, cheap in amps
+##   BOTH  — both stages: full thrust, burns LH2, expensive in amps
+##   START — the starter detent; see DRIVE_START_TIME. Produces no thrust itself.
+const DRIVE_MODES: Array[String] = ["OFF", "R", "L", "BOTH", "START"]
+
+## Positions that actually run the drive. START and OFF are not among them, so
+## thrust is zero at either.
+const DRIVE_RUN_MODES: Array[String] = ["R", "L", "BOTH"]
+
+## Positions running the electrodynamic FIELD stage — the one that costs
+## electricity and needs no propellant.
+const DRIVE_FIELD_MODES: Array[String] = ["R", "BOTH"]
+
+## Positions running the NUCLEAR THERMAL stage — the one that burns liquid
+## hydrogen and barely touches the bus.
+const DRIVE_THERMAL_MODES: Array[String] = ["L", "BOTH"]
 
 const HULL_SECTIONS: Array[String] = ["BOW", "PORT", "STBD", "CORE", "AFT", "DRIVE"]
 
@@ -347,17 +390,48 @@ var _next_contact_id := 0
 var power_high := 0.8
 var power_low := 0.2
 
-## Master electrical switches. Off states override the channel mix (see
-## _apply_electrical) and lock power against edits (power_locked).
+## Master electrical switches. ALT is the alternator — it turns reactor output
+## into electricity for the bus. BAT is the battery, which buffers the difference
+## between what the alternator makes and what the channels draw. Neither is an
+## override on the mix: they decide what is AVAILABLE, never what is SET.
 var master_bat := true
 var master_alt := true
 
-## Desired per-channel allocation the switches and touch sliders write. The
-## master overrides are computed on top of this each _apply_electrical, so the
-## prior mix is restored automatically when a master comes back on — no snapshot.
+## Battery charge, 0..BATTERY_CAPACITY. Boots full.
+var battery_charge := BATTERY_CAPACITY
+
+## Latch for the low-battery call, so it is made on the crossing rather than
+## every frame below the threshold.
+var _battery_low_called := false
+
+## Desired per-channel allocation the switches and touch sliders write. This is
+## what the pilot ASKED FOR and nothing in the electrical model ever rewrites it;
+## local_ship()["power"] is what is actually DELIVERED against it. Losing the
+## alternator or flattening the battery starves delivery and leaves the settings
+## standing, so full output resumes the moment supply does — no snapshot, and no
+## surprise when the lights come back.
 ## Owned here (not in a driver node) so every input surface — switch panel, touch
 ## UI, future ones — shares one power model.
 var _power_target: Dictionary = {}
+
+## Drive selector position, one of DRIVE_MODES. Driven by the panel's magneto or
+## by drive_mode_prev/next.
+var drive_mode := "BOTH"
+
+## Seconds the selector has been sitting at START. Reset whenever it leaves.
+var _drive_start_hold := 0.0
+
+## True once a start has completed. Cleared by selecting OFF, which is what makes
+## shutting the drive down a commitment rather than a habit.
+var drive_started := true
+
+## True while the combustion booster is commanded (a held control, not a latch).
+var drive_boost := false
+
+## Liquid hydrogen and liquid oxygen aboard, in the units ShipDefinition's tank
+## and burn-rate figures use. Both board full.
+var lh2_fuel := 0.0
+var lox_fuel := 0.0
 
 
 func _ready() -> void:
@@ -380,6 +454,8 @@ func _ready() -> void:
 		"power": {"THRUST": 0.8, "CUTTER": 0.0, "SENSORS": 0.6, "LIFE": 1.0},
 	}
 	_power_target = ships[LOCAL_PEER_ID]["power"].duplicate()
+	lh2_fuel = ship_def.lh2_capacity
+	lox_fuel = ship_def.lox_capacity
 	post_comms("SYSTEM", "DISPLAY NETWORK ONLINE — %s" % ship_def.display_name)
 
 
@@ -671,73 +747,152 @@ func cycle_tactical_view() -> void:
 	set_tactical_view(TACTICAL_VIEWS[(idx + 1) % TACTICAL_VIEWS.size()])
 
 
-## Touch-slider intent: set a channel's desired allocation. No-op while power is
-## locked (a master off) — the master override owns the live mix then.
+## Touch-slider intent: set a channel's desired allocation. Always accepted — a
+## setting is what the pilot asked for, and no electrical condition rewrites it.
+## A starved bus changes what is delivered against this, not this.
 func set_power(channel: String, value: float) -> void:
-	if power_locked() or not _power_target.has(channel):
+	if not _power_target.has(channel):
 		return
 	_power_target[channel] = clampf(value, 0.0, 1.0)
 	_apply_electrical()
 
 
 ## Channel-switch intent (SwitchPanelBridge): ON = high setting, OFF = low.
-## Unlike set_power, this always records the switch's target even while power is
-## locked — a physical toggle's position is authoritative and must survive the
-## lockout so the mix is correct when a master comes back on. Only the live
-## re-apply is gated on the lock; the master override owns the live mix meanwhile.
 func set_power_switch(switch_name: String, on: bool) -> void:
 	if not CHANNEL_SWITCHES.has(switch_name):
 		return
 	var channel: String = CHANNEL_SWITCHES[switch_name]
 	var hi: float = CHANNEL_HIGH_OVERRIDE.get(channel, power_high)
 	_power_target[channel] = hi if on else power_low
-	# A physical toggle's position is authoritative even while a master is off —
-	# record it so the mix is correct when power returns. The master override
-	# still owns the live mix until then, so only push to live power when unlocked.
-	if not power_locked():
-		_apply_electrical()
+	_apply_electrical()
 
 
-## Master-alternator intent: off rigs all power to thrusters (THRUST full, rest
-## zero), overriding the channel mix; on restores the desired mix. See
-## _apply_electrical for the override precedence with the battery.
+## Master-alternator intent. The alternator turns reactor output into electricity;
+## off, it makes none and the ship runs on the battery until that is flat.
 func set_master_alt(on: bool) -> void:
 	master_alt = on
 	_apply_electrical()
 	signature_changed.emit(passive_signature())
 
 
-## Master-battery intent: off kills all reactor power; on restores the desired
-## mix. Restore is automatic — the desired mix in _power_target is never
-## clobbered by the off override — so this is idempotent on repeated off.
+## Master-battery intent. The battery buffers the difference between supply and
+## demand; off, there is no buffer and delivery is capped at whatever the
+## alternator is making right now.
 func set_master_battery(on: bool) -> void:
 	master_bat = on
 	_apply_electrical()
 	signature_changed.emit(passive_signature())
 
 
-## True while a master electrical switch is off: the master override owns the
-## live power mix, so switches and sliders can't edit it.
-func power_locked() -> bool:
-	return not master_bat or not master_alt
+## Electrical supply, in the units power_total() sums: the alternator's output
+## when it is running, nothing when it is not. The reactor is always lit — ALT is
+## what converts its output into amps.
+func electrical_supply() -> float:
+	return power_budget() if master_alt else 0.0
 
 
-## Recompute the live per-channel power from the desired mix plus the master
-## overrides, then emit power_changed once. Battery off wins over alternator off
-## (a dead bus can't feed the thrusters either).
+## Electrical demand: the sum of what the channels are SET to, with THRUST scaled
+## by what the drive is actually doing. The field stage is electrically expensive
+## and the thermal stage is nearly free, so demand moves with the drive selector
+## and with whether there is hydrogen left to burn — see ShipDefinition.
+func electrical_demand() -> float:
+	var total := 0.0
+	for channel: String in POWER_CHANNELS:
+		var value: float = _power_target.get(channel, 0.0)
+		if channel == "THRUST":
+			value *= thrust_draw_factor()
+		total += value
+	return total
+
+
+## Multiplier on THRUST-channel demand for the stages currently running. Nothing
+## running draws nothing; the field stage is dear, the thermal stage cheap.
+func thrust_draw_factor() -> float:
+	if field_stage_running():
+		return ship_def.thrust_draw_electric
+	if thermal_stage_running():
+		return ship_def.thrust_draw_thermal
+	return 0.0
+
+
+## Fraction of demand the bus can actually deliver, 0..1. Full whenever supply
+## covers demand, or whenever the battery is there to make up the difference;
+## otherwise the shortfall is shared proportionally across every channel.
+func delivery_fraction() -> float:
+	var demand := electrical_demand()
+	if demand <= 0.0:
+		return 1.0
+	var supply := electrical_supply()
+	if supply >= demand:
+		return 1.0
+	if master_bat and battery_charge > 0.0:
+		return 1.0
+	return clampf(supply / demand, 0.0, 1.0)
+
+
+## Recompute delivered per-channel power from the settings and what the bus can
+## carry, then emit power_changed once. The settings themselves are never touched
+## here: a starved channel reads low on the instrument and comes back by itself.
 func _apply_electrical() -> void:
 	var power: Dictionary = local_ship()["power"]
+	var fraction := delivery_fraction()
 	for channel: String in POWER_CHANNELS:
-		var value: float
-		if not master_bat:
-			value = 0.0
-		elif not master_alt:
-			# Rig for escape: everything to thrust, but keep life support alive.
-			value = 1.0 if channel == "THRUST" or channel == "LIFE" else 0.0
-		else:
-			value = _power_target.get(channel, 0.0)
-		power[channel] = clampf(value, 0.0, 1.0)
+		power[channel] = clampf(_power_target.get(channel, 0.0) * fraction, 0.0, 1.0)
 	power_changed.emit()
+
+
+## Charge or drain the battery against the standing supply/demand balance, and
+## re-apply delivery. Called every physics tick.
+func _advance_electrical(delta: float) -> void:
+	var supply := electrical_supply()
+	var demand := electrical_demand()
+	var before := battery_charge
+	if supply > demand:
+		if master_bat:
+			battery_charge = minf(BATTERY_CAPACITY,
+					battery_charge + minf(supply - demand, BATTERY_CHARGE_RATE) * delta)
+	elif supply < demand and master_bat:
+		battery_charge = maxf(0.0, battery_charge - (demand - supply) * delta)
+	_announce_battery(before)
+	_apply_electrical()
+	if not is_equal_approx(before, battery_charge):
+		battery_changed.emit(battery_fraction())
+
+
+## The low-battery and flat-battery calls, made on the crossing rather than every
+## frame. Rearms once the charge climbs back above the threshold, so a pilot who
+## runs it down twice is told twice.
+func _announce_battery(before: float) -> void:
+	var fraction := battery_fraction()
+	if fraction > BATTERY_LOW:
+		_battery_low_called = false
+		return
+	if _battery_low_called:
+		return
+	_battery_low_called = true
+	if battery_charge <= 0.0 and before > 0.0:
+		post_comms("OPS", "BATTERY FLAT — BUS UNPOWERED, RESTORE THE ALTERNATOR")
+	else:
+		post_comms("OPS", "BATTERY LOW — %.0f%% REMAINING" % (fraction * 100.0))
+
+
+## Battery charge as a fraction of capacity, for instruments and checklist rows.
+func battery_fraction() -> float:
+	return clampf(battery_charge / BATTERY_CAPACITY, 0.0, 1.0)
+
+
+## Net battery current, in the units power_total() sums: positive charging,
+## negative discharging, zero when the balance is even or there is no buffer.
+func battery_flow() -> float:
+	if not master_bat:
+		return 0.0
+	var supply := electrical_supply()
+	var demand := electrical_demand()
+	if supply > demand and battery_charge < BATTERY_CAPACITY:
+		return minf(supply - demand, BATTERY_CHARGE_RATE)
+	if supply < demand and battery_charge > 0.0:
+		return -(demand - supply)
+	return 0.0
 
 
 ## Visibility to passive scanners, 0..1. Running dark on a master halves it;
@@ -755,9 +910,9 @@ func power(channel: String) -> float:
 	return local_ship()["power"].get(channel, 0.0)
 
 
-## The desired mix for a channel (what the sliders/switches/nudges set), before
-## the master overrides in _apply_electrical() rewrite the live value. Digital
-## POWER nudges step this so a master being off never ratchets the stored mix.
+## What a channel is SET to, as opposed to what power() reports being delivered
+## against it. The two differ only while the bus is starved, and every instrument
+## that shows a setting reads this one.
 func power_target(channel: String) -> float:
 	return _power_target.get(channel, 0.0)
 
@@ -771,6 +926,164 @@ func power_total() -> float:
 
 func power_budget() -> float:
 	return ship_def.power_budget
+
+
+# --- Drive selector and propellant -------------------------------------------
+
+## Drive-selector intent (the panel's magneto, or drive_mode_prev/next). Selecting
+## OFF shuts the drive down, which costs a full start to undo — that is what makes
+## the shutdown on the arrival checklist a decision rather than a formality.
+func set_drive_mode(mode: String) -> void:
+	if not DRIVE_MODES.has(mode) or mode == drive_mode:
+		return
+	var was_start := drive_mode == "START"
+	drive_mode = mode
+	if mode == "OFF":
+		drive_started = false
+		_drive_start_hold = 0.0
+		post_comms("OPS", "DRIVE SHUT DOWN")
+	elif mode == "START":
+		_drive_start_hold = 0.0
+	elif was_start:
+		# Leaving START is what completes a start: the hold has to have been served
+		# in full, and thrust only arrives once the selector is on a running detent.
+		if _drive_start_hold >= ship_def.drive_start_time:
+			drive_started = true
+			post_comms("OPS", "DRIVE RUNNING — %s" % mode)
+		else:
+			post_comms("OPS", "START ABANDONED — %0.0f OF %0.0f SECONDS SERVED"
+					% [_drive_start_hold, ship_def.drive_start_time])
+		_drive_start_hold = 0.0
+	_apply_electrical()
+	drive_mode_changed.emit(drive_mode)
+
+
+## Step the selector along DRIVE_MODES (mapped-button intent). Clamped rather than
+## wrapped: a magneto does not wrap from START round to OFF, and neither should
+## the keys that stand in for one.
+func step_drive_mode(direction: int) -> void:
+	var idx := DRIVE_MODES.find(drive_mode)
+	set_drive_mode(DRIVE_MODES[clampi(idx + direction, 0, DRIVE_MODES.size() - 1)])
+
+
+## Held-boost intent. Only meaningful while the thermal stage is running and both
+## tanks have something in them; the burn itself is metered by ShipMotion.
+func set_drive_boost(on: bool) -> void:
+	drive_boost = on
+
+
+## True while the selector is at START and the hold is still being served. The
+## checklist row and the comms progress call read this.
+func drive_starting() -> bool:
+	return drive_mode == "START" and _drive_start_hold < ship_def.drive_start_time
+
+
+## Seconds served at START, for the checklist row's live value.
+func drive_start_progress() -> float:
+	return _drive_start_hold
+
+
+## Advance the starter hold. Only counts while the selector actually sits at
+## START, and only with the bus alive — a dead ship cannot crank.
+func _advance_drive_start(delta: float) -> void:
+	if drive_mode != "START":
+		return
+	if delivery_fraction() <= 0.0 or electrical_supply() <= 0.0 and battery_charge <= 0.0:
+		return
+	var before := _drive_start_hold
+	_drive_start_hold = minf(_drive_start_hold + delta, ship_def.drive_start_time)
+	if before < ship_def.drive_start_time and _drive_start_hold >= ship_def.drive_start_time:
+		post_comms("OPS", "START COMPLETE — SELECT A RUNNING POSITION")
+
+
+## True while the drive is capable of producing thrust at all: a running detent,
+## and a start that has been served since the last shutdown.
+func drive_live() -> bool:
+	return drive_started and DRIVE_RUN_MODES.has(drive_mode)
+
+
+## True while the electrodynamic FIELD stage is turning: selected, and live. It
+## needs no propellant, so nothing else can stop it.
+func field_stage_running() -> bool:
+	return drive_live() and DRIVE_FIELD_MODES.has(drive_mode)
+
+
+## True while the NUCLEAR THERMAL stage is turning: selected, live, and with
+## hydrogen left to heat. There is no automatic fallback — at L with a dry tank
+## this goes false and NOTHING else takes over, because nothing else is selected.
+func thermal_stage_running() -> bool:
+	return drive_live() and DRIVE_THERMAL_MODES.has(drive_mode) and lh2_fuel > 0.0
+
+
+## True while the combustion booster is actually burning: commanded, layered on a
+## running thermal stage, and with oxygen as well as hydrogen aboard.
+func boosting() -> bool:
+	return drive_boost and thermal_stage_running() and lox_fuel > 0.0
+
+
+## Thrust as a fraction of the ship's rated figure, from the stages actually
+## turning. Both is the rated case; either alone is a degraded one; neither —
+## selector at OFF or START, or L with a dry tank — is no thrust at all.
+func thrust_fraction() -> float:
+	var field := field_stage_running()
+	var thermal := thermal_stage_running()
+	if field and thermal:
+		return 1.0
+	if thermal:
+		return ship_def.thrust_fraction_thermal
+	if field:
+		return ship_def.thrust_fraction_field
+	return 0.0
+
+
+## The speed the Higgs drag holds the ship to, given what the drive is doing. The
+## field stage alone is the drag-limited maximum; reaction mass buys past it.
+func speed_ceiling() -> float:
+	var ceiling: float = ship_def.max_speed
+	if thermal_stage_running():
+		ceiling += ship_def.thermal_speed_bonus
+		if boosting():
+			ceiling += ship_def.boost_speed_bonus
+	return ceiling
+
+
+## Fill a tank from a berth. Returns the units actually taken, which is what the
+## buyer is charged for — a part-empty tank costs part price.
+func add_propellant(kind: String, units: float) -> float:
+	var taken := 0.0
+	if kind == "LH2":
+		taken = minf(units, ship_def.lh2_capacity - lh2_fuel)
+		lh2_fuel += taken
+	elif kind == "LOX":
+		taken = minf(units, ship_def.lox_capacity - lox_fuel)
+		lox_fuel += taken
+	if taken > 0.0:
+		propellant_changed.emit()
+	return taken
+
+
+## Burn intent from ShipMotion, metered by commanded thrust. Announces the dry
+## tank, because losing the thermal stage is something the pilot has to act on.
+func burn_propellant(lh2: float, lox: float) -> void:
+	if lh2 <= 0.0 and lox <= 0.0:
+		return
+	var had_lh2 := lh2_fuel > 0.0
+	var had_lox := lox_fuel > 0.0
+	lh2_fuel = maxf(0.0, lh2_fuel - lh2)
+	lox_fuel = maxf(0.0, lox_fuel - lox)
+	if had_lh2 and lh2_fuel <= 0.0:
+		post_comms("OPS", "LH2 EXHAUSTED — THERMAL STAGE DEAD, SELECT R OR BOTH")
+	if had_lox and lox_fuel <= 0.0:
+		post_comms("OPS", "LOX EXHAUSTED — NO BOOST AVAILABLE")
+	propellant_changed.emit()
+
+
+func lh2_fraction() -> float:
+	return clampf(lh2_fuel / maxf(ship_def.lh2_capacity, 0.001), 0.0, 1.0)
+
+
+func lox_fraction() -> float:
+	return clampf(lox_fuel / maxf(ship_def.lox_capacity, 0.001), 0.0, 1.0)
 
 
 func post_comms(source: String, text: String) -> void:
@@ -810,10 +1123,15 @@ func _write_comms_log(entry: Dictionary) -> void:
 	_comms_log.flush()
 
 
-## Gear travel is simulation state (the gear interlocks and the landing rules
-## read it), so it advances on the physics tick with the rest of the sim.
+## Gear travel, the electrical balance and the starter hold are all simulation
+## state that other systems read as truth, so they advance on the physics tick
+## with the rest of the sim rather than on the frame.
 func _physics_process(delta: float) -> void:
 	_advance_gear(delta)
+	# Order matters: the starter needs a bus, and the bus balance depends on what
+	# the drive is doing, so settle the electrics first and crank against them.
+	_advance_electrical(delta)
+	_advance_drive_start(delta)
 
 
 func _process(delta: float) -> void:

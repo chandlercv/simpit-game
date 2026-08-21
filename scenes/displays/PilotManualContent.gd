@@ -84,13 +84,17 @@ Controls are named throughout as they are [b]currently assigned[/b]. A control w
 		"body": """The [b]SV KESTREL[/b] is a single-seat salvage cutter. It carries a cutting torch on the starboard wing, a cargo hatch in the nose, four landing legs, and a reactor of limited output which is divided between four systems by the pilot.
 
 [color=#66ccff]PERFORMANCE[/color]
-Main thruster acceleration, full THRUST allocation ....... [b]4.0 m/s²[/b]
+Main thruster acceleration, both drive stages ........... [b]4.0 m/s²[/b]
+ — thermal stage alone .................................. [b]2.4 m/s²[/b]
+ — field stage alone .................................... [b]1.6 m/s²[/b]
 Attitude rate, full control deflection, all axes ......... [b]45°/s[/b]
-Maximum speed ........................................... [b]25 m/s[/b]
+Maximum speed, field stage alone ........................ [b]25 m/s[/b]
+ — with the thermal stage running ....................... [b]35 m/s[/b]
+ — boosting ............................................. [b]50 m/s[/b]
 Secondary thrusters, rated as a fraction of main ........ [b]50%[/b]
 Approach autopilot closing speed, maximum ............... [b]8 m/s[/b]
 
-Acceleration falls in proportion to the THRUST allocation. The secondary thrusters — lateral, vertical and reverse — are supplied by the same drive and are governed by the same allocation.
+Acceleration falls in proportion to the THRUST allocation and to which drive stages are running. The secondary thrusters — lateral, vertical and reverse — are supplied by the same drive and are governed by both. See [b]Drive & propellant[/b].
 
 [color=#66ccff]CARGO[/color]
 Hold capacity ........................................... [b]40.0 t / 30.0 m³[/b]
@@ -106,7 +110,7 @@ This is not a new ship. Integrity at the start of a tour is BOW 0.96, PORT 0.88,
 
 [color=#f2705c]WARNING — DRIVE integrity governs the stability augmentation.[/color] The reaction control runs are carried in the DRIVE section. Authority is unimpaired at 0.80 and above, falls in proportion below it, and is lost entirely at 0.30. Heavy landings, flight over the gear limit with the legs out, and structural collapse all wear this section. See [b]Flight controls[/b].
 
-[color=#8c9eb8]NOTE — The Kestrel carries no propellant. Thrust is limited by electrical allocation alone, and there is no refuelling requirement.[/color]""",
+[color=#8c9eb8]NOTE — The Kestrel carries two propellants, liquid hydrogen and liquid oxygen, and will not make her rated performance without them. She is not disabled by empty tanks: the field stage of the drive needs no propellant at all. See [b]Drive & propellant[/b].[/color]""",
 	},
 	{
 		"id": "flight",
@@ -148,7 +152,7 @@ Throttle ....... {{throttle}}
 [color=#66ccff]THROTTLE[/color]
 The throttle has two command laws, selected with {{act:throttle_cmd_toggle}}.
 
-[b]SPEED[/b] (normal). The lever commands a proportion of maximum speed. Set to 50%, the ship accelerates to 12.5 m/s and holds it.
+[b]SPEED[/b] (normal). The lever commands a proportion of the maximum currently available, which depends on the drive stages running — see [b]Drive & propellant[/b]. Set to 50% on the field stage alone, the ship accelerates to 12.5 m/s and holds it; the same lever position with the thermal stage running commands 17.5 m/s.
 [b]THRUST[/b] (alternate). The lever commands acceleration directly. No speed is held.
 
 Reverse is limited to 50% of the lever's forward authority under either law.
@@ -161,6 +165,9 @@ The approach autopilot is the only autopilot fitted; the stability augmentation 
 To engage, the throttle must be below 40% travel. Above that the engagement is refused:
 [i]"APPROACH INHIBITED — THROTTLE PAST 40%, EASE BACK TO ARM"[/i]
 
+The autopilot flies on the drive, and is refused outright with the drive shut down, unstarted, or selected to a stage that has no propellant:
+[i]"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)"[/i]
+
 The autopilot disengages and returns control to the pilot on any lateral, vertical or attitude demand beyond 0.2 deflection, on throttle movement beyond the 40% band, or on collision:
 [i]"AUTOPILOT DISENGAGED — MANUAL CONTROL"[/i]
 
@@ -170,33 +177,124 @@ The autopilot disengages and returns control to the pilot on any lateral, vertic
 		"id": "power",
 		"group": "SECTION 2 — SYSTEMS",
 		"title": "Electrical & power",
-		"body": """Reactor output is divided between four channels. Each is allocated between [b]0.00[/b] and [b]1.00[/b] and is set on an MFD [b]POWER[/b] page.
+		"body": """The reactor is always lit. The [b]alternator[/b] turns its output into electricity for the bus; the [b]battery[/b] buffers the difference between what the alternator makes and what the ship is drawing. Electricity is divided between four channels, each allocated between [b]0.00[/b] and [b]1.00[/b] on an MFD [b]POWER[/b] page.
 
 [color=#66ccff]CHANNELS[/color]
-[b]THRUST[/b] — supplies the main and secondary thrusters and the approach autopilot. At zero allocation the ship will not manoeuvre.
+[b]THRUST[/b] — supplies the drive and the approach autopilot. At zero allocation the ship will not manoeuvre.
 [b]CUTTER[/b] — supplies the cutting torch. Minimum for operation [b]0.20[/b]. A fall below 0.20 during a cut terminates it.
 [b]SENSORS[/b] — supplies the structural scan. Minimum for operation [b]0.10[/b].
 [b]LIFE[/b] — supplies the habitat. It has no bearing on the performance of any other system. Carry it at full.
 
 [color=#f2bf59]CAUTION — The CUTTER channel is at zero on power-up.[/color] Allocation at power-up is THRUST 0.80, CUTTER 0.00, SENSORS 0.60, LIFE 1.00. The torch will not fire until the channel is raised, and raising it is a required step on every tour.
 
-[color=#66ccff]REACTOR LOADING[/color]
-Total draw is displayed against a reference figure of [b]2.5[/b] on the POWER page header, which changes colour when the figure is exceeded. No interlock prevents the pilot from exceeding it and no system is shed automatically. The indication is the only warning given.
+[color=#66ccff]SUPPLY AND DEMAND[/color]
+Alternator output ....................................... [b]2.5[/b]
+Battery capacity, at one unit of deficit ................ [b]120 seconds[/b]
+Battery recharge rate, maximum .......................... [b]1.0[/b]
+
+Demand is the sum of the four allocations, with [b]THRUST counted at what the drive is actually doing[/b] — the field stage of the drive is electrically expensive and the thermal stage is not, so the same allocation costs very different amounts depending on the selector and on whether there is hydrogen left to burn. See [b]Drive & propellant[/b].
+
+Where demand exceeds supply the battery makes up the difference and is drawn down. Where supply exceeds demand the surplus recharges it. The POWER page header carries demand against output, the state of charge, and which way the battery is going.
+
+[color=#f2705c]WARNING — A flat battery with the alternator off leaves the ship without electrical power of any kind.[/color] Nothing is delivered to any channel and the ship will not manoeuvre. Restore the alternator.
 
 [color=#66ccff]SETTING A CHANNEL[/color]
-Any of the following may be used. All three act on the same allocation.
+Any of the following may be used. All act on the same allocation.
 · The sliders on an MFD POWER page.
 · The panel switches — THRUST {{pwsw:THRUST}}, SENSORS {{pwsw:SENSORS}}, CUTTER {{pwsw:CUTTER}}, LIFE {{pwsw:LIFE}}. The first three select high [b]0.80[/b] or low [b]0.20[/b]. LIFE selects [b]1.00[/b] or low.
 · An assigned analogue axis, which acts as a slider; or an assigned key or button, which steps the allocation by 0.10.
 
 [color=#66ccff]MASTER SWITCHES[/color]
-[b]{{sw:MASTER_ALT}} — OFF.[/b] Emergency configuration. THRUST and LIFE to 1.00, CUTTER and SENSORS to zero, overriding the selected allocation.
-[b]{{sw:MASTER_BAT}} — OFF.[/b] All channels to zero. This condition overrides the alternator switch.
+[b]{{sw:MASTER_ALT}}[/b] · {{act:master_alt}} — the alternator. Off, it generates nothing and the ship runs on the battery until that is flat.
+[b]{{sw:MASTER_BAT}}[/b] · {{act:master_bat}} — the battery. Off, there is no buffer: delivery is limited to whatever the alternator is making at that instant, and a demand above it is met only in part.
 
-[color=#f2bf59]CAUTION — With either master switch off the allocation is locked[/color] and cannot be altered from any station. Panel switch positions continue to be registered and take effect when power is restored; slider movements made during the lockout are not retained. If the allocation will not respond, check both master switches first.
+[color=#8c9eb8]NOTE — An allocation is never altered by a loss of supply. Only what is delivered against it changes.[/color] A starved channel shows its setting and the smaller figure being delivered against it side by side, and returns to full output the moment supply does. Settings made while the ship is unpowered are kept and take effect on restoration.
+
+[color=#8c9eb8]NOTE — The master switches do not stop the drive. That is the drive selector's function, and the two are independent.[/color]
 
 [color=#66ccff]EMISSIONS[/color]
 Each master switch turned off halves the ship's signature to passive detection — one switch off gives one half, both give one quarter. A patrol must close to the corresponding fraction of its normal 60 m enforcement range before it can act.""",
+	},
+	{
+		"id": "propulsion",
+		"group": "SECTION 2 — SYSTEMS",
+		"title": "Drive & propellant",
+		"body": """The drive is a hybrid of three stages. Which of them are running is chosen on the five-position selector — {{sw:ENGINE_OFF}}, {{sw:ENGINE_R}}, {{sw:ENGINE_L}}, {{sw:ENGINE_BOTH}}, {{sw:ENGINE_START}} — or stepped with {{act:drive_mode_prev}} and {{act:drive_mode_next}}.
+
+[b]FIELD[/b] — electrodynamic. Carries no propellant and needs none. Electrically expensive.
+[b]THERMAL[/b] — liquid hydrogen heated by the reactor and expelled. Electrically cheap.
+[b]COMBUSTION[/b] — liquid oxygen burned with liquid hydrogen. The most thrust, the shortest endurance.
+
+[color=#66ccff]SELECTOR POSITIONS[/color]
+[b]OFF[/b] ..... No stage running. No thrust of any kind, however healthy the bus.
+[b]R[/b] ....... Field stage. [b]40%[/b] thrust, [b]25 m/s[/b], heavy on the bus, no propellant.
+[b]L[/b] ....... Thermal stage. [b]60%[/b] thrust, [b]35 m/s[/b], light on the bus, burns hydrogen.
+[b]BOTH[/b] .... Both stages. [b]100%[/b] thrust, [b]35 m/s[/b], heavy on the bus, burns hydrogen.
+[b]START[/b] ... The starter. No thrust — see STARTING below.
+
+R burns no propellant but is slow and draws heavily on the bus. L is economical on both counts and is the position to select when the bus is already loaded. BOTH is the normal position for work.
+
+[color=#66ccff]STARTING[/color]
+The selector is to be left at [b]START[/b] for [b]10 seconds[/b], and the drive runs only once it is turned back to R, L or BOTH. Leaving START early abandons the start and it must be run again.
+
+[color=#f2bf59]CAUTION — START is not a running position and produces no thrust however long it is left there.[/color]
+
+[color=#f2bf59]CAUTION — The starter requires the bus. Establish the master switches before attempting a start.[/color]
+
+[color=#66ccff]TANKS[/color]
+Liquid hydrogen ................. [b]60 units[/b]
+ — thermal stage ................ [b]1.0 unit/s[/b] at full commanded thrust
+ — boosting ..................... [b]2.5 units/s[/b] at full commanded thrust
+Liquid oxygen ................... [b]20 units[/b]
+ — boosting ..................... [b]2.0 units/s[/b] at full commanded thrust
+
+Consumption is proportional to commanded thrust. Holding station consumes nothing; a sustained burn consumes at the rated figure. Neither tank is replenished in flight.
+
+[color=#66ccff]BOOST[/color]
+{{act:drive_boost}}, held. It requires the thermal stage running and both tanks charged, and raises the maximum to [b]50 m/s[/b]. It is not a latch and releases when the control does.
+
+[color=#f2bf59]CAUTION — Liquid oxygen cannot be burned without liquid hydrogen.[/color] A charged oxygen tank is of no use with the hydrogen tank empty.
+
+[color=#f2705c]WARNING — There is no automatic reversion between stages.[/color] A stage runs when it is selected and supplied, and no other stage takes over for one that is not. At [b]L[/b] with the hydrogen tank empty the ship makes [b]no thrust at all[/b] until the pilot selects R or BOTH. At BOTH the field stage is already selected and the ship continues on it. See [b]Drive failures[/b].
+
+[color=#8c9eb8]NOTE — Running the hydrogen tank dry also raises the electrical draw of the THRUST channel, because the field stage is the expensive one. Expect the battery to begin discharging.[/color]
+
+[color=#8c9eb8]NOTE — A hydrogen intake is fitted to the thermal stage. At the densities encountered on this circuit it collects no useful quantity and no allowance is made for it.[/color]""",
+	},
+	{
+		"id": "drive-failures",
+		"group": "SECTION 2 — SYSTEMS",
+		"title": "Drive failures",
+		"body": """[color=#8c9eb8]The conditions that leave the ship unable to manoeuvre, and what to do about each. They are different failures and are annunciated differently; treating one as another wastes the endurance the battery is giving you.[/color]
+
+[color=#66ccff]NO THRUST — HYDROGEN EXHAUSTED AT L[/color]
+Annunciated [i]LH2 DEPLETED[/i], and in the log:
+[i]"LH2 EXHAUSTED — THERMAL STAGE DEAD, SELECT R OR BOTH"[/i]
+
+The thermal stage was the only stage selected and it has nothing left to heat. The field stage is not selected and will not take over.
+
+[b]1  SELECTOR[/b] — [color=#59f28c]R OR BOTH[/color]
+[b]2  PERFORMANCE[/b] — [color=#59f28c]EXPECT 40% THRUST AND 25 m/s[/color]
+[b]3  ALLOCATION[/b] — [color=#59f28c]REDUCE CUTTER AND SENSORS[/color]
+     [color=#8c9eb8]The field stage draws heavily. Shedding the channels you are not using lengthens the ship's endurance on the battery.[/color]
+[b]4  BERTH[/b] — [color=#59f28c]MAKE FOR ONE[/color]
+     [color=#8c9eb8]Both tanks are replenished there.[/color]
+
+[color=#f2705c]WARNING — The ship is not disabled by empty tanks, but she is slow and she is running on the battery.[/color] Plan the return on the state of charge, not on the distance.
+
+[color=#66ccff]NO THRUST — BUS UNPOWERED[/color]
+Indicated by every channel delivering less than it is set to, and in the log:
+[i]"BATTERY FLAT — BUS UNPOWERED, RESTORE THE ALTERNATOR"[/i]
+
+[b]1  {{sw:MASTER_ALT}}[/b] — [color=#59f28c]ON[/color]
+[b]2  {{sw:MASTER_BAT}}[/b] — [color=#59f28c]ON[/color]
+[b]3  ALLOCATION[/b] — [color=#59f28c]INSIDE THE ALTERNATOR'S OUTPUT[/color]
+     [color=#8c9eb8]Reduce demand below 2.5 and allow the battery to recover before drawing on it again.[/color]
+
+[color=#66ccff]NO THRUST — DRIVE SHUT DOWN[/color]
+Annunciated [i]DRIVE OFF[/i].
+
+[color=#8c9eb8]NOTE — A drive shut down at OFF is not an electrical failure, and the master switches will not restore it. It requires a start. See [b]Drive & propellant[/b].[/color]""",
 	},
 	{
 		"id": "sensors",
@@ -344,7 +442,9 @@ An extended leg lies in the arc of the cutting torch. The gear therefore inhibit
 [i]"CUT ABORT — STOW THE LANDING GEAR FIRST"[/i]
 
 [color=#66ccff]DEPARTURE[/color]
-Outbound the requirement is reversed. The gear is to remain [b]down[/b] until the berth bay is cleared — raising it within the bay is a violation — and is to be [b]stowed[/b] before Control will release the ship for the transit.""",
+Outbound there is no point at which the gear is required down. It may be raised as soon as the ship is off the pad, and is to be [b]stowed[/b] before Control will release the ship for the transit.
+
+[color=#8c9eb8]NOTE — Raise it early. The gear's speed rating applies wherever the ship is flying, and the outbound lane is flown faster than the gear is rated for.[/color]""",
 	},
 	{
 		"id": "landing-limits",
@@ -450,9 +550,10 @@ A small number of items cannot be tested from aboard: attitude held by hand duri
 [b]Salvage markers[/b] — a diamond on each adrift piece with identification and range. With the hatch open, relative speed and a recovery ring are added, together with the governing condition.
 [b]CARGO HATCH OPEN[/b] — upper right, pulsing, whenever the hatch is open.
 [b]Gear[/b] — GEAR IN TRANSIT with percentage, then GEAR DOWN; GEAR OVERSPEED in red above 18 m/s.
+[b]Drive[/b] — IMPULSE or BOOST beside VEL while a reaction stage is burning; DRIVE with the selector position when the drive is not making its rated thrust; LH2 DEPLETED, pulsing, with the hydrogen tank empty.
 [b]ATC[/b] — the standing instruction during an approach, with altitude and sink rate on final.
 
-[color=#8c9eb8]NOTE — Reactor loading and hull condition are not repeated on the flight HUD. They are presented on the MFD POWER page and the Tactical SCOPE respectively.[/color]""",
+[color=#8c9eb8]NOTE — Electrical loading, the state of charge and the contents of the tanks are not repeated on the flight HUD. They are presented on the MFD POWER page, which carries demand against the alternator's output, the battery and which way it is going, the selector position and both tank levels. Hull condition is on the Tactical SCOPE.[/color]""",
 	},
 	{
 		"id": "risk",
@@ -485,32 +586,38 @@ Secondary members may be taken at little cost to the frame. Primary members shou
 		"title": "Departure",
 		"body": """[color=#8c9eb8]Vacating a berth, and the systems set-up required from cold.
 
-Items 1 to 5 are ship configuration. Items 6 onward are flown in compliance with the berth's departure procedure, which is not builder data — see the [b]TERMINAL PROCEDURES[/b].[/color]
+Items 1 to 7 are ship configuration and are ordered by dependency: the gear lever is confirmed first so it agrees with the ship standing on its legs, then the bus, then the drive that cannot be started without it. Items 8 onward are flown in compliance with the berth's departure procedure, which is not builder data — see the [b]TERMINAL PROCEDURES[/b].[/color]
 
 [color=#66ccff]BEFORE DEPARTURE[/color]
-[b]1  MASTER SWITCHES[/b] — {{sw:MASTER_BAT}} and {{sw:MASTER_ALT}} [color=#59f28c]ON[/color]
-     [color=#8c9eb8]The allocation is locked while either is off. Complete this item first.[/color]
-[b]2  POWER CHANNELS[/b] — [color=#59f28c]SET[/color]
+[b]1  LANDING GEAR[/b] — [color=#59f28c]DOWN[/color]
+     [color=#8c9eb8]The ship is standing on it. Confirm the lever agrees before anything else is touched.[/color]
+[b]2  MASTER SWITCHES[/b] — {{sw:MASTER_BAT}} and {{sw:MASTER_ALT}} [color=#59f28c]ON[/color]
+[b]3  BATTERY[/b] — [color=#59f28c]CHARGING[/color]
+     [color=#8c9eb8]Read on the MFD POWER page header. A battery discharging on the pad means demand is already above the alternator's output.[/color]
+[b]4  POWER CHANNELS[/b] — [color=#59f28c]SET[/color]
      [color=#8c9eb8]THRUST raised. SENSORS raised if a scan is to be run on arrival. CUTTER is not required for the transit.[/color]
-[b]3  CARGO HATCH[/b] — [color=#59f28c]SECURED[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
+[b]5  CARGO HATCH[/b] — [color=#59f28c]SECURED[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
      [color=#f2bf59]CAUTION — Departure is refused with the hatch open: "DEPARTURE HELD — SECURE CARGO HATCH FIRST"[/color]
-[b]4  HOLD[/b] — [color=#59f28c]DISPOSED OF[/color]
-     [color=#8c9eb8]Cargo carried out of the station is carried back to it.[/color]
-[b]5  LANDING GEAR[/b] — [color=#59f28c]DOWN[/color]
-     [color=#8c9eb8]The ship is standing on it. It remains down until the bay is cleared.[/color]
+
+[color=#66ccff]STARTING[/color]
+[b]6  DRIVE SELECTOR[/b] — [color=#59f28c]START, 10 SECONDS[/color] · {{sw:ENGINE_START}}
+     [color=#f2bf59]CAUTION — The starter requires the bus. Do not attempt it before item 2.[/color]
+[b]7  DRIVE SELECTOR[/b] — [color=#59f28c]BOTH[/color] · {{sw:ENGINE_BOTH}}
+     [color=#f2bf59]CAUTION — Nothing moves the ship until the selector is off START. START is not a running position.[/color]
+     [color=#8c9eb8]L is available for an economical transit — 60% thrust for a fraction of the electrical draw. See [b]Drive & propellant[/b].[/color]
 
 [color=#66ccff]LEAVING THE BERTH[/color]
-[b]6  UNDOCK[/b] — {{act:market_depart}}, or DEPART on the MFD MARKET page
+[b]8  UNDOCK[/b] — {{act:market_depart}}, or DEPART on the MFD MARKET page
      [color=#8c9eb8]This lifts the ship off the pad and into the berth's departure hold. It is not the transit; the lane is flown first.[/color]
-[b]7  DOCK PAGE[/b] — [color=#59f28c]SELECTED[/color]
+[b]9  DOCK PAGE[/b] — [color=#59f28c]SELECTED[/color]
      [color=#8c9eb8]Presented automatically on the primary MFD. It carries the berth's live requirements — speed, lane and clearance — for the rest of the departure.[/color]
-[b]8  BERTH DEPARTURE PROCEDURE[/b] — [color=#59f28c]COMPLY[/color]
+[b]10 BERTH DEPARTURE PROCEDURE[/b] — [color=#59f28c]COMPLY[/color]
      [color=#8c9eb8]Clearance, the outbound lane and its limits are the berth's, and are given in the [b]TERMINAL PROCEDURES[/b] for the station you are leaving.[/color]
-[b]9  LANDING GEAR[/b] — [color=#59f28c]DOWN UNTIL THE BAY IS CLEARED, THEN STOWED[/color] · {{act:landing_gear}}
-     [color=#f2705c]WARNING — Above 18 m/s with the gear extended the DRIVE section wears continuously. Stow it as soon as the berth permits.[/color]
-     [color=#8c9eb8]Three seconds of travel each way. When the gear may be raised, and the consequence of raising it early, are the berth's business.[/color]
+[b]11 LANDING GEAR[/b] — [color=#59f28c]STOWED ONCE OFF THE PAD[/color] · {{act:landing_gear}}
+     [color=#f2705c]WARNING — Above 18 m/s with the gear extended the DRIVE section wears continuously. Raise it as soon as the pad is clear.[/color]
+     [color=#8c9eb8]Three seconds of travel each way, and Control withholds the release from the pattern until it is stowed.[/color]
 
-[color=#8c9eb8]FROM COLD — On the first launch of a tour there is no berth to leave. Items 1 and 2 are the whole of the set-up, the gear is already stowed, and the ship begins on station at the claim.[/color]""",
+[color=#8c9eb8]FROM COLD — On the first launch of a tour there is no berth to leave. Items 2 to 7 are the whole of the set-up — the bus and a start — the gear is already stowed, and the ship begins on station at the claim.[/color]""",
 	},
 	{
 		"id": "checklist-arrival",
@@ -551,7 +658,15 @@ This is the [b]ship's[/b] half of an arrival — what the Kestrel must be config
      · Sink rate below [b]5.0 m/s[/b]; below [b]1.5 m/s[/b] for no wear
      [color=#f2bf59]CAUTION — The ship lands on its legs, level. Do not lower the nose toward the pad.[/color]
      [color=#8c9eb8]These are the legs' limits — see [b]Landing limitations[/b]. Where on the deck the ship may be put down, and how the arrival is judged, are the berth's.[/color]
-[b]11 HOLD[/b] — [color=#59f28c]DISPOSE OF[/color]
+[color=#66ccff]AFTER LANDING[/color]
+[b]11 DRIVE SELECTOR[/b] — [color=#59f28c]OFF[/color] · {{sw:ENGINE_OFF}}
+     [color=#f2bf59]CAUTION — Shut the drive down before the ship is opened up.[/color]
+     [color=#8c9eb8]A shutdown costs a full 10-second start to undo. See [b]Drive & propellant[/b].[/color]
+[b]12 CARGO HATCH[/b] — [color=#59f28c]OPEN[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
+     [color=#8c9eb8]The hold is discharged through the hatch. A buttoned-up ship has nothing to hand over: "DISCHARGE HELD — OPEN THE CARGO HATCH FIRST"[/color]
+[b]13 {{sw:MASTER_ALT}}[/b] — [color=#59f28c]OFF[/color]
+[b]14 {{sw:MASTER_BAT}}[/b] — [color=#59f28c]OFF[/color]
+     [color=#8c9eb8]The ship is quiet on the pad. Both are the first items of the next departure.[/color]
 
 [color=#8c9eb8]ABANDONING THE APPROACH — {{act:market_depart}} leaves the pattern and returns the ship to the claim, with the derelict as it was left.[/color]""",
 	},
@@ -574,31 +689,33 @@ This is the [b]ship's[/b] half of an arrival — what the Kestrel must be config
      [color=#8c9eb8]The projected increase in structural risk is listed against each member. Secondary panels are inexpensive; the spine truss is not.[/color]
 
 [color=#66ccff]APPROACH[/color]
-[b]6  THROTTLE[/b] — [color=#59f28c]BELOW 40%[/color] · {{throttle}}
+[b]6  DRIVE[/b] — [color=#59f28c]MAKING THRUST[/color]
+     [color=#f2bf59]CAUTION — The autopilot flies on the drive and is refused without it: "APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)"[/color]
+[b]7  THROTTLE[/b] — [color=#59f28c]BELOW 40%[/color] · {{throttle}}
      [color=#f2bf59]CAUTION — "APPROACH INHIBITED — THROTTLE PAST 40%, EASE BACK TO ARM"[/color]
-[b]7  APPROACH[/b] — [color=#59f28c]ENGAGE[/color] · {{act:ops_approach}}
-[b]8  ATTITUDE[/b] — [color=#59f28c]PILOT[/color]
+[b]8  APPROACH[/b] — [color=#59f28c]ENGAGE[/color] · {{act:ops_approach}}
+[b]9  ATTITUDE[/b] — [color=#59f28c]PILOT[/color]
      [color=#f2bf59]CAUTION — The autopilot translates only. It will not turn the ship and cannot match the derelict's rotation. Keep the target in view on pitch and yaw.[/color]
-[b]9  APPROACH STATE[/b] — [color=#59f28c]MATCHED[/color]
+[b]10 APPROACH STATE[/b] — [color=#59f28c]MATCHED[/color]
      [color=#8c9eb8]Indicated by MATCHED — FIRE TO ALIGN on the target marker. Selecting another member cancels the match and the approach must be re-engaged.[/color]
 
 [color=#66ccff]BEFORE FIRING[/color]
-[b]10 CUTTER ALLOCATION[/b] — [color=#59f28c]0.20 MINIMUM[/color] · {{pwsw:CUTTER}} switch, or the MFD POWER page
+[b]11 CUTTER ALLOCATION[/b] — [color=#59f28c]0.20 MINIMUM[/color] · {{pwsw:CUTTER}} switch, or the MFD POWER page
      [color=#f2bf59]CAUTION — The CUTTER channel is at zero on power-up. This item is required on every tour.[/color]
-[b]11 CARGO HATCH[/b] — [color=#59f28c]SECURED[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
-[b]12 LANDING GEAR[/b] — [color=#59f28c]STOWED[/color] · {{act:landing_gear}}
+[b]12 CARGO HATCH[/b] — [color=#59f28c]SECURED[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
+[b]13 LANDING GEAR[/b] — [color=#59f28c]STOWED[/color] · {{act:landing_gear}}
      [color=#8c9eb8]An extended leg lies in the arc of the torch. Confirm following any station departure.[/color]
 
 [color=#66ccff]CUT[/color]
-[b]13 TRIGGER[/b] — [color=#59f28c]FIRE TO OPEN ALIGNMENT[/color] · {{act:ops_cut}}
+[b]14 TRIGGER[/b] — [color=#59f28c]FIRE TO OPEN ALIGNMENT[/color] · {{act:ops_cut}}
      [color=#8c9eb8]This opens the alignment. It does not cut.[/color]
-[b]14 SEAM[/b] — [color=#59f28c]TRACK[/color] on pitch and yaw
+[b]15 SEAM[/b] — [color=#59f28c]TRACK[/color] on pitch and yaw
      [color=#8c9eb8]The seam traverses because the derelict is rotating. Hold within the tolerance ring to build lock; lock decays faster than it builds.[/color]
-[b]15 COMMIT[/b] — [color=#59f28c]AUTOMATIC AT FULL LOCK[/color], or {{act:ops_cut}} to commit early
+[b]16 COMMIT[/b] — [color=#59f28c]AUTOMATIC AT FULL LOCK[/color], or {{act:ops_cut}} to commit early
      [color=#8c9eb8]Quality governs cut rate, the increase in structural risk, and the salvage recovered in the piece.[/color]
-[b]16 STRUCTURAL RISK[/b] — [color=#59f28c]MONITOR[/color]
+[b]17 STRUCTURAL RISK[/b] — [color=#59f28c]MONITOR[/color]
      [color=#f2705c]WARNING — Above 0.55 the frame may collapse, destroying every member not yet severed.[/color]
-[b]17 SEVERED PIECE[/b] — [color=#59f28c]PROCEED TO RECOVERY[/color]
+[b]18 SEVERED PIECE[/b] — [color=#59f28c]PROCEED TO RECOVERY[/color]
      [color=#8c9eb8]The piece is adrift and is not aboard. See the Collecting procedure.[/color]
 
 [color=#66ccff]IF THE TRIGGER HAS NO EFFECT[/color]

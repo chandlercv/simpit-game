@@ -76,12 +76,6 @@ static func _torch_idle() -> Dictionary:
 	return _gate(not aligning, "ALIGNING" if aligning else "IDLE")
 
 
-static func _hold_empty() -> Dictionary:
-	var ship: Dictionary = GameState.local_ship()
-	return _gate(CargoSystem.cargo_mass() <= 0.0, "%.1f / %.1f T" % [
-		CargoSystem.cargo_mass(), float(ship["cargo_mass_limit_t"])])
-
-
 static func _gear_down() -> Dictionary:
 	if GameState.gear_locked_down():
 		return _gate(true, "DOWN & LOCKED")
@@ -127,12 +121,29 @@ static func _berth_compliance() -> Dictionary:
 static func _departure() -> Array[Dictionary]:
 	return [
 		{
+			# First, so the lever is known to agree with the ship standing on its
+			# legs before anything else is touched.
+			"group": "BEFORE DEPARTURE", "label": "LANDING GEAR", "want": "DOWN",
+			"read": func() -> Dictionary: return _gear_down(),
+		},
+		{
 			"group": "BEFORE DEPARTURE", "label": "MASTER SWITCHES", "want": "ON",
 			"read": func() -> Dictionary:
 				var on := GameState.master_bat and GameState.master_alt
 				return _gate(on, "BAT %s · ALT %s" % [
 					"ON" if GameState.master_bat else "OFF",
 					"ON" if GameState.master_alt else "OFF"]),
+		},
+		{
+			"group": "BEFORE DEPARTURE", "label": "BATTERY", "want": "CHARGING",
+			"read": func() -> Dictionary:
+				var flow := GameState.battery_flow()
+				var charge := "%d%%" % roundi(GameState.battery_fraction() * 100.0)
+				if GameState.battery_fraction() >= 1.0:
+					return _gate(GameState.master_alt, "%s · FULL" % charge)
+				return _gate(flow > 0.0, "%s · %s" % [charge,
+					"CHG %.1f" % flow if flow > 0.0
+					else ("DISCH %.1f" % -flow if flow < 0.0 else "STATIC")]),
 		},
 		{
 			"group": "BEFORE DEPARTURE", "label": "POWER CHANNELS", "want": "SET",
@@ -145,12 +156,26 @@ static func _departure() -> Array[Dictionary]:
 			"read": func() -> Dictionary: return _hatch_secured(),
 		},
 		{
-			"group": "BEFORE DEPARTURE", "label": "HOLD", "want": "DISPOSED OF",
-			"read": func() -> Dictionary: return _hold_empty(),
+			# The starter needs the bus, which is why it sits after the masters.
+			# It counts only while the selector is actually at START.
+			"group": "STARTING", "label": "DRIVE SELECTOR", "want": "START, 10 S",
+			"read": func() -> Dictionary:
+				if GameState.drive_live():
+					return _gate(true, "STARTED")
+				if GameState.drive_mode != "START":
+					return _gate(false, GameState.drive_mode)
+				return _gate(false, "%.0f / %.0f S" % [
+					GameState.drive_start_progress(),
+					GameState.ship_def.drive_start_time]),
 		},
 		{
-			"group": "BEFORE DEPARTURE", "label": "LANDING GEAR", "want": "DOWN",
-			"read": func() -> Dictionary: return _gear_down(),
+			"group": "STARTING", "label": "DRIVE SELECTOR", "want": "RUNNING POSITION",
+			"read": func() -> Dictionary:
+				if not GameState.drive_live():
+					return _gate(false, GameState.drive_mode)
+				return _gate(GameState.thrust_fraction() > 0.0, "%s · %d%% THRUST" % [
+					GameState.drive_mode,
+					roundi(GameState.thrust_fraction() * 100.0)]),
 		},
 		{
 			"group": "LEAVING THE BERTH", "label": "UNDOCK", "want": "COMMANDED",
@@ -167,15 +192,15 @@ static func _departure() -> Array[Dictionary]:
 		},
 		{
 			"group": "LEAVING THE BERTH", "label": "LANDING GEAR",
-			"want": "STOWED ONCE CLEAR",
+			"want": "STOWED BEFORE RELEASE",
 			"read": func() -> Dictionary:
-				# Down is correct until the bay is behind you, so this cannot fail
-				# while the ship is still inside it — it simply does not apply yet.
+				# There is no longer a point on the way out at which the gear must
+				# still be down, so this applies for the whole outbound run: raise
+				# it whenever the pad is clear, and it has to be up before ATC will
+				# release the ship for the jump.
 				var st := DockingSystem.status()
 				if st.is_empty() or not st["outbound"]:
 					return _na("NOT OUTBOUND")
-				if GameState.docking_state != "DEPARTING":
-					return _na("IN THE BAY — GEAR DOWN")
 				return _gear_stowed(),
 		},
 	]
@@ -269,8 +294,40 @@ static func _arrival() -> Array[Dictionary]:
 					rate, DockingSystem.FIRM_RATE]),
 		},
 		{
-			"group": "TOUCHDOWN", "label": "HOLD", "want": "DISPOSE OF",
-			"read": func() -> Dictionary: return _hold_empty(),
+			# Shut the drive down before the ship is opened up. Selecting OFF costs
+			# a full start to undo, which is what makes it a decision rather than a
+			# reflex — see the DEPARTURE procedure.
+			"group": "AFTER LANDING", "label": "DRIVE SELECTOR", "want": "OFF",
+			"read": func() -> Dictionary:
+				if GameState.docking_state != "LANDED" and GameState.run_phase != "DOCKED":
+					return _na("NOT ON A PAD")
+				return _gate(GameState.drive_mode == "OFF", GameState.drive_mode),
+		},
+		{
+			"group": "AFTER LANDING", "label": "CARGO HATCH", "want": "OPEN",
+			"read": func() -> Dictionary:
+				if GameState.docking_state != "LANDED" and GameState.run_phase != "DOCKED":
+					return _na("NOT ON A PAD")
+				# The hold discharges through the hatch, so this is the item that
+				# lets the berth take the cargo — not a formality.
+				return _gate(GameState.cargo_hatch_open,
+					"OPEN" if GameState.cargo_hatch_open else "SECURED"),
+		},
+		{
+			"group": "AFTER LANDING", "label": "MASTER ALT", "want": "OFF",
+			"read": func() -> Dictionary:
+				if GameState.docking_state != "LANDED" and GameState.run_phase != "DOCKED":
+					return _na("NOT ON A PAD")
+				return _gate(not GameState.master_alt,
+					"ON" if GameState.master_alt else "OFF"),
+		},
+		{
+			"group": "AFTER LANDING", "label": "MASTER BAT", "want": "OFF",
+			"read": func() -> Dictionary:
+				if GameState.docking_state != "LANDED" and GameState.run_phase != "DOCKED":
+					return _na("NOT ON A PAD")
+				return _gate(not GameState.master_bat,
+					"ON" if GameState.master_bat else "OFF"),
 		},
 	]
 
@@ -311,6 +368,16 @@ static func _cutting() -> Array[Dictionary]:
 				var member := GameState.get_member(GameState.selected_member_id)
 				return _gate(not member.is_empty(),
 						String(member.get("name", "NONE SELECTED"))),
+		},
+		{
+			# The autopilot flies on the drive, and it is refused outright when the
+			# drive is not making thrust — so the drive is checked before the
+			# throttle, in the order the refusals actually fire.
+			"group": "APPROACH", "label": "DRIVE", "want": "MAKING THRUST",
+			"read": func() -> Dictionary:
+				return _gate(GameState.thrust_fraction() > 0.0, "%s · %d%%" % [
+					GameState.drive_mode,
+					roundi(GameState.thrust_fraction() * 100.0)]),
 		},
 		{
 			"group": "APPROACH", "label": "THROTTLE", "want": "INSIDE THE ARMING BAND",
