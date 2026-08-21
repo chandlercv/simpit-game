@@ -1,6 +1,7 @@
 extends Node
 ## Headless checks for the per-member approach + pre-cut alignment mini-game:
-## approach needs a target and re-selecting forces a reposition; the cutter
+## approach needs a target, re-selecting forces a reposition and a drive shut down
+## under a flying autopilot disengages it; the cutter
 ## trigger opens alignment (not a cut); on-target aim builds the lock and commits
 ## at high quality; a sustained slip aborts (hard-fail) and nudges risk; and the
 ## banked quality binds the stakes — a clean cut is faster and preserves more yield.
@@ -50,6 +51,23 @@ func _run() -> void:
 	SalvageSystem.select_member(ids[1])
 	_check(GameState.approach_state == "HOLDING", "selecting a new target drops out of MATCHED")
 	_check(GameState.matched_member_id == -1, "matched member cleared on reselect")
+
+	# The autopilot flies on the drive, and the selector moves under it. The
+	# arm-time gate cannot cover a shutdown mid-approach, so the loop rechecks.
+	SalvageSystem.reset_site()
+	GameState.wreck["scanned"] = true
+	SalvageSystem.select_member(ids[0])
+	SalvageSystem.toggle_approach()
+	_check(GameState.approach_state == "APPROACHING", "approach arms with the drive running")
+	GameState.set_drive_mode("OFF")
+	# physics_frame is emitted BEFORE the systems that step on it, so the first
+	# await only lands us in the physics context; the second is the tick that runs.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(GameState.approach_state == "HOLDING",
+			"shutting the drive down disengages a flying autopilot")
+	GameState.drive_started = true
+	GameState.set_drive_mode("BOTH")
 
 	# --- Alignment begins on the cutter trigger ---
 	SalvageSystem.reset_site()

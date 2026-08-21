@@ -171,6 +171,11 @@ The autopilot flies on the drive, and is refused outright with the drive shut do
 The autopilot disengages and returns control to the pilot on any lateral, vertical or attitude demand beyond 0.2 deflection, on throttle movement beyond the 40% band, or on collision:
 [i]"AUTOPILOT DISENGAGED — MANUAL CONTROL"[/i]
 
+It flies on the drive throughout, not only at engagement. Shutting the drive down, or selecting START, while it is flying disengages it in the same way:
+[i]"AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST"[/i]
+
+[color=#f2bf59]CAUTION — However it is disengaged, the standoff is given up with it.[/color] MATCHED is the range condition for the torch, so an alignment or a cut in progress ends at the same instant, and the cut's progress is not retained.
+
 [color=#8c9eb8]NOTE — No en-route autopilot is fitted. Transits between the claim and the station's outer approach are flown by the ship's own navigation; everything within the approach is hand-flown.[/color]""",
 	},
 	{

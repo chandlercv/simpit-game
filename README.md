@@ -246,8 +246,10 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
    one.
    *The throttle must be eased back under ~40% to arm the autopilot, the drive
    has to actually be making thrust (it flies on the drive, so a shut-down drive
-   or a dry hydrogen tank on `L` refuses the engagement), and any real
-   stick/throttle input while it's flying hands control back to you.*
+   or a dry hydrogen tank on `L` refuses the engagement, and shutting the drive
+   down while it's flying disengages it), and any real stick/throttle input while
+   it's flying hands control back to you. However you lose it, you lose the
+   standoff with it — and any alignment or cut in progress ends there.*
 4. **Power the cutter.** Raise the **CUTTER** power channel to at least 0.2 on
    an MFD **POWER** page.
 5. **Align the cutting head.** With the approach `MATCHED`, fire the cutter to

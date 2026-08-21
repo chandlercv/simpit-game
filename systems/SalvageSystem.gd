@@ -542,6 +542,18 @@ func _update_approach(delta: float) -> void:
 	if GameState.approach_state == "HOLDING":
 		ShipMotion.step(delta)
 		return
+	# The autopilot flies on the drive, and the selector moves under it: OFF or
+	# START after toggle_approach()'s gate has already passed. The seize below is
+	# kinematic and never consults the drive, so without this the ship would keep
+	# closing — and then hold station, and be cut from — on a drive making no
+	# thrust at all. Hand control back the way a collision does.
+	if GameState.thrust_fraction() <= 0.0:
+		_abort_align("DRIVE THRUST LOST")
+		_abort_cut("DRIVE THRUST LOST")
+		_set_approach("HOLDING")
+		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST")
+		ShipMotion.step(delta)
+		return
 	# Fly to the *selected* member: its baked world centroid (published into the
 	# graph by Wreck.gd) is the park target, so the ship stations off that member
 	# specifically. Fall back to the wreck centre when the member carries no baked
