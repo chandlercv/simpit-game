@@ -187,19 +187,19 @@ func buy_propellant(kind: String) -> void:
 	if GameState.run_phase != "DOCKED":
 		GameState.post_comms("MARKET", "%s IS SOLD AT A BERTH ONLY" % label)
 		return
-	var price := propellant_quote(kind)
-	if price <= 0:
+	var cost := propellant_quote(kind)
+	if cost <= 0:
 		GameState.post_comms("MARKET", "%s TANK ALREADY FULL" % label)
 		return
-	if GameState.credits < price:
+	if GameState.credits < cost:
 		GameState.post_comms("MARKET", "%s REFUSED — %d CR REQUIRED, %d CR HELD" % [
-			label, price, GameState.credits])
+			label, cost, GameState.credits])
 		return
 	var taken := GameState.add_propellant(kind, INF)
-	GameState.credits -= price
+	GameState.credits -= cost
 	GameState.credits_changed.emit(GameState.credits)
 	GameState.post_comms("MARKET", "%s UPLIFTED — %.0f UNITS, %d CR" % [
-		label, taken, price])
+		label, taken, cost])
 
 
 ## Leaving the berth is flown too: this lifts off into the departure pattern

@@ -834,10 +834,10 @@ func delivery_fraction() -> float:
 ## carry, then emit power_changed once. The settings themselves are never touched
 ## here: a starved channel reads low on the instrument and comes back by itself.
 func _apply_electrical() -> void:
-	var power: Dictionary = local_ship()["power"]
+	var delivered: Dictionary = local_ship()["power"]
 	var fraction := delivery_fraction()
 	for channel: String in POWER_CHANNELS:
-		power[channel] = clampf(_power_target.get(channel, 0.0) * fraction, 0.0, 1.0)
+		delivered[channel] = clampf(_power_target.get(channel, 0.0) * fraction, 0.0, 1.0)
 	power_changed.emit()
 
 

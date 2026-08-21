@@ -42,6 +42,7 @@ static func parse_report(report: PackedByteArray) -> Dictionary:
 	if bytes.size() > 3 and bytes[0] == 0:
 		bytes = bytes.slice(1)
 	for i in SWITCH_NAMES.size():
+		@warning_ignore("integer_division")  # deliberate: 8 switches per byte
 		var byte_index := i / 8
 		if byte_index >= bytes.size():
 			break

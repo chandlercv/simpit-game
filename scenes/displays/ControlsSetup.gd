@@ -678,10 +678,10 @@ func _capture_key(keycode: int) -> void:
 # --- Display + save --------------------------------------------------------
 
 func _dev_short(guid: String) -> String:
-	var name := String(_dev_meta.get(guid, {}).get("name", ""))
-	if name.is_empty():
-		name = guid.substr(0, 6)
-	return name.left(14)
+	var dev_name := String(_dev_meta.get(guid, {}).get("name", ""))
+	if dev_name.is_empty():
+		dev_name = guid.substr(0, 6)
+	return dev_name.left(14)
 
 
 func _refresh_values() -> void:
@@ -706,8 +706,8 @@ func _button_row_text(action: String) -> String:
 
 
 func _key_name(keycode: int) -> String:
-	var name := OS.get_keycode_string(keycode as Key)
-	return name if not name.is_empty() else "Key%d" % keycode
+	var key_text := OS.get_keycode_string(keycode as Key)
+	return key_text if not key_text.is_empty() else "Key%d" % keycode
 
 
 ## An axis pair shows its analog/nub binding if set, else its per-direction

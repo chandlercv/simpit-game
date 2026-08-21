@@ -1273,21 +1273,21 @@ func _atc(text: String, detail := "", urgent := false) -> void:
 ## Calls sit on top of the standing instruction for CALL_HOLD, then fall away
 ## and leave the clearance showing.
 func _call(text: String, detail := "", urgent := false) -> void:
-	var call := {
+	var momentary := {
 		"text": text, "detail": detail, "urgent": urgent,
 		"tick": GameState.tick, "until": _pattern_time + CALL_HOLD,
 	}
-	GameState.docking["call"] = call
+	GameState.docking["call"] = momentary
 	GameState.post_comms("ATC", text if detail.is_empty() else "%s — %s" % [text, detail])
-	GameState.atc_instruction.emit(call)
+	GameState.atc_instruction.emit(momentary)
 
 
 ## Whatever the instrument should be showing: a live call if there is one, else
 ## the standing instruction.
 func current_instruction() -> Dictionary:
-	var call: Dictionary = GameState.docking.get("call", {})
-	if not call.is_empty() and _pattern_time < float(call.get("until", 0.0)):
-		return call
+	var momentary: Dictionary = GameState.docking.get("call", {})
+	if not momentary.is_empty() and _pattern_time < float(momentary.get("until", 0.0)):
+		return momentary
 	return GameState.docking.get("atc", {})
 
 

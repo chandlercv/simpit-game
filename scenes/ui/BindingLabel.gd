@@ -162,8 +162,8 @@ static func _event_text(event: InputEvent) -> String:
 
 
 static func _key_name(keycode: int) -> String:
-	var name := OS.get_keycode_string(keycode as Key)
-	return name if not name.is_empty() else "Key%d" % keycode
+	var key_text := OS.get_keycode_string(keycode as Key)
+	return key_text if not key_text.is_empty() else "Key%d" % keycode
 
 
 ## A connected joypad's name, trimmed to the part that identifies it. OS joystick
@@ -176,13 +176,13 @@ static func _key_name(keycode: int) -> String:
 static func _device_name(device: int) -> String:
 	if device < 0 or not Input.get_connected_joypads().has(device):
 		return "device %d" % device
-	var name := Input.get_joy_name(device)
+	var joy_name := Input.get_joy_name(device)
 	for prefix in ["Madcatz Saitek Pro Flight ", "Saitek Pro Flight ", "Madcatz ", "Saitek "]:
-		if name.begins_with(prefix):
-			name = name.substr(prefix.length())
+		if joy_name.begins_with(prefix):
+			joy_name = joy_name.substr(prefix.length())
 			break
 	for suffix in [" Flight Control System", " Flight Controller", " Controller", " Joystick"]:
-		if name.ends_with(suffix):
-			name = name.substr(0, name.length() - suffix.length())
+		if joy_name.ends_with(suffix):
+			joy_name = joy_name.substr(0, joy_name.length() - suffix.length())
 			break
-	return name
+	return joy_name
