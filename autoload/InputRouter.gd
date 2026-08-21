@@ -76,8 +76,10 @@ const BUILTIN_PROFILES := [
 	## Default keyboard mapping — a device-less pseudo-profile (guid "keyboard")
 	## with a `keys` array (physical keycode -> action), injected by _bind_hotas
 	## regardless of joypads. It's DATA, not hardcoded project.godot [input] events:
-	## the remapper shows it, a user keyboard.json OVERRIDES it entirely, and
-	## clearing every key in the remapper persists an empty override.
+	## the remapper shows it, a user keyboard.json overrides it key for key, and
+	## clearing every key in the remapper persists an empty override. That override
+	## is PER KEY, not wholesale: an action the file was never offered keeps its
+	## default from here (see _merge_keyboard).
 	##
 	## THE LAYOUT IS A SHAPE, NOT A PILE. Keys are reserved in contiguous blocks by
 	## function, so a pilot learns regions rather than 40 individual keys, and so a
@@ -156,6 +158,11 @@ const BUILTIN_PROFILES := [
 		],
 	},
 ]
+
+## GUID of the device-less pseudo-profile above. Not a device: its `keys` are
+## injected regardless of which joypads are connected, and a user file under this
+## GUID is merged with the built-in rather than replacing it (_merge_keyboard).
+const KEYBOARD_GUID := "keyboard"
 
 const SwitchPanelBridgeScene := preload("res://systems/hardware/SwitchPanelBridge.gd")
 const HidGlanceBridgeScene := preload("res://systems/hardware/HidGlanceBridge.gd")
@@ -237,6 +244,12 @@ func _add_hardware_bridge(bridge: Node) -> void:
 ## Shipped defaults overlaid with the user's JSON profiles: a user entry with the
 ## same GUID fully REPLACES the built-in (predictable override), a new GUID is
 ## appended. Matched by GUID in _bind_hotas() just like before.
+##
+## The keyboard profile is the one exception — it is merged, not replaced (see
+## _merge_keyboard). It carries the shipped default LAYOUT rather than one
+## device's mapping, and it is the only way to reach an action when no HOTAS is
+## plugged in, so a file written before an action existed must not leave that
+## action unreachable.
 func _effective_profiles() -> Array:
 	var by_guid: Dictionary = {}
 	var order: Array = []
@@ -248,6 +261,9 @@ func _effective_profiles() -> Array:
 		var guid := String(profile.get("guid", ""))
 		if guid.is_empty():
 			continue
+		if guid == KEYBOARD_GUID and by_guid.has(guid):
+			by_guid[guid] = _merge_keyboard(by_guid[guid], profile)
+			continue
 		if not by_guid.has(guid):
 			order.append(guid)
 		by_guid[guid] = profile
@@ -255,6 +271,55 @@ func _effective_profiles() -> Array:
 	for guid: String in order:
 		out.append(by_guid[guid])
 	return out
+
+
+## A user keyboard.json still overrides the shipped layout key for key — clearing
+## a key in the remapper has to stick, and ControlsSetup keeps a profile alive
+## with an empty `keys` array precisely so that clearing every key persists.
+##
+## What it must NOT do is silently drop an action that did not exist when the file
+## was written. A profile saved before the masters and the drive selector arrived
+## leaves a keyboard pilot with no way to switch the bus back on or start the
+## drive, and the AFTER LANDING checklist calls for all three OFF — so the trap is
+## sprung by flying the procedure correctly, and nothing on any display says why.
+##
+## So a shipped default is re-added only when all three hold:
+##   * the file's `known_actions` does not list it — the remapper writes every row
+##     it offered, so an action missing from that list is one the pilot was never
+##     given the chance to bind, not one they cleared;
+##   * the file does not already bind the action; and
+##   * the default's key is still free — a default whose key the pilot reassigned
+##     is left out rather than double-bound to two actions.
+##
+## A file predating `known_actions` is treated as having been offered nothing,
+## which is what repairs the profiles already on disk. The cost is one-time and
+## visible: a key cleared before that field existed comes back once, until the
+## next SAVE writes the field. A softlock nobody can diagnose is the worse half of
+## that trade.
+func _merge_keyboard(builtin: Dictionary, user: Dictionary) -> Dictionary:
+	var merged := user.duplicate(true)
+	var keys: Array = merged.get("keys", [])
+	var offered: Dictionary = {}
+	for action: Variant in user.get("known_actions", []):
+		offered[String(action)] = true
+	var bound: Dictionary = {}
+	var taken: Dictionary = {}
+	for spec: Dictionary in keys:
+		bound[String(spec["action"])] = true
+		taken[int(spec["key"])] = true
+	for spec: Dictionary in builtin.get("keys", []):
+		var action := String(spec["action"])
+		if offered.has(action) or bound.has(action):
+			continue
+		var key := int(spec["key"])
+		if taken.has(key):
+			push_warning(("InputRouter: %s has no binding and its default key is " +
+					"already in use; bind it in the remapper (F7)") % action)
+			continue
+		keys.append({"key": key, "action": action})
+		taken[key] = true
+	merged["keys"] = keys
+	return merged
 
 
 ## The effective (built-in + user override) profile for a GUID, or {} if none.
@@ -361,7 +426,7 @@ func _bind_hotas() -> void:
 	# more — every key mapping comes from here — so inject them regardless of which
 	# joypads are connected.
 	for profile: Dictionary in profiles:
-		if String(profile.get("guid", "")) != "keyboard":
+		if String(profile.get("guid", "")) != KEYBOARD_GUID:
 			continue
 		for spec: Dictionary in profile.get("keys", []):
 			var event := InputEventKey.new()

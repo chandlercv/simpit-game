@@ -520,8 +520,9 @@ but have no gameplay effect yet.
 A default keyboard mapping **ships as a built-in profile** (the `keyboard` entry
 in `BUILTIN_PROFILES`, `autoload/InputRouter.gd`) — it's *data*, not hardcoded
 `project.godot` keys, so the remapper shows it and a user profile
-(`user://input_profiles/keyboard.json`) can override or clear any of it. The
-defaults:
+(`user://input_profiles/keyboard.json`) can override or clear any of it, key by
+key. A control added to the game after you last saved keeps its default here
+rather than arriving unbound — see *Remapping the controls* below. The defaults:
 
 The map is laid out in **blocks by function**, so you learn regions rather than
 forty separate keys — and so a new control has an obvious home instead of landing
@@ -631,7 +632,11 @@ unlike device index) and there are three layers, in precedence order:
   nub can't hold an allocation, so those take an axis, buttons, or the switch
   panel). **SAVE** writes the profile(s) and rebinds live
   (no restart). Always-held mode-selector buttons are refused; **Esc** cancels an
-  in-progress bind. (Capture picks whichever control moves most from where it sat
+  in-progress bind. **A key or button another row already uses still binds** —
+  you pass through that state constantly while rearranging a layout — but the
+  status line names the row it collides with, and *both* rows turn amber and read
+  **(clash)** until you move one of them. Two rows on one control means one press
+  fires both. (Capture picks whichever control moves most from where it sat
   at bind, so a throttle can rest anywhere — just let a spring-loaded stick axis
   recenter first.) Glance from the X55 hat is raw-HID and always on, so its rows
   are blank by design.
@@ -640,11 +645,16 @@ unlike device index) and there are three layers, in precedence order:
   mail theirs back; drop it in the folder). A user profile **overrides** the
   built-in with the same GUID, or adds a brand-new device. Keyboard bindings live
   in the same folder as a device-less `keyboard.json` (GUID `keyboard`) carrying a
-  `keys` array — see the schema below.
+  `keys` array — see the schema below. The keyboard file overrides the shipped
+  layout **key by key**, not wholesale: a key you cleared stays cleared, but an
+  action your file never mentions *and was never offered* (because it was added to
+  the game after the file was written) keeps its shipped default, so a new control
+  can't strand a returning pilot with no way to reach it.
 - **Built-in defaults.** The shipped X52/X55 mappings **and the default keyboard
   mapping** are the `BUILTIN_PROFILES` constant at the top of
   `autoload/InputRouter.gd` (the keyboard one is the device-less `keyboard`
-  entry); a matching user profile wins (`_effective_profiles()` merges the two).
+  entry); a matching user profile wins (`_effective_profiles()` merges the two —
+  wholesale for a device, key by key for the keyboard).
   Gameplay code never sees hardware
   numbers — bindings are injected into the Input Map at startup and on each replug.
 
@@ -654,7 +664,8 @@ A profile entry (the file and `BUILTIN_PROFILES` share one schema) has these key
 | --- | --- |
 | `axes` | Analog axes → a pair of direction actions, e.g. `{"axis": 1, "neg": "pitch_down", "pos": "pitch_up"}`. Swap `neg`/`pos` (or hit **REV**) to reverse. |
 | `buttons` | Momentary buttons → one action, e.g. `{"button": 0, "action": "ops_cut"}`. |
-| `keys` | **Keyboard keys → one action** (only on the device-less `keyboard` profile), e.g. `{"key": 67, "action": "ops_cut"}`. `key` is a Godot physical keycode. The shipped default keyboard mapping is the built-in `keyboard` profile; a user `keyboard.json` overrides it. |
+| `keys` | **Keyboard keys → one action** (only on the device-less `keyboard` profile), e.g. `{"key": 67, "action": "ops_cut"}`. `key` is a Godot physical keycode. The shipped default keyboard mapping is the built-in `keyboard` profile; a user `keyboard.json` overrides it key by key (see `known_actions`). |
+| `known_actions` | Written by the remapper on the `keyboard` profile: every action it offered a row for when the file was saved. It's how the game tells an action you **cleared** (listed, unbound — stays cleared) from one that simply **didn't exist yet** (not listed — gets its shipped key back). A hand-written file can omit it; every shipped default you left out then comes back, unless its key is taken. |
 | `throttle` | The one axis read directly. Two curves, toggled by **MODE** in the remapper: **Lever** (default) — a one-directional lever that rests anywhere, rescaled to 0..1. General form `{"axis": 2, "idle": 1.0, "full": -1.0}` fits any rest/travel range and direction; the legacy X52 form `{"axis": 2, "idle_deadzone": 0.95}` still works. **Gamepad** — `{"axis": 2, "mode": "gamepad", "invert": false}`, for a self-centering stick/trigger axis: raw value is the command directly, 0 at center, ±1 at the stops. |
 | `hid_axes` | A **raw-HID virtual axis** → a direction pair, e.g. `{"source": "x52_mouse_x", "neg": "yaw_left", "pos": "yaw_right"}`. Sources: `x52_mouse_x`, `x52_mouse_y` — the X52 throttle's mouse nub, which Godot doesn't expose as joystick axes (see below). |
 | `reserved_buttons` | Documentation only — selector-position banks where one button is always held. Never bind an action to these. |
@@ -788,3 +799,5 @@ running game predates a change.
 | `ManualExport.tscn` | Renders both of the ship's documents to print-styled HTML (`godot --headless res://tools/ManualExport.tscn ++ [out_dir]`, default `build/manuals`). It runs in Godot rather than parsing the catalogs externally because resolving the binding placeholders needs the live Input Map — it instantiates the real `ManualViewer` off-tree and calls its own resolver. `tools/build_manuals.ps1` runs this and then prints the HTML to PDF with headless Chrome or Edge. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |
 | `AxisKeyNormalizeSmoke.tscn` | Headless smoke for the remapper's axis-key normalization: a saved axis/nub spec listed in the swapped (REV-encoded) order folds back to its row's canonical key with reverse set, so it stays visible on its row instead of vanishing under a phantom key. |
+| `BindClashSmoke.tscn` | Headless smoke for the remapper's shared-control detection: a key or button another row already holds still binds, but the capture names that row, **both** rows carry the `(clash)` mark that tints them, rebinding a row to the key it already has isn't a clash, and the same button index on a *different* stick isn't either. |
+| `KeyboardMergeSmoke.tscn` | Headless smoke for the keyboard profile merge: a saved `keyboard.json` overrides the shipped layout key by key, a key you cleared stays cleared, a default whose key you reassigned is skipped rather than double-bound, and an action added since the file was written gets its shipped key back — so a new control can't leave a returning pilot unable to reach the masters or the drive selector. |

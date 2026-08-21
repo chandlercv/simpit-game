@@ -99,6 +99,14 @@ func _is_valid_profile(profile: Dictionary, path: String) -> bool:
 	# keycode -> action); validated here so a bad file can't crash the injector.
 	if not _valid_specs(profile, "keys", ["key", "action"], path):
 		return false
+	# It also carries "known_actions", a flat array of the action names the remapper
+	# offered when the file was written (InputRouter._merge_keyboard reads it to tell
+	# a cleared bind from one that postdates the file). Entries are names, not specs,
+	# so _valid_specs does not fit — but the shape still has to be an Array, because
+	# the merge iterates it.
+	if profile.has("known_actions") and typeof(profile["known_actions"]) != TYPE_ARRAY:
+		push_warning("InputConfig: %s has a non-array \"known_actions\" — skipped" % path)
+		return false
 	return true
 
 
