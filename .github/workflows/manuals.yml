@@ -49,9 +49,14 @@ jobs:
     # means build_manuals.ps1 finds Chrome or Edge at the install paths it looks
     # in, and that CI takes the same code path a contributor takes locally.
     runs-on: windows-latest
+    # A cold print is about four minutes. The ceiling is here because the
+    # failure mode of this job is a hang, not a crash: anything that stops
+    # ManualExport reaching its quit leaves headless Godot spinning, and the
+    # 6-hour default would let it.
+    timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Godot ${{ env.GODOT_VERSION }}
         shell: pwsh
@@ -60,38 +65,54 @@ jobs:
           Invoke-WebRequest $url -OutFile godot.zip
           Expand-Archive godot.zip -DestinationPath godot-bin
 
-          # build_manuals.ps1 looks for `godot_console` first and `godot` second.
-          # Both go in one directory under exactly those names: the console
-          # wrapper launches its sibling by stripping `_console` from its own
-          # filename, so the pair has to stay together and stay matched.
+          # Both binaries go in one directory under exactly these names:
+          # build_manuals.ps1 looks for `godot_console` first and `godot` second,
+          # and the console wrapper launches its sibling by stripping `_console`
+          # from its own filename, so the pair has to stay together and matched.
+          #
+          # The console build is required, not preferred -- see the import step.
           $dir = (Resolve-Path godot-bin).Path
           $console = Get-ChildItem $dir -Filter '*_console.exe' | Select-Object -First 1
           $gui = Get-ChildItem $dir -Filter '*.exe' |
               Where-Object { $_.Name -notlike '*_console.exe' } | Select-Object -First 1
           if (-not $gui) { throw "no Godot executable unpacked into $dir" }
+          if (-not $console) { throw "no Godot console executable unpacked into $dir" }
           Move-Item $gui.FullName (Join-Path $dir 'godot.exe')
-          if ($console) { Move-Item $console.FullName (Join-Path $dir 'godot_console.exe') }
+          Move-Item $console.FullName (Join-Path $dir 'godot_console.exe')
 
           Add-Content -Path $env:GITHUB_PATH -Value $dir
-          & (Join-Path $dir 'godot.exe') --headless --version
+          & (Join-Path $dir 'godot_console.exe') --headless --version
 
       - name: Import project resources
         shell: pwsh
         run: |
           # .godot/ is gitignored, so a fresh checkout has never imported the
-          # fonts and scenes that ManualExport pulls in through the real
-          # ManualViewer. Skip this and the export writes no HTML, and the next
-          # step trips the script's own "wrote no HTML" guard.
+          # project. What that costs is not just the fonts and scenes: the import
+          # is also what writes .godot/global_script_class_cache.cfg, and without
+          # it no `class_name` global resolves. GameState then fails to parse,
+          # every autoload reading it sees Nil and throws once per frame, and
+          # ManualExport never reaches its quit -- so the run HANGS rather than
+          # failing, which is what the job timeout above is for.
           #
-          # Godot's exit code is not worth reading here (the same reason
-          # build_manuals.ps1 judges its Godot step by what it produced); let the
-          # print step be the real check.
+          # It must be godot_console. The plain godot.exe is a GUI-subsystem
+          # binary that detaches and returns in about 20 ms, so the step looks
+          # clean having imported nothing at all -- measured, not guessed.
+          # build_manuals.ps1 documents this same trap and picks the console
+          # build for the same reason.
           $PSNativeCommandUseErrorActionPreference = $false
-          godot --headless --path . --import
+          godot_console --headless --path . --import
+
+          # Judge the import by what it produced rather than by its exit code,
+          # the way build_manuals.ps1 judges its own stages. This is the check
+          # that would have caught the silent no-op above.
+          if (-not (Test-Path .godot/global_script_class_cache.cfg)) {
+            throw "no global script class cache after import -- class_name globals will not resolve"
+          }
           exit 0
 
       - name: Print both documents
         shell: pwsh
+        timeout-minutes: 10
         run: |
           # build_manuals.ps1 deliberately judges each stage by the file it
           # produced rather than by an exit code -- neither the GUI-subsystem

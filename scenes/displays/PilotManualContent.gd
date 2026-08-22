@@ -170,8 +170,8 @@ To engage, the throttle must be below 40% travel. Above that the engagement is r
 The autopilot flies on the drive, and is refused outright with the drive shut down, unstarted, or selected to a stage that has no propellant:
 [i]"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)"[/i]
 
-It flies on the THRUST channel as well, and the two are separate conditions — the drive stages turn on whether or not the bus is still supplying them. With nothing delivered against the channel, the allocation at zero or the supply gone, the engagement is refused:
-[i]"APPROACH INHIBITED — THRUST CHANNEL UNPOWERED (RAISE THE ALLOCATION)"[/i]
+It flies on the THRUST channel as well, and the two are separate conditions — the drive stages turn on whether or not the bus is still supplying them. The autopilot requires [b]0.05[/b] delivered against the channel. Below that — the allocation wound down, or the supply gone — the engagement is refused:
+[i]"APPROACH INHIBITED — THRUST CHANNEL BELOW 5% (RAISE THE ALLOCATION)"[/i]
 
 The autopilot disengages and returns control to the pilot on any lateral, vertical or attitude demand beyond 0.2 deflection, on throttle movement beyond the 40% band, or on collision:
 [i]"AUTOPILOT DISENGAGED — MANUAL CONTROL"[/i]
@@ -179,8 +179,10 @@ The autopilot disengages and returns control to the pilot on any lateral, vertic
 Both conditions are held throughout, not only at engagement. Shutting the drive down, or selecting START, while it is flying disengages it:
 [i]"AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST"[/i]
 
-Losing the THRUST supply while it is flying — the alternator off with the battery flat, or the allocation wound down to zero — disengages it in the same way:
-[i]"AUTOPILOT DISENGAGED — THRUST CHANNEL UNPOWERED"[/i]
+Losing the THRUST supply while it is flying — the alternator off with the battery flat, or the allocation wound below 0.05 — disengages it in the same way:
+[i]"AUTOPILOT DISENGAGED — THRUST CHANNEL BELOW 5%"[/i]
+
+[color=#8c9eb8]NOTE — The closing rate is scaled by what the channel delivers, so an allocation just above the minimum arrives slowly. The floor is the point below which the drive can no longer make the approach the autopilot would fly, and hand-flying is no better off there: manual thrust is scaled by the same figure.[/color]
 
 [color=#f2bf59]CAUTION — However it is disengaged, the standoff is given up with it.[/color] MATCHED is the range condition for the torch, so an alignment or a cut in progress ends at the same instant, and the cut's progress is not retained.
 
