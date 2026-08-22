@@ -216,6 +216,17 @@ real reader so a printed step names the control you actually have bound. Output
 lands in `build/manuals/` and is gitignored — the catalogs are the source of
 truth, and a committed PDF would be a third in-tree copy of every figure in them.
 
+**Both publish.** Pushing a `v*` tag runs
+[.github/workflows/manuals.yml](.github/workflows/manuals.yml), which prints both
+documents from a clean checkout and attaches them to that GitHub release, so the
+current pair is downloadable without a Godot install:
+[pilot's manual](https://github.com/chandlercv/simpit-game/releases/latest/download/pilots-manual.pdf)
+and
+[terminal procedures](https://github.com/chandlercv/simpit-game/releases/latest/download/terminal-procedures.pdf)
+— both links always resolve to the newest release. To proof a catalog change
+before tagging, run the workflow by hand from the Actions tab: it builds the same
+two PDFs and attaches them to the run instead of to a release.
+
 ---
 
 ## Core gameplay loop

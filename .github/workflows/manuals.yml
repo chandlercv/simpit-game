@@ -1,0 +1,123 @@
+# Print the ship's two documents and publish them as release assets.
+#
+# The PDFs are build output, not tree content: the two chapter catalogs are the
+# source of truth (see CLAUDE.md), so a committed PDF would be a third in-tree
+# copy of every figure in them. A release asset keeps them off the tree while
+# still giving each one a permanent public link:
+#
+#   https://github.com/chandlercv/simpit-game/releases/latest/download/pilots-manual.pdf
+#   https://github.com/chandlercv/simpit-game/releases/latest/download/terminal-procedures.pdf
+#
+# Push a `v*` tag to publish. Run it by hand (Actions -> Manuals -> Run workflow)
+# to build the same two PDFs as a downloadable run artifact without cutting a
+# release -- that is how to proof a change to the catalogs before tagging.
+
+name: Manuals
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write # gh release create / upload
+
+env:
+  # Bump these together, and keep them on the editor the project is built with
+  # (project.godot, config/features -> "4.7").
+  GODOT_VERSION: 4.7-stable
+  GODOT_ZIP: Godot_v4.7-stable_win64.exe.zip
+
+jobs:
+  manuals:
+    # Windows is required, not merely convenient. addons/hid declares a single
+    # library -- windows.x86_64 -- and the only binary committed for it is the
+    # Windows DLL, so the project's autoloads cannot load anywhere else. It also
+    # means build_manuals.ps1 finds Chrome or Edge at the install paths it looks
+    # in, and that CI takes the same code path a contributor takes locally.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}
+        shell: pwsh
+        run: |
+          $url = "https://github.com/godotengine/godot/releases/download/${env:GODOT_VERSION}/${env:GODOT_ZIP}"
+          Invoke-WebRequest $url -OutFile godot.zip
+          Expand-Archive godot.zip -DestinationPath godot-bin
+
+          # build_manuals.ps1 looks for `godot_console` first and `godot` second.
+          # Both go in one directory under exactly those names: the console
+          # wrapper launches its sibling by stripping `_console` from its own
+          # filename, so the pair has to stay together and stay matched.
+          $dir = (Resolve-Path godot-bin).Path
+          $console = Get-ChildItem $dir -Filter '*_console.exe' | Select-Object -First 1
+          $gui = Get-ChildItem $dir -Filter '*.exe' |
+              Where-Object { $_.Name -notlike '*_console.exe' } | Select-Object -First 1
+          if (-not $gui) { throw "no Godot executable unpacked into $dir" }
+          Move-Item $gui.FullName (Join-Path $dir 'godot.exe')
+          if ($console) { Move-Item $console.FullName (Join-Path $dir 'godot_console.exe') }
+
+          Add-Content -Path $env:GITHUB_PATH -Value $dir
+          & (Join-Path $dir 'godot.exe') --headless --version
+
+      - name: Import project resources
+        shell: pwsh
+        run: |
+          # .godot/ is gitignored, so a fresh checkout has never imported the
+          # fonts and scenes that ManualExport pulls in through the real
+          # ManualViewer. Skip this and the export writes no HTML, and the next
+          # step trips the script's own "wrote no HTML" guard.
+          #
+          # Godot's exit code is not worth reading here (the same reason
+          # build_manuals.ps1 judges its Godot step by what it produced); let the
+          # print step be the real check.
+          $PSNativeCommandUseErrorActionPreference = $false
+          godot --headless --path . --import
+          exit 0
+
+      - name: Print both documents
+        shell: pwsh
+        run: |
+          # build_manuals.ps1 deliberately judges each stage by the file it
+          # produced rather than by an exit code -- neither the GUI-subsystem
+          # Godot build nor headless Chrome reports one reliably. Turn off
+          # PowerShell 7.4's native-command error mapping so a stray exit code
+          # cannot pre-empt those checks.
+          $PSNativeCommandUseErrorActionPreference = $false
+          ./tools/build_manuals.ps1
+
+          $pdfs = @(Get-ChildItem build/manuals -Filter *.pdf)
+          if ($pdfs.Count -lt 2) { throw "expected two PDFs, got $($pdfs.Count)" }
+          $pdfs | ForEach-Object { '{0}  {1:N0} bytes' -f $_.Name, $_.Length }
+          exit 0
+
+      - name: Attach the PDFs to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A failing `gh release view` is the ordinary path for a fresh tag, so
+          # don't let PowerShell turn that exit code into a terminating error.
+          $PSNativeCommandUseErrorActionPreference = $false
+          $tag = $env:GITHUB_REF_NAME
+          $pdfs = @(Get-ChildItem build/manuals -Filter *.pdf).FullName
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $pdfs --clobber
+          } else {
+            gh release create $tag $pdfs --title $tag --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw "gh exited $LASTEXITCODE" }
+
+      - name: Upload the PDFs as a run artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: manuals
+          path: build/manuals/*.pdf
+          if-no-files-found: error
