@@ -739,12 +739,12 @@ func _set_risk(risk: float) -> void:
 ## Hand the ship back to the pilot from a flying autopilot. However the standoff
 ## is given up, it is given up whole: an alignment or a cut in progress rests on
 ## the match and ends with it, so all three go together. `reason` is what the
-## salvage aborts quote; `call` is the OPS line for the disengagement itself.
-func _disengage_approach(reason: String, call: String) -> void:
+## salvage aborts quote; `ops_call` is the OPS line for the disengagement itself.
+func _disengage_approach(reason: String, ops_call: String) -> void:
 	_abort_align(reason)
 	_abort_cut(reason)
 	_set_approach("HOLDING")
-	GameState.post_comms("OPS", call)
+	GameState.post_comms("OPS", ops_call)
 
 
 func _set_approach(state: String) -> void:
