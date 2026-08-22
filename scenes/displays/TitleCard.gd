@@ -388,9 +388,24 @@ func _display_status_text() -> String:
 		"%d screen%s   %s" % [count, "" if count == 1 else "s", "  ".join(parts)]]
 	if DisplayConfig.needs_setup_prompt():
 		lines.append("not assigned for this monitor setup yet — LAUNCH asks first")
-	elif count < DisplayConfig.ALL_ROLES.size():
+	elif _has_shared_screen():
 		lines.append(_sharing_status())
 	return "\n".join(lines)
+
+
+## True if two or more roles are assigned to the same physical screen. Checked
+## directly against the role→screen assignments rather than by comparing
+## screen count to role count — assignment is manual, so a rig with enough
+## screens for one role each can still have the player put two roles on one
+## screen and leave another spare.
+func _has_shared_screen() -> bool:
+	var seen: Dictionary = {}
+	for role in DisplayConfig.ALL_ROLES:
+		var screen: int = DisplayConfig.get_screen_for_role(role)
+		if seen.has(screen):
+			return true
+		seen[screen] = true
+	return false
 
 
 ## What LAUNCH will actually do with a screen that carries more than one role:

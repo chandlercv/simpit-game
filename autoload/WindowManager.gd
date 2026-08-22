@@ -301,6 +301,11 @@ func _spawn_window(role: String, rect: Rect2i) -> void:
 	var packed: PackedScene = load(SECONDARY_SCENES[role])
 	var win: Window = packed.instantiate()
 	win.title = "Salvager — %s" % role.capitalize()
+	# A freshly instantiated secondary Window can come up MODE_MAXIMIZED on
+	# Windows regardless of scene authoring — geometry written to a maximized
+	# window is ignored (same gotcha _position_main_window already guards
+	# against for the Main window), so force windowed before touching rect.
+	win.mode = Window.MODE_WINDOWED
 	win.borderless = true
 	# Tiles are placed, not dragged: Aero Snap on a focused borderless window
 	# would otherwise let a stray Win+Arrow pull one out of its rect.
@@ -315,6 +320,9 @@ func _spawn_window(role: String, rect: Rect2i) -> void:
 func _spawn_packed_window(roles: Array, rect: Rect2i) -> void:
 	var win := Window.new()
 	win.title = "Salvager — " + _roles_title(roles)
+	# See _spawn_window: a fresh secondary Window can come up MODE_MAXIMIZED on
+	# Windows, which ignores any position/size written to it.
+	win.mode = Window.MODE_WINDOWED
 	win.borderless = true
 	win.unresizable = true
 	win.initial_position = Window.WINDOW_INITIAL_POSITION_ABSOLUTE
