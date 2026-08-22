@@ -162,17 +162,25 @@ The approach autopilot is the only autopilot fitted; the stability augmentation 
 
 [color=#f2bf59]CAUTION — The autopilot translates only. It will not turn the ship,[/color] and it cannot match the derelict's rotation. Pointing the ship at the member remains a pilot task throughout.
 
+It flies on the drive and draws propellant to do it, at the same rate the same burn would cost flown by hand. The approach and the braking are the expense; the standoff itself is small, and rises with the rate the frame is turning at. Plan a claim on the state of the tanks, not on the number of members. See [b]Drive & propellant[/b].
+
 To engage, the throttle must be below 40% travel. Above that the engagement is refused:
 [i]"APPROACH INHIBITED — THROTTLE PAST 40%, EASE BACK TO ARM"[/i]
 
 The autopilot flies on the drive, and is refused outright with the drive shut down, unstarted, or selected to a stage that has no propellant:
 [i]"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)"[/i]
 
+It flies on the THRUST channel as well, and the two are separate conditions — the drive stages turn on whether or not the bus is still supplying them. With nothing delivered against the channel, the allocation at zero or the supply gone, the engagement is refused:
+[i]"APPROACH INHIBITED — THRUST CHANNEL UNPOWERED (RAISE THE ALLOCATION)"[/i]
+
 The autopilot disengages and returns control to the pilot on any lateral, vertical or attitude demand beyond 0.2 deflection, on throttle movement beyond the 40% band, or on collision:
 [i]"AUTOPILOT DISENGAGED — MANUAL CONTROL"[/i]
 
-It flies on the drive throughout, not only at engagement. Shutting the drive down, or selecting START, while it is flying disengages it in the same way:
+Both conditions are held throughout, not only at engagement. Shutting the drive down, or selecting START, while it is flying disengages it:
 [i]"AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST"[/i]
+
+Losing the THRUST supply while it is flying — the alternator off with the battery flat, or the allocation wound down to zero — disengages it in the same way:
+[i]"AUTOPILOT DISENGAGED — THRUST CHANNEL UNPOWERED"[/i]
 
 [color=#f2bf59]CAUTION — However it is disengaged, the standoff is given up with it.[/color] MATCHED is the range condition for the torch, so an alignment or a cut in progress ends at the same instant, and the cut's progress is not retained.
 
@@ -185,7 +193,7 @@ It flies on the drive throughout, not only at engagement. Shutting the drive dow
 		"body": """The reactor is always lit. The [b]alternator[/b] turns its output into electricity for the bus; the [b]battery[/b] buffers the difference between what the alternator makes and what the ship is drawing. Electricity is divided between four channels, each allocated between [b]0.00[/b] and [b]1.00[/b] on an MFD [b]POWER[/b] page.
 
 [color=#66ccff]CHANNELS[/color]
-[b]THRUST[/b] — supplies the drive and the approach autopilot. At zero allocation the ship will not manoeuvre.
+[b]THRUST[/b] — supplies the drive and the approach autopilot. At zero allocation the ship will not manoeuvre by hand, and the approach autopilot is refused — and gives up a standoff it is already holding.
 [b]CUTTER[/b] — supplies the cutting torch. Minimum for operation [b]0.20[/b]. A fall below 0.20 during a cut terminates it.
 [b]SENSORS[/b] — supplies the structural scan. Minimum for operation [b]0.10[/b].
 [b]LIFE[/b] — supplies the habitat. It has no bearing on the performance of any other system. Carry it at full.
@@ -253,7 +261,11 @@ Liquid hydrogen ................. [b]60 units[/b]
 Liquid oxygen ................... [b]20 units[/b]
  — boosting ..................... [b]2.0 units/s[/b] at full commanded thrust
 
-Consumption is proportional to commanded thrust. Holding station consumes nothing; a sustained burn consumes at the rated figure. Neither tank is replenished in flight.
+Consumption is proportional to commanded thrust. Holding station on the controls consumes nothing; a sustained burn consumes at the rated figure. Neither tank is replenished in flight.
+
+The approach autopilot is metered on the same rule. It flies on the drive, so closing on a member and braking at the far end are burns and are charged as such, and holding the standoff against a rotating frame is charged for as long as it is held — following a member around the wreck's centre keeps the ship under acceleration. A coast at constant velocity costs nothing, flown by hand or flown for you. At R it costs nothing at all: the field stage draws no propellant for the autopilot any more than it does for the pilot.
+
+The drive is fed from the THRUST channel, and consumption follows what that channel delivers as well as what the lever commands. With nothing delivered against it the drive is not turning propellant into thrust and none is drawn: an open lever on an unpowered bus costs neither speed nor hydrogen. See [b]Drive failures[/b].
 
 [color=#66ccff]BOOST[/color]
 {{act:drive_boost}}, held. It requires the thermal stage running and both tanks charged, and raises the maximum to [b]50 m/s[/b]. It is not a latch and releases when the control does.
@@ -288,13 +300,17 @@ The thermal stage was the only stage selected and it has nothing left to heat. T
 [color=#f2705c]WARNING — The ship is not disabled by empty tanks, but she is slow and she is running on the battery.[/color] Plan the return on the state of charge, not on the distance.
 
 [color=#66ccff]NO THRUST — BUS UNPOWERED[/color]
-Indicated by every channel delivering less than it is set to, and in the log:
+Annunciated [i]THRUST UNPOWERED[/i], with every channel delivering less than it is set to, and in the log:
 [i]"BATTERY FLAT — BUS UNPOWERED, RESTORE THE ALTERNATOR"[/i]
+
+The drive is unaffected and its stages continue to turn. It is the supply to them that has failed, so the selector is not at fault and moving it will not help.
 
 [b]1  {{sw:MASTER_ALT}}[/b] — [color=#59f28c]ON[/color]
 [b]2  {{sw:MASTER_BAT}}[/b] — [color=#59f28c]ON[/color]
 [b]3  ALLOCATION[/b] — [color=#59f28c]INSIDE THE ALTERNATOR'S OUTPUT[/color]
      [color=#8c9eb8]Reduce demand below 2.5 and allow the battery to recover before drawing on it again.[/color]
+
+[color=#8c9eb8]NOTE — The tanks are not drawn down while the bus is unpowered, whatever the lever is doing. The endurance lost to this failure is electrical, not propellant.[/color]
 
 [color=#66ccff]NO THRUST — DRIVE SHUT DOWN[/color]
 Annunciated [i]DRIVE OFF[/i].
@@ -555,7 +571,7 @@ A small number of items cannot be tested from aboard: attitude held by hand duri
 [b]Salvage markers[/b] — a diamond on each adrift piece with identification and range. With the hatch open, relative speed and a recovery ring are added, together with the governing condition.
 [b]CARGO HATCH OPEN[/b] — upper right, pulsing, whenever the hatch is open.
 [b]Gear[/b] — GEAR IN TRANSIT with percentage, then GEAR DOWN; GEAR OVERSPEED in red above 18 m/s.
-[b]Drive[/b] — IMPULSE or BOOST beside VEL while a reaction stage is burning; DRIVE with the selector position when the drive is not making its rated thrust; LH2 DEPLETED, pulsing, with the hydrogen tank empty.
+[b]Drive[/b] — IMPULSE or BOOST beside VEL while a reaction stage is burning; DRIVE with the selector position when the drive is not making its rated thrust; THRUST UNPOWERED when the channel is delivering nothing to it; LH2 DEPLETED, pulsing, with the hydrogen tank empty.
 [b]ATC[/b] — the standing instruction during an approach, with altitude and sink rate on final.
 
 [color=#8c9eb8]NOTE — Electrical loading, the state of charge and the contents of the tanks are not repeated on the flight HUD. They are presented on the MFD POWER page, which carries demand against the alternator's output, the battery and which way it is going, the selector position and both tank levels. Hull condition is on the Tactical SCOPE.[/color]""",

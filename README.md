@@ -115,11 +115,13 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   drive is making its rated thrust. **IMPULSE** or **BOOST** appears beside the
   **VEL** readout while a reaction stage is burning, so spending propellant is
   never silent; **DRIVE R / L / STARTING / OFF** names the selector position when
-  it isn't making full thrust; and a pulsing red **LH2 DEPLETED** calls the empty
+  it isn't making full thrust; red **THRUST UNPOWERED** calls a THRUST channel
+  delivering nothing, which the drive's own state can't show you (the stages keep
+  turning on a dead bus); and a pulsing red **LH2 DEPLETED** calls the empty
   hydrogen tank, which costs 60% of the ship's acceleration and is not something
-  to discover on short final. There are two quite different ways to end up with
-  no thrust — a shut-down drive and a dead bus — and they read differently on
-  purpose.
+  to discover on short final. There are three quite different ways to end up with
+  no thrust — a shut-down drive, a dead bus and a dry tank — and they read
+  differently on purpose.
 - **Assist annunciator** — under the gear indicator, and *silent while nominal*
   (an annunciator that's always lit tells you nothing). Reads **ASSIST OFF** when
   you've switched the stability augmentation off yourself, or **ASSIST DEGRADED
@@ -244,12 +246,20 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
    on it. The match belongs to that member: **select a different target and you
    drop back to `HOLDING` and must re-arm the approach to reposition** onto the new
    one.
+   *The autopilot flies on the drive and **burns propellant to do it** — closing
+   and braking are charged at the rate the same burn would cost by hand, and
+   holding the standoff against a tumbling frame costs a trickle more for as long
+   as you hold it. A coast at constant velocity is free either way.*
    *The throttle must be eased back under ~40% to arm the autopilot, the drive
    has to actually be making thrust (it flies on the drive, so a shut-down drive
    or a dry hydrogen tank on `L` refuses the engagement, and shutting the drive
-   down while it's flying disengages it), and any real stick/throttle input while
-   it's flying hands control back to you. However you lose it, you lose the
-   standoff with it — and any alignment or cut in progress ends there.*
+   down while it's flying disengages it), the **THRUST channel has to be
+   delivering** (it flies on the amps too, and the stages keep turning on a bus
+   that's stopped feeding them — so a zero allocation, or an alternator off with
+   a flat battery, refuses the engagement and disengages it mid-approach), and
+   any real stick/throttle input while it's flying hands control back to you.
+   However you lose it, you lose the standoff with it — and any alignment or cut
+   in progress ends there.*
 4. **Power the cutter.** Raise the **CUTTER** power channel to at least 0.2 on
    an MFD **POWER** page.
 5. **Align the cutting head.** With the approach `MATCHED`, fire the cutter to
@@ -782,7 +792,7 @@ running game predates a change.
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
-| `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
+| `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; a drive shutdown or a dead THRUST channel under a flying autopilot disengages it; a flown approach is charged propellant like the burn it is, and a settled standoff isn't; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
 | `FlightSmoke.tscn` | Headless smoke for the flight model's **failure** cases — the ones a working fly-by-wire hides. A perfect assist is indistinguishable from the old no-momentum model, so these drive authority *down* and assert the residual survives: a spin imparted at zero authority keeps turning the ship, a switched-off assist leaves drift alone, direct thruster torque still flies a dead-stick ship, and the alignment interlock refuses (and aborts) below half authority. |
 | `GjkFuzz.tscn` | Property + differential fuzz for the hand-rolled GJK narrowphase, over ~12,800 randomised queries against eight hull families — including the degenerate ones the game really registers (coplanar panels and bay walls, the thin berth-floor slab, collinear/duplicate vertices from a bake). Every result must sit inside an exact bracket (never nearer than the hull's bounding box, never further than its closest vertex), must be invariant under rigid transforms, and must agree with **Godot's own convex collision** on the overlap verdict. The bracket is precisely the property the flat-slab bug violated: with the fix reverted it reports 0 m where the truth is 5.8 m. |
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
@@ -795,7 +805,7 @@ running game predates a change.
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
 | `ChecklistSmoke.tscn` | Headless smoke for the MFD **CHECKLIST** page: the catalog is well-formed and carries all four procedures with contiguous sections; **every live read is called against real state** and must return a status and a value (so a renamed `GameState` field fails the build instead of blanking a row); rows follow the ship when the real intents are driven (hatch, gear travel, power channels); a limit is **read from the constant that enforces it** rather than transcribed; no live row can be hand-ticked, and RESET / a site reset clear the ones that can; and the shared vertical budget holds — each checklist reserve fits its rows at the current type scale, and the DOCK / SCOOP / ALIGN pages still draw on a unit far smaller than any real MFD. |
 | `PowerSmoke.tscn` | Headless smoke for the alternator/battery power model: channel switches drive their mapped channel; a surplus charges the battery and a deficit discharges it; ALT off runs the ship off the battery until it's flat; BAT off caps delivery at the alternator's output; and — the assertion that matters most — **an electrical condition changes what is delivered and never what is set**, with edits made on a dark ship surviving and taking effect on restoration. Passive-scanner visibility still halves per master off. |
-| `PropellantSmoke.tscn` | Headless smoke for the hybrid drive: each selector position's thrust and ceiling; burn metered by commanded thrust; boost drawing on both tanks and refused without either; the starter (10 s at START, and **no thrust until the selector leaves it**); the electrical coupling that makes a dry tank a bus problem too; and buying propellant at a berth. It exists to pin down **the no-automatic-reversion rule** — at `L` with a dry hydrogen tank the ship makes no thrust at all, and nothing helpfully falls back for you. |
+| `PropellantSmoke.tscn` | Headless smoke for the hybrid drive: each selector position's thrust and ceiling; burn metered by commanded thrust **and only to the extent the THRUST channel delivers it** (an open lever on a dead bus costs neither speed nor hydrogen); the same meter charging a burn the approach autopilot flies kinematically, measured as delta-v against what the drive could make; boost drawing on both tanks and refused without either; the starter (10 s at START, and **no thrust until the selector leaves it**); the electrical coupling that makes a dry tank a bus problem too; and buying propellant at a berth. It exists to pin down **the no-automatic-reversion rule** — at `L` with a dry hydrogen tank the ship makes no thrust at all, and nothing helpfully falls back for you. |
 | `ManualExport.tscn` | Renders both of the ship's documents to print-styled HTML (`godot --headless res://tools/ManualExport.tscn ++ [out_dir]`, default `build/manuals`). It runs in Godot rather than parsing the catalogs externally because resolving the binding placeholders needs the live Input Map — it instantiates the real `ManualViewer` off-tree and calls its own resolver. `tools/build_manuals.ps1` runs this and then prints the HTML to PDF with headless Chrome or Edge. |
 | `PowerNudgeSmoke.tscn` | Headless smoke for driving a power channel from the remapper rows: an analog axis acts as a slider, a digital key/button nudges the channel per press, and a bound-but-idle digital event never pegs it to the midpoint. |
 | `AxisKeyNormalizeSmoke.tscn` | Headless smoke for the remapper's axis-key normalization: a saved axis/nub spec listed in the swapped (REV-encoded) order folds back to its row's canonical key with reverse set, so it stays visible on its row instead of vanishing under a phantom key. |

@@ -302,16 +302,23 @@ func _draw_assist_indicator() -> void:
 
 
 ## Drive state, stacked under the assist annunciator. Silent while the drive is
-## making its rated thrust. There are two quite different ways to end up with no
-## thrust — the selector at OFF, or the thermal stage starved of hydrogen — and a
-## pilot has to be able to tell them apart, so each says which it is instead of a
-## shared "no thrust" light. LH2 DEPLETED pulses because it is the one that
-## arrives without being asked for and costs most of the ship's acceleration.
+## making its rated thrust. There are three quite different ways to end up with no
+## thrust — the selector at OFF, the THRUST channel delivering nothing, or the
+## thermal stage starved of hydrogen — and a pilot has to be able to tell them
+## apart, so each says which it is instead of a shared "no thrust" light. The
+## electrical case is read from what is DELIVERED, not from the drive: the stages
+## keep turning on a dead bus, so nothing else here would show it. It is ranked
+## above the tank because it is the one that leaves no thrust at all. LH2 DEPLETED
+## pulses because it is the one that arrives without being asked for and costs
+## most of the ship's acceleration.
 func _draw_drive_indicator() -> void:
 	var text := ""
 	var color := SALVAGE_COLOR
 	if not GameState.drive_live():
 		text = "DRIVE %s" % ("STARTING" if GameState.drive_starting() else GameState.drive_mode)
+	elif GameState.power("THRUST") <= 0.0:
+		text = "THRUST UNPOWERED"
+		color = THREAT_COLOR
 	elif GameState.lh2_fuel <= 0.0:
 		text = "LH2 DEPLETED"
 		color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))

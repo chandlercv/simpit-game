@@ -32,6 +32,7 @@ func _run() -> void:
 	_test_dry_tanks(def)
 	_test_boost(def)
 	await _test_burn(def)
+	_test_kinematic_burn(def)
 	await _test_starter(def)
 	_test_electrical_coupling(def)
 	_test_purchase(def)
@@ -131,7 +132,10 @@ func _test_boost(def: ShipDefinition) -> void:
 # --- Burn accounting --------------------------------------------------------
 
 ## Burn is metered by COMMANDED thrust, so holding station beside a wreck is
-## nearly free and a hard burn is not. Boost draws on both tanks at once.
+## nearly free and a hard burn is not. Boost draws on both tanks at once. What is
+## commanded is metered only to the extent it is DELIVERED, so a dead bus burns
+## nothing. A burn the autopilot flies kinematically is charged too — see
+## _test_kinematic_burn.
 func _test_burn(_def: ShipDefinition) -> void:
 	_fill()
 	_start_drive()
@@ -158,6 +162,95 @@ func _test_burn(_def: ShipDefinition) -> void:
 			"boosting draws on BOTH tanks at once")
 	GameState.set_drive_boost(false)
 	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+
+	# The field stage needs no propellant, which is the whole reason R is the
+	# position to select with the tanks low. An open lever costs amps and nothing
+	# else there — no hydrogen is drawn because no hydrogen is being heated.
+	_fill()
+	GameState.set_drive_mode("R")
+	var field_lh2 := GameState.lh2_fuel
+	SalvageSystem.set_manual_flight(Vector3(0, 0, 1.0), Vector3.ZERO)
+	await _wait(0.4)
+	_check(is_equal_approx(GameState.lh2_fuel, field_lh2),
+			"an open lever on the field stage alone burns nothing")
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	GameState.set_drive_mode("BOTH")
+
+	# The stage keeps turning on a dead bus, so thermal_stage_running() alone would
+	# happily meter a burn that produced nothing: the acceleration is scaled by the
+	# DELIVERED THRUST figure and goes to zero with it. A lever open against a dead
+	# channel must cost neither speed nor propellant.
+	_fill()
+	GameState.set_master_alt(false)
+	GameState.set_master_battery(false)
+	_check(GameState.thermal_stage_running(),
+			"a dead bus leaves the thermal stage turning")
+	_check(GameState.power("THRUST") == 0.0, "...with nothing delivered to it")
+	var dead_lh2 := GameState.lh2_fuel
+	var dead_speed: float = (GameState.local_ship()["velocity"] as Vector3).length()
+	SalvageSystem.set_manual_flight(Vector3(0, 0, 1.0), Vector3.ZERO)
+	await _wait(0.4)
+	_check(is_equal_approx(GameState.lh2_fuel, dead_lh2),
+			"an open lever on a dead bus burns no LH2")
+	_check(is_equal_approx((GameState.local_ship()["velocity"] as Vector3).length(), dead_speed),
+			"...and produces no acceleration either")
+	GameState.set_master_alt(true)
+	GameState.set_master_battery(true)
+
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+
+
+## A burn flown as a KINEMATIC OVERRIDE — the approach autopilot, which seizes the
+## motion state instead of commanding the drive — is charged like any other: the
+## velocity change it imposes, measured against what the drive could have made in
+## the same tick. Metering delta-v rather than speed is what leaves a coast free
+## and still charges for the braking at the far end.
+func _test_kinematic_burn(def: ShipDefinition) -> void:
+	_fill()
+	_start_drive()
+	GameState.set_power("THRUST", 1.0)
+	var step := 1.0 / 60.0
+	# The same figure the drive flies on, so any delivery fraction cancels out of
+	# the arithmetic below and these checks pin the LAW, not the allocation.
+	var accel := ShipMotion.thrust_accel()
+	_check(accel > 0.0, "the drive has an acceleration to charge a seize against")
+
+	var before := GameState.lh2_fuel
+	ShipMotion.burn_for_delta_v(Vector3.ZERO, step)
+	_check(is_equal_approx(GameState.lh2_fuel, before),
+			"a seize at constant velocity is a coast and burns nothing")
+
+	before = GameState.lh2_fuel
+	ShipMotion.burn_for_delta_v(Vector3(0.0, 0.0, accel * step * 0.5), step)
+	_check(is_equal_approx(before - GameState.lh2_fuel, def.lh2_burn_rate * 0.5 * step),
+			"half the drive's acceleration is charged at half the rated rate")
+
+	before = GameState.lh2_fuel
+	ShipMotion.burn_for_delta_v(Vector3(0.0, 0.0, accel * step * 10.0), step)
+	_check(is_equal_approx(before - GameState.lh2_fuel, def.lh2_burn_rate * step),
+			"a seize beyond what the drive could make is charged at the rated rate, not above it")
+
+	# Nor does the field stage draw a tank it does not use. The autopilot flies on
+	# R perfectly well — it is simply charged nothing for it, exactly as a pilot
+	# flying the same burn by hand would be.
+	_fill()
+	GameState.set_drive_mode("R")
+	before = GameState.lh2_fuel
+	ShipMotion.burn_for_delta_v(Vector3(0.0, 0.0, ShipMotion.thrust_accel() * step), step)
+	_check(ShipMotion.thrust_accel() > 0.0, "the field stage still makes thrust to be charged for")
+	_check(is_equal_approx(GameState.lh2_fuel, before),
+			"...but an autopilot burn on the field stage alone costs no propellant")
+	GameState.set_drive_mode("BOTH")
+
+	# The dead-bus rule reaches this path too — one meter, one set of gates.
+	GameState.set_master_alt(false)
+	GameState.set_master_battery(false)
+	before = GameState.lh2_fuel
+	ShipMotion.burn_for_delta_v(Vector3(0.0, 0.0, 1.0), step)
+	_check(is_equal_approx(GameState.lh2_fuel, before),
+			"a kinematic burn on a dead bus meters nothing either")
+	GameState.set_master_alt(true)
+	GameState.set_master_battery(true)
 
 
 # --- The starter ------------------------------------------------------------

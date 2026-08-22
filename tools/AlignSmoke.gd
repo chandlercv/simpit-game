@@ -1,7 +1,8 @@
 extends Node
 ## Headless checks for the per-member approach + pre-cut alignment mini-game:
-## approach needs a target, re-selecting forces a reposition and a drive shut down
-## under a flying autopilot disengages it; the cutter
+## approach needs a target, re-selecting forces a reposition, a drive shut down
+## or a dead THRUST channel under a flying autopilot disengages it, and a flown
+## approach is charged propellant like the burn it is; the cutter
 ## trigger opens alignment (not a cut); on-target aim builds the lock and commits
 ## at high quality; a sustained slip aborts (hard-fail) and nudges risk; and the
 ## banked quality binds the stakes — a clean cut is faster and preserves more yield.
@@ -68,6 +69,77 @@ func _run() -> void:
 			"shutting the drive down disengages a flying autopilot")
 	GameState.drive_started = true
 	GameState.set_drive_mode("BOTH")
+
+	# The electrical half of the same interlock. The stages keep turning on a dead
+	# bus, so thrust_fraction() stays positive and only the DELIVERED THRUST figure
+	# falls — and the closing profile's 5% floor would otherwise crawl the ship in
+	# and report MATCHED on a channel handing the pilot nothing.
+	SalvageSystem.reset_site()
+	GameState.wreck["scanned"] = true
+	SalvageSystem.select_member(ids[0])
+	SalvageSystem.toggle_approach()
+	_check(GameState.approach_state == "APPROACHING", "approach arms with the channel powered")
+	GameState.set_master_alt(false)
+	GameState.set_master_battery(false)
+	_check(GameState.thrust_fraction() > 0.0,
+			"a dead bus leaves the drive stages turning (the guard above cannot see this)")
+	_check(GameState.power("THRUST") == 0.0, "...while the THRUST channel delivers nothing")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(GameState.approach_state == "HOLDING",
+			"losing THRUST power disengages a flying autopilot")
+	# Re-arming is refused on the same condition. Forced to HOLDING first so the
+	# toggle has to take the ARMING branch rather than the release one — from
+	# APPROACHING this check would pass on the release alone and prove nothing.
+	GameState.approach_state = "HOLDING"
+	SalvageSystem.toggle_approach()
+	_check(GameState.approach_state == "HOLDING",
+			"...and it will not re-arm until the channel is powered again")
+	GameState.set_master_alt(true)
+	GameState.set_master_battery(true)
+	SalvageSystem.toggle_approach()
+	_check(GameState.approach_state == "APPROACHING",
+			"...and arms again once the bus is back")
+	SalvageSystem.toggle_approach()
+
+	# The autopilot flies on the drive and the drive is fed from a tank, so a seize
+	# is still a burn: fly a real approach and watch the hydrogen move. Without the
+	# metering the whole approach was free, which made the autopilot cheaper than
+	# flying the same closing burn by hand.
+	SalvageSystem.reset_site()
+	GameState.wreck["scanned"] = true
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3.ZERO)
+	GameState.lh2_fuel = GameState.ship_def.lh2_capacity
+	SalvageSystem.select_member(ids[0])
+	var lh2_before := GameState.lh2_fuel
+	SalvageSystem.toggle_approach()
+	var matched := false
+	var flown := 0.0
+	while flown < 60.0:
+		await get_tree().physics_frame
+		flown += get_physics_process_delta_time()
+		if GameState.approach_state == "MATCHED":
+			matched = true
+			break
+	_check(matched, "a flown approach reaches MATCHED")
+	var spent := lh2_before - GameState.lh2_fuel
+	_check(spent > 0.0, "the approach autopilot burns LH2 (%.2f units)" % spent)
+	# MATCHED is declared with up to MATCH_SLACK of travel still to run, and the
+	# autopilot trims that off over the next few seconds — a real, decelerating
+	# burn. Let it settle before measuring the standoff itself.
+	var settle := 0.0
+	while settle < 15.0:
+		await get_tree().physics_frame
+		settle += get_physics_process_delta_time()
+	# Settled. With no 3D scene the member has no baked orbital velocity, so the
+	# autopilot holds a constant velocity and the meter reads it as the coast it
+	# is — which is the check that the law is delta-v and not speed.
+	var held_before := GameState.lh2_fuel
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(is_equal_approx(GameState.lh2_fuel, held_before),
+			"...and a settled standoff on a still member costs nothing more")
+	SalvageSystem.toggle_approach()
 
 	# --- Alignment begins on the cutter trigger ---
 	SalvageSystem.reset_site()

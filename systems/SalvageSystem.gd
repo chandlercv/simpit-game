@@ -188,10 +188,7 @@ func set_manual_flight(thrust: Vector3, rot: Vector3) -> void:
 	var moved := Vector3(thrust.x, thrust.y, forward_over).length() > MANUAL_OVERRIDE_DELTA \
 			or rot.length() > MANUAL_OVERRIDE_DELTA
 	if GameState.approach_state != "HOLDING" and moved:
-		_abort_align("MANUAL CONTROL")
-		_abort_cut("MANUAL CONTROL")
-		_set_approach("HOLDING")
-		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
+		_disengage_approach("MANUAL CONTROL", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
 
 
 func toggle_approach() -> void:
@@ -215,14 +212,20 @@ func toggle_approach() -> void:
 			GameState.post_comms("OPS",
 					"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)")
 			return
+		# It flies on the THRUST channel as well as on the drive, and the two fail
+		# independently: a stage can be turning with no amps reaching it. Delivering
+		# nothing against the channel is the electrical equivalent of a shut-down
+		# drive — manual thrust scales by this figure and goes to zero with it — so
+		# the autopilot must not fly on it either.
+		if GameState.power("THRUST") <= 0.0:
+			GameState.post_comms("OPS",
+					"APPROACH INHIBITED — THRUST CHANNEL UNPOWERED (RAISE THE ALLOCATION)")
+			return
 		_set_approach("APPROACHING")
 		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH %s"
 				% GameState.get_member(GameState.selected_member_id)["name"])
 	else:
-		_abort_align("APPROACH BROKEN")
-		_abort_cut("APPROACH BROKEN")
-		_set_approach("HOLDING")
-		GameState.post_comms("OPS", "STATION-KEEPING RELEASED — HOLDING")
+		_disengage_approach("APPROACH BROKEN", "STATION-KEEPING RELEASED — HOLDING")
 
 
 ## Bindable (throttle_cmd_toggle): forwards to the motion pipeline, which owns
@@ -426,10 +429,7 @@ func trigger_collapse() -> void:
 func abort_approach_on_collision() -> void:
 	if GameState.approach_state == "HOLDING":
 		return
-	_abort_align("PATH OBSTRUCTED")
-	_abort_cut("PATH OBSTRUCTED")
-	_set_approach("HOLDING")
-	GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
+	_disengage_approach("PATH OBSTRUCTED", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
 
 
 ## MarketSystem: called on leaving the site (docking) — approach state has no
@@ -548,10 +548,18 @@ func _update_approach(delta: float) -> void:
 	# closing — and then hold station, and be cut from — on a drive making no
 	# thrust at all. Hand control back the way a collision does.
 	if GameState.thrust_fraction() <= 0.0:
-		_abort_align("DRIVE THRUST LOST")
-		_abort_cut("DRIVE THRUST LOST")
-		_set_approach("HOLDING")
-		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST")
+		_disengage_approach("DRIVE THRUST LOST", "AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST")
+		ShipMotion.step(delta)
+		return
+	# The same hole on the electrical side, and the arm-time gate cannot cover it
+	# either: thrust_fraction() reports the stages TURNING, not the amps reaching
+	# them, so a dead alternator on a flat battery — or the allocation wound to
+	# zero — leaves it positive while the channel delivers nothing. The closing
+	# profile below floors its speed cap at 5% of rated whatever the channel reads,
+	# so an unpowered ship would crawl in and report MATCHED while manual thrust
+	# (ShipMotion, which scales by the delivered figure) gave the pilot nothing.
+	if GameState.power("THRUST") <= 0.0:
+		_disengage_approach("THRUST POWER LOST", "AUTOPILOT DISENGAGED — THRUST CHANNEL UNPOWERED")
 		ShipMotion.step(delta)
 		return
 	# Fly to the *selected* member: its baked world centroid (published into the
@@ -580,7 +588,16 @@ func _update_approach(delta: float) -> void:
 	var closing: Vector3 = approach_dir * speed if remaining > 0.01 else Vector3.ZERO
 	var velocity: Vector3 = member_vel + closing
 	transform.origin += velocity * delta
+	# The autopilot flies on the drive, and the drive is fed from a tank. The seize
+	# writes the motion state directly and so never reaches the command path that
+	# meters a burn — without this the whole approach, and the station-keeping that
+	# follows it, would be flown on free hydrogen. Charge the velocity change it is
+	# imposing: the closing burn and the braking both cost, a coast at constant
+	# velocity does not, and holding station on a member orbiting the wreck centre
+	# costs the small continuous burn that actually implies.
+	var was_velocity: Vector3 = ship["velocity"]
 	ShipMotion.seize(transform, velocity)
+	ShipMotion.burn_for_delta_v(velocity - was_velocity, delta)
 	if GameState.approach_state == "APPROACHING" \
 			and remaining <= MATCH_SLACK and speed < 0.6:
 		_set_approach("MATCHED")
@@ -717,6 +734,17 @@ func _abort_cut(reason: String) -> void:
 func _set_risk(risk: float) -> void:
 	GameState.structural_risk = clampf(risk, 0.0, 1.0)
 	GameState.structural_risk_changed.emit(GameState.structural_risk)
+
+
+## Hand the ship back to the pilot from a flying autopilot. However the standoff
+## is given up, it is given up whole: an alignment or a cut in progress rests on
+## the match and ends with it, so all three go together. `reason` is what the
+## salvage aborts quote; `call` is the OPS line for the disengagement itself.
+func _disengage_approach(reason: String, call: String) -> void:
+	_abort_align(reason)
+	_abort_cut(reason)
+	_set_approach("HOLDING")
+	GameState.post_comms("OPS", call)
 
 
 func _set_approach(state: String) -> void:
