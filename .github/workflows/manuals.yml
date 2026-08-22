@@ -8,9 +8,16 @@
 #   https://github.com/chandlercv/simpit-game/releases/latest/download/pilots-manual.pdf
 #   https://github.com/chandlercv/simpit-game/releases/latest/download/terminal-procedures.pdf
 #
-# Push a `v*` tag to publish. Run it by hand (Actions -> Manuals -> Run workflow)
-# to build the same two PDFs as a downloadable run artifact without cutting a
-# release -- that is how to proof a change to the catalogs before tagging.
+# Push a `v*` tag to publish. Every pull request builds the same two PDFs and
+# attaches them to the run instead of to a release, which is how a change to
+# either catalog gets proofed on paper before it merges.
+#
+# NOTE: `workflow_dispatch` -- the Actions -> Manuals -> Run workflow button --
+# only appears once this file is on the default branch. That is a GitHub rule
+# about where it looks for dispatchable workflows, not a property of this file,
+# and it is why the `pull_request` trigger below is what proves the workflow
+# before the first merge. Tag pushes are unaffected: a `push` event runs the
+# workflow as it exists at the pushed ref.
 
 name: Manuals
 
@@ -18,6 +25,11 @@ on:
   push:
     tags:
       - 'v*'
+  # Unfiltered on purpose. Both documents quote figures from all over the tree
+  # and resolve their control names through the live Input Map, so a paths
+  # filter narrow enough to be worth having would be wrong often enough to skip
+  # a proof that mattered.
+  pull_request:
   workflow_dispatch:
 
 permissions:

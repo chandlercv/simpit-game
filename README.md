@@ -223,9 +223,9 @@ current pair is downloadable without a Godot install:
 [pilot's manual](https://github.com/chandlercv/simpit-game/releases/latest/download/pilots-manual.pdf)
 and
 [terminal procedures](https://github.com/chandlercv/simpit-game/releases/latest/download/terminal-procedures.pdf)
-— both links always resolve to the newest release. To proof a catalog change
-before tagging, run the workflow by hand from the Actions tab: it builds the same
-two PDFs and attaches them to the run instead of to a release.
+— both links always resolve to the newest release. Every pull request builds the
+same two PDFs and attaches them to the run instead, so a catalog change can be
+read on paper before it merges.
 
 ---
 
