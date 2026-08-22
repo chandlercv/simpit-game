@@ -10,14 +10,19 @@ extends Node
 ## the card and come back from, so the card is hidden rather than freed while
 ## it runs.
 ##
-## Placement is data-driven from DisplayConfig.get_roles_for_screen():
-##  - MAIN → the primary window, fullscreen on its screen.
-##  - one role alone on a non-Main screen → its own full-coverage borderless window.
-##  - two+ roles sharing a spare screen → a RoleTabHost filling a window on it.
-##  - any role(s) landing on the Main screen → a dimmed RoleTabHost overlay in a
-##    CanvasLayer over the Main view.
-## Adding a new display role is an entry in SECONDARY_SCENES plus a DisplayConfig
-## role — no other changes.
+## Placement is planned by ScreenLayout from DisplayConfig.get_roles_for_screen()
+## and applied here:
+##  - MAIN alone on its screen → the primary window, fullscreen on it.
+##  - MAIN sharing its screen → the primary window drops to a borderless
+##    MODE_WINDOWED rect over the top two thirds; the roles tile the bottom third.
+##  - roles sharing a spare screen → tiled, one borderless window each.
+##  - a role alone on a spare screen → its own full-coverage borderless window.
+##  - a region whose tiles would be too small to read → a RoleTabHost spanning it
+##    instead: a window on a spare screen, or the dimmed overlay in a CanvasLayer
+##    over a fullscreen Main view.
+## Every tile is the display's own scene Window, so it keeps its content scale
+## and RoleWindow's Esc/close handling. Adding a new display role is an entry in
+## SECONDARY_SCENES + ROLE_CANVAS plus a DisplayConfig role — no other changes.
 
 const SECONDARY_SCENES: Dictionary = {
 	"tactical": "res://scenes/displays/TacticalWindow.tscn",
@@ -25,9 +30,21 @@ const SECONDARY_SCENES: Dictionary = {
 	"camera": "res://scenes/displays/CameraWindow.tscn",
 }
 
+## Each secondary scene's authored content_scale_size — the canvas ScreenLayout
+## measures a tile against to decide whether a panel still reads at that size.
+## DisplayLayoutSmoke asserts this table against the scenes themselves, so a
+## .tscn edit can't silently desync it.
+const ROLE_CANVAS: Dictionary = {
+	"tactical": Vector2i(1280, 720),
+	"mfd": Vector2i(1280, 800),
+	"camera": Vector2i(1280, 720),
+}
+
 const RoleTabHostScript := preload("res://scenes/displays/RoleTabHost.gd")
+const RoleWindowScript := preload("res://scenes/displays/RoleWindow.gd")
 const DisplaySetupScript := preload("res://scenes/displays/DisplaySetup.gd")
 const TitleCardScript := preload("res://scenes/displays/TitleCard.gd")
+const ScreenLayoutScript := preload("res://scenes/displays/ScreenLayout.gd")
 
 ## What the chooser's confirm button is called, per what confirming actually does
 ## from where it was opened. One label for all three read as a lie in two of them:
@@ -41,6 +58,9 @@ var _windows: Array[Window] = []
 var _hosts: Array = []
 var _overlay_layer: CanvasLayer = null
 var _setup_ui: Node = null
+## True while the Main window has been shrunk to share its screen with a panel
+## strip. Only then does anything need giving back before the chooser is drawn.
+var _main_shares_screen := false
 ## The launch screen, alive (possibly hidden) until LAUNCH. Kept on its own layer
 ## so _teardown() — which rebuilds the display layout — can't free it mid-launch.
 var _title_ui: Control = null
@@ -144,6 +164,7 @@ func _close_title() -> void:
 ## zero-arg signal, and is caught by the check below rather than by the caller.
 func _show_setup(confirm_label := CONFIRM_APPLY) -> void:
 	_teardown()
+	_restore_main_window()
 	# Opened from the card (its DISPLAYS row, or F6 before launch): the card waits
 	# hidden underneath and comes back with the new assignment when the chooser
 	# confirms — so confirming here returns, it doesn't start anything.
@@ -175,50 +196,128 @@ func _place_all() -> void:
 	# The world runs once its displays are up: the title card and the chooser both
 	# hold the pause until here (a no-op on the mid-game F5 rebuild path).
 	get_tree().paused = false
-	_position_main_window()
 	var main_screen: int = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
+	var by_screen := _roles_by_screen()
+	# MAIN alone on its screen has no by_screen entry, but its window still has to
+	# be placed — without this a four-monitor rig never leaves its boot size.
+	if not by_screen.has(main_screen):
+		by_screen[main_screen] = []
 
+	for screen: int in by_screen:
+		var roles: Array = by_screen[screen]
+		var has_main := screen == main_screen
+		var exclusive := not has_main and roles.size() <= 1
+		var plan: Dictionary = ScreenLayoutScript.plan_screen(
+				_screen_region(screen, exclusive), has_main, roles, ROLE_CANVAS)
+		_apply_plan(plan, screen, has_main)
+
+
+## Secondary roles per screen, in SECONDARY_SCENES order (tactical, MFD, camera —
+## Dictionary iteration is insertion order). Not DisplayConfig.get_roles_for_screen,
+## which includes MAIN and would need filtering back out.
+func _roles_by_screen() -> Dictionary:
 	var by_screen: Dictionary = {}
-	for role in SECONDARY_SCENES:
+	for role: String in SECONDARY_SCENES:
 		var screen: int = DisplayConfig.get_screen_for_role(role)
 		if not by_screen.has(screen):
 			by_screen[screen] = []
 		by_screen[screen].append(role)
+	return by_screen
 
-	for screen in by_screen:
-		var roles: Array = by_screen[screen]
-		if screen == main_screen:
-			_make_overlay_host(roles)
-		elif roles.size() == 1:
-			_spawn_window(roles[0], screen)
+
+## The rect a screen's layout is planned inside. A window covering a whole screen
+## is what makes the Windows shell hide the taskbar over it, so the one-window
+## cases keep the full screen rect exactly as they always have. A screen we split
+## loses that, and the taskbar is topmost — so plan those inside the usable rect
+## or it eats the bottom row.
+func _screen_region(screen: int, exclusive: bool) -> Rect2i:
+	if exclusive:
+		return Rect2i(DisplayServer.screen_get_position(screen),
+				DisplayServer.screen_get_size(screen))
+	return DisplayServer.screen_get_usable_rect(screen)
+
+
+func _apply_plan(plan: Dictionary, screen: int, has_main: bool) -> void:
+	if has_main:
+		_position_main_window(plan["main"], plan["main_fullscreen"], screen)
+	if plan["tabbed"]:
+		if plan["tab_overlay"]:
+			_make_overlay_host(plan["tab_roles"])
 		else:
-			_spawn_packed_window(roles, screen)
+			_spawn_packed_window(plan["tab_roles"], plan["tab_region"])
+		return
+	var tiles: Dictionary = plan["tiles"]
+	for role: String in tiles:
+		_spawn_window(role, tiles[role])
 
 
-func _position_main_window() -> void:
-	var screen: int = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
+func _position_main_window(rect: Rect2i, fullscreen: bool, screen: int) -> void:
 	var win := get_window()
-	win.current_screen = screen
+	if fullscreen:
+		_main_shares_screen = false
+		win.current_screen = screen
+		win.mode = Window.MODE_FULLSCREEN
+		return
+	# Sharing the screen with the panel strip. Leave fullscreen first — geometry
+	# written to a fullscreen window is ignored — and set borderless before the
+	# rect, because while it's false `position` means the client origin and the
+	# window lands a title bar too low.
+	_main_shares_screen = true
+	win.mode = Window.MODE_WINDOWED
+	win.borderless = true
+	win.size = rect.size
+	win.position = rect.position
+
+
+## Give the whole Main screen back before the chooser is drawn over it:
+## _teardown() has already closed the strip's windows, so a Main window still
+## sitting at two thirds height would leave the bottom third showing the desktop.
+## A no-op unless the window was actually shrunk, so the launch card and a
+## four-monitor rig keep the size they always had. Deliberately not inside
+## _teardown() itself — _place_all() calls that too, and would flash fullscreen
+## on every F5 rebuild.
+func _restore_main_window() -> void:
+	if not _main_shares_screen or DisplayServer.get_name() == "headless":
+		return
+	_main_shares_screen = false
+	var win := get_window()
+	win.current_screen = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
 	win.mode = Window.MODE_FULLSCREEN
 
 
-func _spawn_window(role: String, screen: int) -> void:
+func _spawn_window(role: String, rect: Rect2i) -> void:
 	var packed: PackedScene = load(SECONDARY_SCENES[role])
 	var win: Window = packed.instantiate()
 	win.title = "Salvager — %s" % role.capitalize()
 	win.borderless = true
-	win.position = DisplayServer.screen_get_position(screen)
-	win.size = DisplayServer.screen_get_size(screen)
+	# Tiles are placed, not dragged: Aero Snap on a focused borderless window
+	# would otherwise let a stray Win+Arrow pull one out of its rect.
+	win.unresizable = true
+	win.initial_position = Window.WINDOW_INITIAL_POSITION_ABSOLUTE
+	win.position = rect.position
+	win.size = rect.size
 	add_child(win)
 	_windows.append(win)
 
 
-func _spawn_packed_window(roles: Array, screen: int) -> void:
+func _spawn_packed_window(roles: Array, rect: Rect2i) -> void:
 	var win := Window.new()
 	win.title = "Salvager — " + _roles_title(roles)
 	win.borderless = true
-	win.position = DisplayServer.screen_get_position(screen)
-	win.size = DisplayServer.screen_get_size(screen)
+	win.unresizable = true
+	win.initial_position = Window.WINDOW_INITIAL_POSITION_ABSOLUTE
+	# _harvest_content throws away each scene's own Window, and with it the
+	# content scale that keeps a panel's layout intact at a size other than the
+	# one it was drawn at. Put it back on the host, sized to the largest canvas
+	# among the roles it carries.
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	win.content_scale_size = _shared_canvas(roles)
+	# The same script the tiled windows get from their scenes, so a packed host
+	# answers Esc and the window close button like every other display.
+	win.set_script(RoleWindowScript)
+	win.position = rect.position
+	win.size = rect.size
 	var host := RoleTabHostScript.new()
 	host.configure(true)
 	for role in roles:
@@ -259,6 +358,16 @@ func _orphan_owner(node: Node, old_owner: Node) -> void:
 		node.owner = null
 	for child in node.get_children():
 		_orphan_owner(child, old_owner)
+
+
+## The canvas one host window has to serve for every panel it carries: the
+## componentwise largest, so no role is laid out in less room than it asks for.
+func _shared_canvas(roles: Array) -> Vector2i:
+	var canvas := ScreenLayoutScript.DEFAULT_CANVAS
+	for role: String in roles:
+		var role_canvas: Vector2i = ROLE_CANVAS.get(role, ScreenLayoutScript.DEFAULT_CANVAS)
+		canvas = Vector2i(maxi(canvas.x, role_canvas.x), maxi(canvas.y, role_canvas.y))
+	return canvas
 
 
 func _roles_title(roles: Array) -> String:

@@ -11,7 +11,8 @@ extends Node
 ## here, so adding a fifth display is a config entry + a scene, not a code change.
 ## When fewer screens are present than roles, the game prompts (see
 ## needs_setup_prompt) with tools/DisplaySetup so the player assigns roles to
-## screens; two roles sharing a screen become a tabbed host.
+## screens; roles sharing a screen are tiled into it by ScreenLayout, and only a
+## region too small to tile legibly falls back to a tabbed host.
 
 signal mapping_changed
 
@@ -91,8 +92,8 @@ func get_screen_for_role(role: String) -> int:
 	return _role_to_screen.get(role, 0)
 
 
-## Roles currently assigned to the given screen (used by the setup chooser and
-## by WindowManager to decide which screens need a tabbed host).
+## Roles currently assigned to the given screen (used by the setup chooser to
+## report what a screen is carrying).
 func get_roles_for_screen(screen: int) -> Array[String]:
 	var roles: Array[String] = []
 	for role in ALL_ROLES:
@@ -175,8 +176,8 @@ func _fill_defaults() -> void:
 				break
 		if assigned == -1:
 			# Fewer screens than roles: pack overflow onto the last screen
-			# (WindowManager makes a shared screen a tabbed host). On a single
-			# screen this is the main screen, i.e. the dimmed overlay.
+			# (WindowManager tiles a shared screen). On a single screen this is
+			# the main screen, so they tile the strip under the flight view.
 			assigned = screen_count - 1
 		_role_to_screen[role] = assigned
 		used.append(assigned)

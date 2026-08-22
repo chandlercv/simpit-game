@@ -389,7 +389,7 @@ func _display_status_text() -> String:
 	if DisplayConfig.needs_setup_prompt():
 		lines.append("not assigned for this monitor setup yet — LAUNCH asks first")
 	elif count < DisplayConfig.ALL_ROLES.size():
-		lines.append("displays sharing a screen open as a tabbed panel")
+		lines.append("displays sharing a screen are tiled side by side")
 	return "\n".join(lines)
 
 
