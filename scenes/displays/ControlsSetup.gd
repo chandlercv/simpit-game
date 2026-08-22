@@ -41,6 +41,15 @@ const AXIS_TARGETS := [
 ]
 const BUTTON_TARGETS := [
 	{"label": "Throttle Cmd Mode", "action": "throttle_cmd_toggle", "group": "THROTTLE"},
+	# The two electrical masters and the drive selector. On the simpit these are
+	# the panel's MASTER BAT/ALT toggles and its five-position magneto, but the
+	# departure and arrival procedures both require all three — so a pilot flying
+	# on the keyboard has to be able to reach them too.
+	{"label": "Master BAT", "action": "master_bat", "group": "ELECTRICAL"},
+	{"label": "Master ALT", "action": "master_alt", "group": "ELECTRICAL"},
+	{"label": "Drive Selector +", "action": "drive_mode_next", "group": "DRIVE"},
+	{"label": "Drive Selector −", "action": "drive_mode_prev", "group": "DRIVE"},
+	{"label": "Boost (hold)", "action": "drive_boost", "group": "DRIVE"},
 	{"label": "Approach", "action": "ops_approach", "group": "OPS"},
 	{"label": "Cut", "action": "ops_cut", "group": "OPS"},
 	{"label": "Open Cargo Hatch", "action": "cargo_hatch_open", "group": "OPS"},
@@ -80,6 +89,19 @@ const HID_SOURCE_LABELS := {
 }
 const X52_GUID := "0300ea18a30600005c07000000000000"
 
+## Suffix a row carries when the key or button it shows is bound on another row
+## too. Both rows carry it, so the pair is findable from either end, and it is the
+## single signal the row tint follows (see _set_row_text).
+const CLASH_MARK := "  (clash)"
+
+## Row value colours: bound-and-clear, and sharing a control with another row.
+const ROW_COLOR := Color(0.6, 0.95, 0.7)
+const ROW_CLASH_COLOR := Color(1.0, 0.55, 0.35)
+
+## Status-line colours: the ordinary report, and one that needs reading.
+const STATUS_COLOR := Color(0.9, 0.85, 0.4)
+const STATUS_WARN_COLOR := ROW_CLASH_COLOR
+
 ## Axis deviation from its BIND-start rest that counts as "the user moved this".
 const AXIS_CAPTURE_THRESHOLD := 0.6
 const AXIS_SCAN_COUNT := 10
@@ -97,6 +119,13 @@ var _key_binds: Dictionary = {}
 ## True if a keyboard profile existed at load, so clearing every key bind saves an
 ## empty profile rather than leaving the old file to reassert the cleared keys.
 var _keyboard_loaded := false
+## Recomputed each refresh: the keycodes, and the "guid:button" ids, that more
+## than one row is bound to. Nothing here refuses a bind — a shared control is a
+## legitimate thing to want, and a pilot mid-rearrangement passes through the
+## state constantly — but it must never be SILENT, because both rows fire and the
+## symptom (one press doing two things) is nothing like the cause.
+var _clash_keys: Dictionary = {}
+var _clash_buttons: Dictionary = {}
 ## {} or {"guid":String,"axis":int,"invert":bool}
 var _throttle: Dictionary = {}
 ## The loaded throttle spec, verbatim, so an untouched throttle keeps its
@@ -186,7 +215,7 @@ func _build_ui() -> void:
 		+ "next bind. The throttle's MODE button toggles Lever (rests anywhere, " \
 		+ "idle→full) vs Gamepad (center-rest, bipolar — pick this for a self-" \
 		+ "centering stick/trigger axis). The X52 wheel is buttons 32/33 — bind it " \
-		+ "on an OPS row. SAVE writes a profile per device. Esc or CLOSE exits."
+		+ "on an OPS row. A key or button already used by another row still binds, " 		+ "but both rows are marked (clash) — both will fire. " 		+ "SAVE writes a profile per device. Esc or CLOSE exits."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
@@ -206,7 +235,7 @@ func _build_ui() -> void:
 
 	_status = Label.new()
 	_status.add_theme_font_size_override("font_size", 16)
-	_status.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4))
+	_status.add_theme_color_override("font_color", STATUS_COLOR)
 	vbox.add_child(_status)
 
 	# Rows scroll inside an EXPAND_FILL ScrollContainer: the row list now runs well
@@ -291,7 +320,7 @@ func _row_container(name_text: String, key: String) -> HBoxContainer:
 	row.add_child(name_label)
 	var value := Label.new()
 	value.custom_minimum_size = Vector2(250, 0)
-	value.add_theme_color_override("font_color", Color(0.6, 0.95, 0.7))
+	value.add_theme_color_override("font_color", ROW_COLOR)
 	row.add_child(value)
 	_value_labels[key] = value
 	return row
@@ -457,9 +486,13 @@ func _reload() -> void:
 		_load_winner_axis[s["key"]] = _axis_binds.get(s["key"])
 	for s: Dictionary in _shadow_buttons:
 		_load_winner_button[s["action"]] = _button_binds.get(s["action"])
-	if _status:
-		_status.text = "Ready — press BIND on a row."
 	_refresh_values()
+	var clashes := _clash_keys.size() + _clash_buttons.size()
+	if clashes > 0:
+		_set_status(("Ready — press BIND on a row.  %d control(s) drive more than one "
+				+ "row; both rows are marked%s.") % [clashes, CLASH_MARK.rstrip(" ")], true)
+	else:
+		_set_status("Ready — press BIND on a row.")
 
 
 # --- Binding: begin + poll-based capture -----------------------------------
@@ -468,7 +501,7 @@ func _begin_listen(what: Dictionary) -> void:
 	# A button row can be bound to a keyboard key with no joypad present; only the
 	# analog axis / throttle capture actually needs a connected stick.
 	if Input.get_connected_joypads().is_empty() and what["kind"] != "button":
-		_status.text = "No joystick connected — analog axis/throttle need one."
+		_set_status("No joystick connected — analog axis/throttle need one.")
 		return
 	_listening = what
 	# Snapshot every device's axis rest values + held buttons so we capture only
@@ -481,7 +514,7 @@ func _begin_listen(what: Dictionary) -> void:
 		for b in MAX_SCAN_BUTTONS:
 			if Input.is_joy_button_pressed(device, b as JoyButton):
 				_btn_held["%d:%d" % [device, b]] = true
-	_status.text = ("Press a button or key now…" if what["kind"] == "button"
+	_set_status("Press a button or key now…" if what["kind"] == "button"
 			else "Move the axis now…")
 
 
@@ -537,13 +570,21 @@ func _poll_button_capture() -> void:
 			if _btn_held.has("%d:%d" % [device, b]):
 				continue  # already down at BIND start (held selector) — ignore
 			var action: String = _listening["key"]
-			_button_binds[action] = {"guid": Input.get_joy_guid(device), "button": b}
+			var guid := Input.get_joy_guid(device)
+			# Asked BEFORE the new bind lands, so the row being bound cannot count
+			# itself as its own clash.
+			var clash := _rows_on_button(guid, b, action)
+			_button_binds[action] = {"guid": guid, "button": b}
 			# If this is one direction of an axis pair, drop the pair's axis bind
 			# so the two don't both drive it.
 			var pair_key := _pair_key_for_action(action)
 			if not pair_key.is_empty():
 				_axis_binds.erase(pair_key)
-			_finish_listen()
+			if clash.is_empty():
+				_finish_listen()
+			else:
+				_finish_listen("Bound — but Button %d on %s also fires %s." % [
+						b, _dev_short(guid), ", ".join(clash)])
 			return
 
 
@@ -582,10 +623,25 @@ func _is_power_key(key: String) -> bool:
 	return false
 
 
-func _finish_listen() -> void:
+## `warning`, when set, is the clash report for the control just captured. The
+## bind stands either way; the rows keep the mark until one of them is cleared.
+func _finish_listen(warning: String = "") -> void:
 	_listening = {}
-	_status.text = "Bound. Continue, or SAVE."
+	if warning.is_empty():
+		_set_status("Bound. Continue, or SAVE.")
+	else:
+		_set_status(warning, true)
 	_refresh_values()
+
+
+## The one way the status line is written, so a warning colour can never outlive
+## the warning that set it.
+func _set_status(text: String, warn: bool = false) -> void:
+	if not _status:
+		return
+	_status.text = text
+	_status.add_theme_color_override("font_color",
+			STATUS_WARN_COLOR if warn else STATUS_COLOR)
 
 
 func _toggle_reverse(key: String) -> void:
@@ -600,7 +656,7 @@ func _bind_hid(key: String, source: String) -> void:
 	_button_binds.erase(pair[0])
 	_button_binds.erase(pair[1])
 	_listening = {}
-	_status.text = "Bound %s. Continue, or SAVE." % HID_SOURCE_LABELS.get(source, source)
+	_set_status("Bound %s. Continue, or SAVE." % HID_SOURCE_LABELS.get(source, source))
 	_refresh_values()
 
 
@@ -654,35 +710,132 @@ func _input(event: InputEvent) -> void:
 
 func _cancel_listen() -> void:
 	_listening = {}
-	if _status:
-		_status.text = "Bind cancelled."
+	_set_status("Bind cancelled.")
 
 
 ## Bind the currently-listened action to a keyboard key. Coexists with any joypad
 ## bind on the same action (both fire it) — mirroring the old keyboard-fallback
 ## behaviour, now user-authored instead of hardcoded.
+##
+## Coexisting with a DIFFERENT action on the same key is another matter: it binds,
+## because a pilot rearranging a layout is in that state half the time, but it is
+## reported by name rather than left to be discovered in flight.
 func _capture_key(keycode: int) -> void:
-	_key_binds[_listening["key"]] = keycode
-	_finish_listen()
+	var action: String = _listening["key"]
+	# Asked before the new bind lands, so this row cannot count itself.
+	var clash := _rows_on_key(keycode, action)
+	_key_binds[action] = keycode
+	if clash.is_empty():
+		_finish_listen()
+	else:
+		_finish_listen("Bound — but Key %s also fires %s." % [
+				_key_name(keycode), ", ".join(clash)])
+
+
+## Rows already holding `keycode`, named as their row reads, excluding `action`
+## itself — rebinding a row to the key it already has is not a clash.
+func _rows_on_key(keycode: int, action: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	for other: String in _key_binds:
+		if other != action and int(_key_binds[other]) == keycode:
+			out.append(_row_label_for(other))
+	return out
+
+
+## Same for a joypad button, which is a (device, button) pair — the same index on
+## a different stick is a different control, not a clash.
+func _rows_on_button(guid: String, button: int, action: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	for other: String in _button_binds:
+		var bb: Dictionary = _button_binds[other]
+		if other != action and String(bb["guid"]) == guid and int(bb["button"]) == button:
+			out.append(_row_label_for(other))
+	return out
+
+
+## An action named the way its row reads. A direction carries the sign the row
+## shows, so the two halves of a pair are distinguishable in a clash report.
+func _row_label_for(action: String) -> String:
+	for target: Dictionary in AXIS_TARGETS:
+		if target["neg"] == action:
+			return "−%s" % target["label"]
+		if target["pos"] == action:
+			return "+%s" % target["label"]
+	for target: Dictionary in BUTTON_TARGETS:
+		if target["action"] == action:
+			return String(target["label"])
+	return action
 
 
 # --- Display + save --------------------------------------------------------
 
 func _dev_short(guid: String) -> String:
-	var name := String(_dev_meta.get(guid, {}).get("name", ""))
-	if name.is_empty():
-		name = guid.substr(0, 6)
-	return name.left(14)
+	var dev_name := String(_dev_meta.get(guid, {}).get("name", ""))
+	if dev_name.is_empty():
+		dev_name = guid.substr(0, 6)
+	return dev_name.left(14)
 
 
 func _refresh_values() -> void:
+	_recompute_clashes()
 	for target: Dictionary in AXIS_TARGETS:
 		var key: String = "%s|%s" % [target["neg"], target["pos"]]
-		_value_labels[key].text = _axis_row_text(target["neg"], target["pos"])
+		_set_row_text(key, _axis_row_text(target["neg"], target["pos"]))
 	for target: Dictionary in BUTTON_TARGETS:
 		var action: String = target["action"]
-		_value_labels["btn:%s" % action].text = _button_row_text(action)
-	_value_labels["throttle"].text = _throttle_text()
+		_set_row_text("btn:%s" % action, _button_row_text(action))
+	_set_row_text("throttle", _throttle_text())
+
+
+## Every keycode, and every (device, button) pair, that more than one row is
+## bound to. Built once per refresh so each row can mark its share of a shared
+## control without rescanning the whole list.
+func _recompute_clashes() -> void:
+	_clash_keys.clear()
+	_clash_buttons.clear()
+	var key_rows: Dictionary = {}
+	for action: String in _key_binds:
+		var code := int(_key_binds[action])
+		key_rows[code] = int(key_rows.get(code, 0)) + 1
+	for code: int in key_rows:
+		if key_rows[code] > 1:
+			_clash_keys[code] = true
+	var button_rows: Dictionary = {}
+	for action: String in _button_binds:
+		var id := _button_id(_button_binds[action])
+		button_rows[id] = int(button_rows.get(id, 0)) + 1
+	for id: String in button_rows:
+		if button_rows[id] > 1:
+			_clash_buttons[id] = true
+
+
+## A joypad button's identity: the index alone is not one, since two sticks each
+## have a button 0.
+func _button_id(bind: Dictionary) -> String:
+	return "%s:%d" % [bind["guid"], int(bind["button"])]
+
+
+func _set_row_text(key: String, text: String) -> void:
+	var label: Label = _value_labels[key]
+	label.text = text
+	# CLASH_MARK is the single signal: whichever builder put it in the row text,
+	# the tint follows it, so the two can never disagree.
+	label.add_theme_color_override("font_color",
+			ROW_CLASH_COLOR if text.contains(CLASH_MARK) else ROW_COLOR)
+
+
+## CLASH_MARK when this row's key is on another row too, else "".
+func _key_mark(action: String) -> String:
+	if not _key_binds.has(action):
+		return ""
+	return CLASH_MARK if _clash_keys.has(int(_key_binds[action])) else ""
+
+
+## CLASH_MARK when this row's joypad button is on another row too, else "".
+func _button_mark(action: String) -> String:
+	if not _button_binds.has(action):
+		return ""
+	return CLASH_MARK if _clash_buttons.has(_button_id(_button_binds[action])) else ""
 
 
 ## A button row shows its joypad button and/or its keyboard key (both can be set).
@@ -690,15 +843,16 @@ func _button_row_text(action: String) -> String:
 	var parts: PackedStringArray = []
 	if _button_binds.has(action):
 		var bb: Dictionary = _button_binds[action]
-		parts.append("Button %d · %s" % [bb["button"], _dev_short(bb["guid"])])
+		parts.append("Button %d · %s%s" % [
+				bb["button"], _dev_short(bb["guid"]), _button_mark(action)])
 	if _key_binds.has(action):
-		parts.append("Key %s" % _key_name(_key_binds[action]))
+		parts.append("Key %s%s" % [_key_name(_key_binds[action]), _key_mark(action)])
 	return " + ".join(parts) if not parts.is_empty() else "—"
 
 
 func _key_name(keycode: int) -> String:
-	var name := OS.get_keycode_string(keycode as Key)
-	return name if not name.is_empty() else "Key%d" % keycode
+	var key_text := OS.get_keycode_string(keycode as Key)
+	return key_text if not key_text.is_empty() else "Key%d" % keycode
 
 
 ## An axis pair shows its analog/nub binding if set, else its per-direction
@@ -712,19 +866,19 @@ func _axis_row_text(neg: String, pos: String) -> String:
 		var btns: PackedStringArray = []
 		var guid := ""
 		if _button_binds.has(neg):
-			btns.append("−Btn%d" % _button_binds[neg]["button"])
+			btns.append("−Btn%d%s" % [_button_binds[neg]["button"], _button_mark(neg)])
 			guid = _button_binds[neg]["guid"]
 		if _button_binds.has(pos):
-			btns.append("+Btn%d" % _button_binds[pos]["button"])
+			btns.append("+Btn%d%s" % [_button_binds[pos]["button"], _button_mark(pos)])
 			guid = _button_binds[pos]["guid"]
 		if not btns.is_empty():
 			parts.append("%s · %s" % [" ".join(btns), _dev_short(guid)])
 	# Keyboard keys per direction coexist with an axis/button binding.
 	var keys: PackedStringArray = []
 	if _key_binds.has(neg):
-		keys.append("−%s" % _key_name(_key_binds[neg]))
+		keys.append("−%s%s" % [_key_name(_key_binds[neg]), _key_mark(neg)])
 	if _key_binds.has(pos):
-		keys.append("+%s" % _key_name(_key_binds[pos]))
+		keys.append("+%s%s" % [_key_name(_key_binds[pos]), _key_mark(pos)])
 	if not keys.is_empty():
 		parts.append("Key %s" % " ".join(keys))
 	return "  ·  ".join(parts) if not parts.is_empty() else "—"
@@ -785,17 +939,37 @@ func _save() -> void:
 	# when every key was cleared but a profile existed at load, so the clear sticks.
 	var kb_saved := false
 	if not _key_binds.is_empty() or _keyboard_loaded:
-		var kbp := {"guid": "keyboard", "name": "Keyboard", "keys": []}
+		var kbp := {
+			"guid": "keyboard", "name": "Keyboard", "keys": [],
+			"known_actions": _offered_actions(),
+		}
 		for action: String in _key_binds:
 			kbp["keys"].append({"key": _key_binds[action], "action": action})
 		InputConfig.save_profile(kbp)
 		kb_saved = true
 	if by_guid.is_empty() and not kb_saved:
-		_status.text = "Nothing bound to save."
+		_set_status("Nothing bound to save.")
 		return
 	for guid: String in by_guid:
 		InputConfig.save_profile(by_guid[guid])
-	_status.text = "Saved %d profile(s)." % (by_guid.size() + (1 if kb_saved else 0))
+	_set_status("Saved %d profile(s)." % (by_guid.size() + (1 if kb_saved else 0)))
+
+
+## Every action this screen offers a row for. Saved into the keyboard profile as
+## `known_actions` so a later build can tell an action the pilot CLEARED from one
+## that did not exist when the file was written — the second gets its shipped key
+## back, the first stays cleared. See InputRouter._merge_keyboard.
+##
+## Read off the row tables rather than listed by hand, so a new row is covered by
+## adding it and nothing else.
+func _offered_actions() -> Array:
+	var out: Array = []
+	for target: Dictionary in AXIS_TARGETS:
+		out.append(target["neg"])
+		out.append(target["pos"])
+	for target: Dictionary in BUTTON_TARGETS:
+		out.append(target["action"])
+	return out
 
 
 ## If `working[key]` is already bound (by an earlier-enumerated device), copy that

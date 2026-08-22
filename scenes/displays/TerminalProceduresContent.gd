@@ -193,10 +193,8 @@ The lane is flown in reverse under the same corridor and speed discipline as an 
 [b]3  LIFT OFF[/b] — [color=#59f28c]BELOW 6 m/s[/color] within the bay
 [b]4  MARKERS[/b] — [color=#59f28c]DELTA, CHARLIE, BRAVO, ALPHA[/color] in order
      [color=#8c9eb8]Same rings and corridors as an arrival, below 12 m/s once clear of the bay.[/color]
-[b]5  LANDING GEAR[/b] — [color=#59f28c]DOWN UNTIL DELTA IS CLEARED[/color]
-     [color=#f2bf59]CAUTION — A leg remains within the bay walls until the final marker is behind you. Raising the gear before that point is a violation.[/color]
-[b]6  GEAR[/b] — [color=#59f28c]STOWED BEFORE RELEASE[/color]
-     [color=#8c9eb8]Control withholds the release from the pattern until the gear is stowed.[/color]
+[b]5  LANDING GEAR[/b] — [color=#59f28c]STOWED BEFORE RELEASE[/color]
+     [color=#8c9eb8]The harbour sets no point at which the gear must still be down on the way out; raise it once the pad is clear. Control withholds the release from the pattern until it is stowed.[/color]
 
 [color=#66ccff]FAILURE TO COMPLY, OUTBOUND[/color]
 A broken rule on departure is recorded as a [b]reprimand[/b] — a reduction in standing and an urgent call — and not as a go-around. A departing vessel is leaving in any case, and returning it to the pad serves nobody.
@@ -246,13 +244,21 @@ Commodity ............. Reference ..... Mass ....... Volume
 
 [color=#8c9eb8]NOTE — Mass and volume are given because a hold is limited in both. Volatiles occupy more space per unit of value than any other commodity listed; nav cores and isotopes occupy very little.[/color]
 
+[color=#66ccff]PROPELLANT[/color]
+Sold by the unit of tank capacity, uplifted at the berth. A part-filled tank is charged for what it takes.
+
+[b]LIQUID HYDROGEN[/b] ...... [b]8 CR/UNIT[/b]
+[b]LIQUID OXYGEN[/b] ........ [b]30 CR/UNIT[/b]
+
+[color=#8c9eb8]NOTE — What each is used for, what a vessel's tanks hold, and how fast they are consumed are matters for her own handbook. This office sells the fluid and quotes the price.[/color]
+
 [color=#66ccff]BUYERS[/color]
 [b]FREEHOLD[/b] — operator of this claim. Pays above reference for hull alloy and volatiles, below it for isotopes.
 [b]LAGRANGE UNION[/b] — pays above reference for nav cores and fused optics.
 [b]MERIDIAN CO.[/b] — pays above reference for rare isotopes, and well for nav cores.
 
 [color=#66ccff]TERMS[/color]
-A hold is disposed of entire, at the berth, at the buying operator's prices. Cargo is not bought by the item and nothing is offered for sale to vessels — no fuel, no repair, no berthing charge, no consumables.
+A hold is disposed of entire, at the berth, at the buying operator's prices, and is taken through the vessel's own cargo hatch. Cargo is not bought by the item. Propellant is the only thing offered for sale to vessels: there is no repair facility, no berthing charge and no other consumable.
 
 [color=#66ccff]STANDING[/color]
 Standing with an operator moves the offer across a span of [b]0.85 to 1.15[/b] of the reference price, and is therefore worth money.

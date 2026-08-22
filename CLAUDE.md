@@ -15,6 +15,7 @@ section that documents it:
 | Displays, windows, or simpit/multi-display behaviour | **The four displays** / **Simpit / multi-display setup** |
 | Gameplay loop, power channels, salvage/market rules | **Core gameplay loop** |
 | A new `tools/` scene | The **Handy tool scenes** table |
+| A chapter in either ship document | Nothing by hand — but `tools/build_manuals.ps1` reprints both to `build/manuals/` (gitignored), which is the quickest way to proof new prose on paper |
 
 ## Keep the ship's two documents in sync too
 
@@ -36,6 +37,8 @@ moves.
 | A quoted constant (`data/ships/kestrel.tres`, a `systems/*.gd` `const`, `GameState` limits or boot state) | The chapter that quotes the number, in whichever document owns it |
 | A ship interlock or its comms line (`request_cut`, the scoop gates, the gear/hatch interlocks) | The matching handbook chapter or checklist step, including the failure text it quotes |
 | A `DockingSystem` rule, charge, limit or ATC line | The **terminal procedures** — never the handbook |
+| A battery, tank, burn-rate or drive-stage constant (`GameState.BATTERY_*`, `ShipDefinition` `lh2_*` / `lox_*` / `thrust_*` / `drive_start_time`) | The handbook chapter that quotes it — **Electrical & power** or **Drive & propellant** |
+| A propellant price (`MarketSystem.LH2_PRICE_PER_UNIT`, `LOX_PRICE_PER_UNIT`) | The **terminal procedures**, under the schedule of prices — never the handbook |
 | A `ThreatSystem` or `MarketSystem` rule (rival, patrol, prices, standing) | The **terminal procedures**, under LOCAL NOTICES |
 | An input action name | Nothing by hand — but run `PilotManualSmoke`, which fails on a placeholder naming an action that no longer exists |
 | A new system, MFD page, or HUD marking | The relevant handbook chapter (and add one if none fits) |

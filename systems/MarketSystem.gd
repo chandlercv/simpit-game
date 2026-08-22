@@ -16,6 +16,19 @@ const TRANSIT_TIME := 3.0
 ## Reputation gained per sale; prices scale 0.85..1.15 across rep 0..1.
 const REP_PER_SALE := 0.03
 
+## Propellant offered at a berth, in credits per unit of tank capacity. Hydrogen
+## is the working fluid and is cheap by the tankful; oxygen is only good for the
+## booster, and is priced as the luxury it is. Quoted in the commercial agent's
+## schedule of prices (TerminalProceduresContent), never in the ship's handbook.
+const LH2_PRICE_PER_UNIT := 8
+const LOX_PRICE_PER_UNIT := 30
+
+## What each propellant is called on the MARKET page and in the comms log.
+const PROPELLANT_NAMES: Dictionary = {
+	"LH2": "LIQUID HYDROGEN",
+	"LOX": "LIQUID OXYGEN",
+}
+
 var _goods: Array = []      # GoodDefinition, parallel to GameState.market_goods
 var _factions: Array = []   # FactionDefinition, parallel to GameState.market_factions
 var _rng := RandomNumberGenerator.new()
@@ -126,6 +139,12 @@ func abort_dock() -> void:
 func sell_hold() -> void:
 	if GameState.run_phase != "DOCKED":
 		return
+	# The hold is discharged through the cargo hatch, so it has to be open. This
+	# is why the arrival procedure opens up before anything else: a buttoned-up
+	# ship has nothing to hand over.
+	if not GameState.cargo_hatch_open:
+		GameState.post_comms("MARKET", "DISCHARGE HELD — OPEN THE CARGO HATCH FIRST")
+		return
 	var faction_index := GameState.docked_faction
 	var faction_name: String = GameState.market_factions[faction_index]
 	var total := hold_value(faction_index)
@@ -140,6 +159,47 @@ func sell_hold() -> void:
 	GameState.reputation_changed.emit()  # drives _reprice() via the _ready hook
 	GameState.post_comms("MARKET", "HOLD SOLD TO %s — %d CR (REP RISING)" % [
 		faction_name, total])
+
+
+## Price of filling a tank to the top from where it stands, in credits. Part of
+## a tank costs part of the price — there is no minimum uplift.
+func propellant_quote(kind: String) -> int:
+	var short := 0.0
+	if kind == "LH2":
+		short = GameState.ship_def.lh2_capacity - GameState.lh2_fuel
+	elif kind == "LOX":
+		short = GameState.ship_def.lox_capacity - GameState.lox_fuel
+	return int(ceil(maxf(short, 0.0) * _propellant_price(kind)))
+
+
+func _propellant_price(kind: String) -> int:
+	return LH2_PRICE_PER_UNIT if kind == "LH2" else LOX_PRICE_PER_UNIT
+
+
+## Buy propellant at the berth. Fills the named tank to the top and charges for
+## what actually went in, so topping off a nearly-full tank is nearly free.
+## Refused away from a berth, on a full tank, and when the credits are not there —
+## partial uplifts on short money would turn every refuel into arithmetic.
+func buy_propellant(kind: String) -> void:
+	if not PROPELLANT_NAMES.has(kind):
+		return
+	var label: String = PROPELLANT_NAMES[kind]
+	if GameState.run_phase != "DOCKED":
+		GameState.post_comms("MARKET", "%s IS SOLD AT A BERTH ONLY" % label)
+		return
+	var cost := propellant_quote(kind)
+	if cost <= 0:
+		GameState.post_comms("MARKET", "%s TANK ALREADY FULL" % label)
+		return
+	if GameState.credits < cost:
+		GameState.post_comms("MARKET", "%s REFUSED — %d CR REQUIRED, %d CR HELD" % [
+			label, cost, GameState.credits])
+		return
+	var taken := GameState.add_propellant(kind, INF)
+	GameState.credits -= cost
+	GameState.credits_changed.emit(GameState.credits)
+	GameState.post_comms("MARKET", "%s UPLIFTED — %.0f UNITS, %d CR" % [
+		label, taken, cost])
 
 
 ## Leaving the berth is flown too: this lifts off into the departure pattern

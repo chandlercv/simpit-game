@@ -13,3 +13,7 @@ export/
 # Windows ReplaceFile leftovers (in-use file swaps, e.g. GDExtension DLLs)
 ~*.TMP
 ~*.dll
+
+# Build output from tools/build_manuals.ps1 — the two chapter catalogs are the
+# source of truth; a committed PDF would be a third in-tree copy of every figure.
+build/

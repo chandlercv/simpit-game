@@ -196,12 +196,12 @@ func _test_body(ship_a: Vector3, ship_b: Vector3, ship_radius: float,
 		if near.distance_to(body["a"]) >= ship_radius + float(body["radius"]):
 			return {}
 		var gjk := _gjk_segment_hull(ship_a, ship_b, hull)
-		var dist: float = gjk["dist"]
-		if dist >= ship_radius:
+		var hull_dist: float = gjk["dist"]
+		if hull_dist >= ship_radius:
 			return {}
-		var normal: Vector3 = gjk["normal"] if not gjk["inside"] and dist > 0.0001 \
+		var hull_normal: Vector3 = gjk["normal"] if not gjk["inside"] and hull_dist > 0.0001 \
 				else fallback
-		return {"normal": normal, "depth": ship_radius - dist}
+		return {"normal": hull_normal, "depth": ship_radius - hull_dist}
 	var closest := _closest_points_between_segments(ship_a, ship_b, body["a"], body["b"])
 	var min_sep: float = ship_radius + float(body["radius"])
 	var separation: Vector3 = closest[0] - closest[1]

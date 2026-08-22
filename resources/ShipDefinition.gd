@@ -19,9 +19,57 @@ extends Resource
 
 ## Manual flight (Phase 5): thruster acceleration at full THRUST allocation,
 ## attitude rate at full stick, and a flight-assist speed ceiling.
+## manual_accel is the RATED figure — the drive with both stages turning. Either
+## stage alone delivers a fraction of it (below), and neither delivers none.
+## max_speed is the DRAG-LIMITED ceiling: the speed at which the field stage's
+## thrust and the hull's Higgs coupling balance. Reaction mass buys past it.
 @export var manual_accel := 4.0
 @export var rotation_rate_deg := 45.0
 @export var max_speed := 25.0
+
+## --- Hybrid drive -----------------------------------------------------------
+## The drive is a field stage (electrodynamic, propellant-free, electrically
+## expensive) and a nuclear-thermal stage (burns liquid hydrogen, electrically
+## cheap), selected independently on the panel's five-position selector. These
+## are the fractions of manual_accel each delivers ALONE; together they make the
+## rated figure. The field stage is what a ship gets home on with dry tanks —
+## which is why it is never zero.
+@export var thrust_fraction_field := 0.4
+@export var thrust_fraction_thermal := 0.6
+
+## Multipliers on the THRUST channel's electrical demand for the stages running.
+## Producing thrust without hydrogen costs electricity; producing it with hydrogen
+## costs very little. This is what couples the propellant state to the battery:
+## run the tank dry, recover onto the field stage, and the bus load jumps with it.
+##
+## Tuned so the BOOT MIX IS SUSTAINABLE. At the boot allocation (THRUST 0.80,
+## CUTTER 0.00, SENSORS 0.60, LIFE 1.00) against a 2.5 alternator, running BOTH
+## comes to 2.4 — just inside. Raising CUTTER to work a wreck is what tips the
+## ship onto the battery, which is the right place for that cost to come from:
+## something the pilot chose, not the factory settings.
+@export var thrust_draw_electric := 1.0
+@export var thrust_draw_thermal := 0.2
+
+## Seconds the selector must sit at START before the drive will run. Thrust
+## arrives only once it is moved off START onto a running position.
+@export var drive_start_time := 10.0
+
+## --- Propellant -------------------------------------------------------------
+## Liquid hydrogen: the thermal stage's working fluid, and the booster's fuel.
+## Burn rates are units per second at FULL commanded thrust and scale down with
+## the throttle, so station-keeping is nearly free and a hard burn is not.
+@export var lh2_capacity := 60.0
+@export var lh2_burn_rate := 1.0
+@export var lh2_burn_boost := 2.5
+## Ceiling added while the thermal stage is running.
+@export var thermal_speed_bonus := 10.0
+
+## Liquid oxygen: burned with hydrogen in the combustion booster, and useless
+## without it. The booster is the shortest-endurance stage by a wide margin.
+@export var lox_capacity := 20.0
+@export var lox_burn_boost := 2.0
+## Ceiling added on top of the thermal stage's while boosting.
+@export var boost_speed_bonus := 15.0
 
 ## Every directional thruster other than the main (forward) one — strafe,
 ## vertical, and reverse — is a smaller tap off the same drive, not a matched

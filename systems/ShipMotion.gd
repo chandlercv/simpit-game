@@ -163,13 +163,15 @@ func step(delta: float) -> void:
 			* (1.0 - auth) * delta
 
 	# 2. Contributors — linear: strafe/vertical thrusters, then the throttle's
-	# own control law on the forward axis.
-	var accel: float = GameState.ship_def.manual_accel * maxf(GameState.power("THRUST"), 0.0)
+	# own control law on the forward axis, both scaled by what the drive can
+	# currently make (see thrust_accel, which the propellant meter reads too).
+	var accel := thrust_accel()
 	var lateral := Vector3(_cmd_thrust.x, _cmd_thrust.y, 0.0)
 	if lateral.length_squared() > 0.001:
 		velocity += transform.basis * lateral \
 				* (accel * GameState.ship_def.secondary_thrust_fraction) * delta
 	velocity = _apply_throttle_axis(transform, velocity, accel, delta)
+	_burn_propellant(lateral, delta)
 
 	# 3. Fly-by-wire — slews omega onto the commanded rate and nulls the
 	# uncommanded translation axes. Runs after every contributor so what it
@@ -181,7 +183,10 @@ func step(delta: float) -> void:
 	if omega.length_squared() > 0.00000001:
 		transform.basis = transform.basis.rotated(
 				omega.normalized(), omega.length() * delta).orthonormalized()
-	velocity = velocity.limit_length(GameState.ship_def.max_speed)
+	# The ceiling is whatever the drive can currently hold against the Higgs drag,
+	# so a tank running dry mid-burn drops it and this clamp decelerates the ship
+	# into the new one without a special case.
+	velocity = velocity.limit_length(GameState.speed_ceiling())
 	transform.origin += velocity * delta
 	ship["transform"] = transform
 	ship["velocity"] = velocity
@@ -202,8 +207,71 @@ func _apply_throttle_axis(transform: Transform3D, velocity: Vector3, accel: floa
 	if _throttle_cmd_mode == ThrottleCmdMode.THRUST:
 		new_fwd_speed = fwd_speed + z_cmd * accel * delta
 	else:
-		new_fwd_speed = move_toward(fwd_speed, z_cmd * GameState.ship_def.max_speed, accel * delta)
+		# SPEED mode commands a fraction of the LIVE ceiling, not of the drag-limited
+		# figure — a full lever with propellant aboard is meant to reach the tier the
+		# tanks are paying for.
+		new_fwd_speed = move_toward(fwd_speed, z_cmd * GameState.speed_ceiling(), accel * delta)
 	return velocity + forward_dir * (new_fwd_speed - fwd_speed)
+
+
+## The acceleration the drive can currently make: the rated figure scaled by BOTH
+## the electrical allocation actually delivered and the stages the selector has
+## turning — so a starved bus and a dead stage cost the same way, and OFF (or L
+## with a dry tank) leaves nothing at all. It is also the yardstick the propellant
+## meter measures a burn against, so both read the same figure.
+func thrust_accel() -> float:
+	return GameState.ship_def.manual_accel \
+			* maxf(GameState.power("THRUST"), 0.0) * GameState.thrust_fraction()
+
+
+## Meter propellant against COMMANDED thrust rather than against speed: holding
+## station beside a wreck costs almost nothing and a hard burn costs plenty,
+## which is the shape that makes a tank a resource rather than a timer.
+func _burn_propellant(lateral: Vector3, delta: float) -> void:
+	# How hard the drive is being worked, 0..1 — the throttle plus whatever the
+	# manoeuvring thrusters are doing, since they are fed by the same drive.
+	_meter_propellant(clampf(absf(_cmd_thrust.z) + lateral.length(), 0.0, 1.0), delta)
+
+
+## Meter propellant for a burn flown as a KINEMATIC OVERRIDE rather than through
+## the command path above — the approach autopilot, which seizes the motion state
+## every tick and so never touches _cmd_thrust. It flies on the drive like any
+## other burn and is charged like one: the velocity change it imposes is measured
+## against what the drive could make in the same tick, which meters a manoeuvre at
+## its delta-v and leaves a coast at constant velocity free.
+##
+## The seize can impose more delta-v in a tick than the drive could actually make
+## — engagement, where it overrides whatever the pilot was carrying. The clamp
+## inside _meter_propellant charges the drive's maximum for that tick rather than
+## inventing a rate above it.
+func burn_for_delta_v(delta_v: Vector3, delta: float) -> void:
+	var accel := thrust_accel()
+	if accel <= 0.0 or delta <= 0.0:
+		return
+	_meter_propellant(delta_v.length() / (accel * delta), delta)
+
+
+## The one metering law, given how hard the drive is being worked (0..1). The
+## booster draws on both tanks; the thermal stage on hydrogen alone.
+func _meter_propellant(demand: float, delta: float) -> void:
+	if not GameState.thermal_stage_running():
+		return
+	# A stage turning is not a stage being worked. The drive draws on the THRUST
+	# channel, and with nothing delivered against it the acceleration is zero
+	# however far the lever is open — so metering against the COMMAND alone would
+	# drain the tank on a dead bus for a burn that never happened. Nothing
+	# delivered, nothing metered; the same figure gates both.
+	if GameState.power("THRUST") <= 0.0:
+		return
+	demand = clampf(demand, 0.0, 1.0)
+	if demand <= 0.0:
+		return
+	var def := GameState.ship_def
+	if GameState.boosting():
+		GameState.burn_propellant(def.lh2_burn_boost * demand * delta,
+				def.lox_burn_boost * demand * delta)
+	else:
+		GameState.burn_propellant(def.lh2_burn_rate * demand * delta, 0.0)
 
 
 ## The fly-by-wire linear channel: bleed the residual on every axis the pilot

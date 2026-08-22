@@ -23,6 +23,13 @@ const SCAN_RANGE := 300.0
 const SCAN_TIME := 5.0
 const MIN_CUTTER_POWER := 0.2
 const MIN_SENSOR_POWER := 0.1
+## Minimum THRUST delivery the approach autopilot will fly on. Below this the
+## closing burn is slower than the profile below is willing to command, and the
+## seize is kinematic — it would fly the ship at a rate the drive cannot make
+## while manual thrust, which scales by the same figure with no floor, handed
+## the pilot almost nothing. Refused up front and held throughout, so the cap
+## below can read the delivered figure straight.
+const MIN_APPROACH_POWER := 0.05
 ## Minimum FBW authority to open (or keep) the pre-cut alignment. While
 ## ALIGNING the router routes pitch/yaw to the torch, so the pilot has no
 ## authority to cancel residual spin by hand — with the stabilisation degraded
@@ -188,10 +195,7 @@ func set_manual_flight(thrust: Vector3, rot: Vector3) -> void:
 	var moved := Vector3(thrust.x, thrust.y, forward_over).length() > MANUAL_OVERRIDE_DELTA \
 			or rot.length() > MANUAL_OVERRIDE_DELTA
 	if GameState.approach_state != "HOLDING" and moved:
-		_abort_align("MANUAL CONTROL")
-		_abort_cut("MANUAL CONTROL")
-		_set_approach("HOLDING")
-		GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
+		_disengage_approach("MANUAL CONTROL", "AUTOPILOT DISENGAGED — MANUAL CONTROL")
 
 
 func toggle_approach() -> void:
@@ -207,14 +211,30 @@ func toggle_approach() -> void:
 					"APPROACH INHIBITED — THROTTLE PAST %d%%, EASE BACK TO ARM"
 					% int(APPROACH_ARM_THROTTLE_MAX * 100.0))
 			return
+		# The autopilot only translates, and it translates on the drive. With the
+		# selector off a running position — or on the thermal stage alone with a dry
+		# hydrogen tank — it would command a burn nothing can deliver and sit there
+		# reporting APPROACHING forever, so refuse it up front.
+		if GameState.thrust_fraction() <= 0.0:
+			GameState.post_comms("OPS",
+					"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)")
+			return
+		# It flies on the THRUST channel as well as on the drive, and the two fail
+		# independently: a stage can be turning with no amps reaching it. Manual
+		# thrust scales by this figure, so a channel delivering next to nothing is
+		# the electrical equivalent of a shut-down drive — and the autopilot must
+		# not fly on what the pilot could not. MIN_APPROACH_POWER, not zero: under
+		# it the closing profile would outrun the drive feeding it.
+		if GameState.power("THRUST") < MIN_APPROACH_POWER:
+			GameState.post_comms("OPS",
+					"APPROACH INHIBITED — THRUST CHANNEL BELOW %d%% (RAISE THE ALLOCATION)"
+					% int(MIN_APPROACH_POWER * 100.0))
+			return
 		_set_approach("APPROACHING")
 		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH %s"
 				% GameState.get_member(GameState.selected_member_id)["name"])
 	else:
-		_abort_align("APPROACH BROKEN")
-		_abort_cut("APPROACH BROKEN")
-		_set_approach("HOLDING")
-		GameState.post_comms("OPS", "STATION-KEEPING RELEASED — HOLDING")
+		_disengage_approach("APPROACH BROKEN", "STATION-KEEPING RELEASED — HOLDING")
 
 
 ## Bindable (throttle_cmd_toggle): forwards to the motion pipeline, which owns
@@ -418,10 +438,7 @@ func trigger_collapse() -> void:
 func abort_approach_on_collision() -> void:
 	if GameState.approach_state == "HOLDING":
 		return
-	_abort_align("PATH OBSTRUCTED")
-	_abort_cut("PATH OBSTRUCTED")
-	_set_approach("HOLDING")
-	GameState.post_comms("OPS", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
+	_disengage_approach("PATH OBSTRUCTED", "AUTOPILOT DISENGAGED — OBSTRUCTION ON APPROACH")
 
 
 ## MarketSystem: called on leaving the site (docking) — approach state has no
@@ -534,6 +551,28 @@ func _update_approach(delta: float) -> void:
 	if GameState.approach_state == "HOLDING":
 		ShipMotion.step(delta)
 		return
+	# The autopilot flies on the drive, and the selector moves under it: OFF or
+	# START after toggle_approach()'s gate has already passed. The seize below is
+	# kinematic and never consults the drive, so without this the ship would keep
+	# closing — and then hold station, and be cut from — on a drive making no
+	# thrust at all. Hand control back the way a collision does.
+	if GameState.thrust_fraction() <= 0.0:
+		_disengage_approach("DRIVE THRUST LOST", "AUTOPILOT DISENGAGED — DRIVE NOT MAKING THRUST")
+		ShipMotion.step(delta)
+		return
+	# The same hole on the electrical side, and the arm-time gate cannot cover it
+	# either: thrust_fraction() reports the stages TURNING, not the amps reaching
+	# them, so a dead alternator on a flat battery — or the allocation wound down —
+	# leaves it positive while the channel delivers next to nothing. Held to the
+	# same floor the engagement is: below it the ship would crawl in and report
+	# MATCHED on a burn the drive cannot make, while manual thrust (ShipMotion,
+	# which scales by the delivered figure) gave the pilot almost nothing.
+	if GameState.power("THRUST") < MIN_APPROACH_POWER:
+		_disengage_approach("THRUST POWER LOST",
+				"AUTOPILOT DISENGAGED — THRUST CHANNEL BELOW %d%%"
+				% int(MIN_APPROACH_POWER * 100.0))
+		ShipMotion.step(delta)
+		return
 	# Fly to the *selected* member: its baked world centroid (published into the
 	# graph by Wreck.gd) is the park target, so the ship stations off that member
 	# specifically. Fall back to the wreck centre when the member carries no baked
@@ -549,9 +588,12 @@ func _update_approach(delta: float) -> void:
 	var member_radius: float = member.get("radius", 0.0)
 	var remaining: float = center_dist - (member_radius + _ship_radius() + STANDOFF_GAP)
 	# Closing speed profile: proportional braking, capped by ship performance
-	# scaled by THRUST allocation (starve the channel and the burn crawls).
+	# scaled by THRUST allocation (starve the channel and the burn crawls). The
+	# delivered figure is read straight — the guard above has already refused
+	# everything below MIN_APPROACH_POWER, so the cap never commands a closing
+	# rate the drive could not make by hand.
 	var speed: float = clampf(remaining * 0.4, 0.0,
-			GameState.ship_def.approach_speed * maxf(GameState.power("THRUST"), 0.05))
+			GameState.ship_def.approach_speed * GameState.power("THRUST"))
 	# The member orbits the wreck centre as the frame tumbles; feed-forward its
 	# orbital velocity so the ship holds station on it (without this the pure-closing
 	# controller lags a moving standoff and never settles inside MATCH_SLACK). The
@@ -560,7 +602,16 @@ func _update_approach(delta: float) -> void:
 	var closing: Vector3 = approach_dir * speed if remaining > 0.01 else Vector3.ZERO
 	var velocity: Vector3 = member_vel + closing
 	transform.origin += velocity * delta
+	# The autopilot flies on the drive, and the drive is fed from a tank. The seize
+	# writes the motion state directly and so never reaches the command path that
+	# meters a burn — without this the whole approach, and the station-keeping that
+	# follows it, would be flown on free hydrogen. Charge the velocity change it is
+	# imposing: the closing burn and the braking both cost, a coast at constant
+	# velocity does not, and holding station on a member orbiting the wreck centre
+	# costs the small continuous burn that actually implies.
+	var was_velocity: Vector3 = ship["velocity"]
 	ShipMotion.seize(transform, velocity)
+	ShipMotion.burn_for_delta_v(velocity - was_velocity, delta)
 	if GameState.approach_state == "APPROACHING" \
 			and remaining <= MATCH_SLACK and speed < 0.6:
 		_set_approach("MATCHED")
@@ -697,6 +748,17 @@ func _abort_cut(reason: String) -> void:
 func _set_risk(risk: float) -> void:
 	GameState.structural_risk = clampf(risk, 0.0, 1.0)
 	GameState.structural_risk_changed.emit(GameState.structural_risk)
+
+
+## Hand the ship back to the pilot from a flying autopilot. However the standoff
+## is given up, it is given up whole: an alignment or a cut in progress rests on
+## the match and ends with it, so all three go together. `reason` is what the
+## salvage aborts quote; `ops_call` is the OPS line for the disengagement itself.
+func _disengage_approach(reason: String, ops_call: String) -> void:
+	_abort_align(reason)
+	_abort_cut(reason)
+	_set_approach("HOLDING")
+	GameState.post_comms("OPS", ops_call)
 
 
 func _set_approach(state: String) -> void:
