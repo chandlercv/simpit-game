@@ -389,8 +389,21 @@ func _display_status_text() -> String:
 	if DisplayConfig.needs_setup_prompt():
 		lines.append("not assigned for this monitor setup yet — LAUNCH asks first")
 	elif count < DisplayConfig.ALL_ROLES.size():
-		lines.append("displays sharing a screen are tiled side by side")
+		lines.append(_sharing_status())
 	return "\n".join(lines)
+
+
+## What LAUNCH will actually do with a screen that carries more than one role:
+## tile them side by side, or — where tiling would shrink a panel past legible
+## size — fall back to a tabbed host. Reads WindowManager's own layout plan
+## rather than assuming tiling always fits, so this can't say "tiled" for an
+## arrangement that's really landing in the tabbed fallback.
+func _sharing_status() -> String:
+	var plans := WindowManager.screen_plans()
+	for screen: int in plans:
+		if plans[screen]["tabbed"]:
+			return "displays sharing a screen are too tight to tile — LAUNCH tabs them instead"
+	return "displays sharing a screen are tiled side by side"
 
 
 func _controls_status_text() -> String:

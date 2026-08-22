@@ -197,19 +197,31 @@ func _place_all() -> void:
 	# hold the pause until here (a no-op on the mid-game F5 rebuild path).
 	get_tree().paused = false
 	var main_screen: int = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
+	var plans := screen_plans()
+	for screen: int in plans:
+		_apply_plan(plans[screen], screen, screen == main_screen)
+
+
+## Every screen's layout decision, keyed by screen index — the same planning
+## _place_all() applies, exposed read-only so the title card's status line can
+## describe what LAUNCH will actually build (tiled vs. tabbed) without spawning
+## any windows to find out.
+func screen_plans() -> Dictionary:
+	var main_screen: int = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
 	var by_screen := _roles_by_screen()
 	# MAIN alone on its screen has no by_screen entry, but its window still has to
 	# be placed — without this a four-monitor rig never leaves its boot size.
 	if not by_screen.has(main_screen):
 		by_screen[main_screen] = []
 
+	var plans := {}
 	for screen: int in by_screen:
 		var roles: Array = by_screen[screen]
 		var has_main := screen == main_screen
 		var exclusive := not has_main and roles.size() <= 1
-		var plan: Dictionary = ScreenLayoutScript.plan_screen(
+		plans[screen] = ScreenLayoutScript.plan_screen(
 				_screen_region(screen, exclusive), has_main, roles, ROLE_CANVAS)
-		_apply_plan(plan, screen, has_main)
+	return plans
 
 
 ## Secondary roles per screen, in SECONDARY_SCENES order (tactical, MFD, camera —
