@@ -265,9 +265,11 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
    has to actually be making thrust (it flies on the drive, so a shut-down drive
    or a dry hydrogen tank on `L` refuses the engagement, and shutting the drive
    down while it's flying disengages it), the **THRUST channel has to be
-   delivering** (it flies on the amps too, and the stages keep turning on a bus
-   that's stopped feeding them — so a zero allocation, or an alternator off with
-   a flat battery, refuses the engagement and disengages it mid-approach), and
+   delivering at least 0.05** (it flies on the amps too, and the stages keep
+   turning on a bus that's stopped feeding them — so an allocation wound below
+   that, or an alternator off with a flat battery, refuses the engagement and
+   disengages it mid-approach; the closing rate scales with the delivered figure,
+   so a thin allocation arrives slowly), and
    any real stick/throttle input while it's flying hands control back to you.
    However you lose it, you lose the standoff with it — and any alignment or cut
    in progress ends there.*

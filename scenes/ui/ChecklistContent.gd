@@ -382,12 +382,15 @@ static func _cutting() -> Array[Dictionary]:
 		{
 			# It flies on the THRUST channel as well, and the drive row above cannot
 			# see that: the stages keep turning on a bus that has stopped supplying
-			# them. Delivered rather than set, because that is the figure it flies on.
+			# them. Delivered rather than set, because that is the figure it flies on,
+			# and against the autopilot's own floor rather than zero, so this row goes
+			# amber exactly where the engagement is refused.
 			"group": "APPROACH", "label": "THRUST ALLOCATION", "want": "DELIVERING",
 			"read": func() -> Dictionary:
-				return _gate(GameState.power("THRUST") > 0.0, "%.2f OF %.2f SET" % [
-					GameState.power("THRUST"),
-					GameState.power_target("THRUST")]),
+				return _gate(GameState.power("THRUST") >= SalvageSystem.MIN_APPROACH_POWER,
+					"%.2f OF %.2f SET" % [
+						GameState.power("THRUST"),
+						GameState.power_target("THRUST")]),
 		},
 		{
 			"group": "APPROACH", "label": "THROTTLE", "want": "INSIDE THE ARMING BAND",

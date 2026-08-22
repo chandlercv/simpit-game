@@ -23,6 +23,13 @@ const SCAN_RANGE := 300.0
 const SCAN_TIME := 5.0
 const MIN_CUTTER_POWER := 0.2
 const MIN_SENSOR_POWER := 0.1
+## Minimum THRUST delivery the approach autopilot will fly on. Below this the
+## closing burn is slower than the profile below is willing to command, and the
+## seize is kinematic — it would fly the ship at a rate the drive cannot make
+## while manual thrust, which scales by the same figure with no floor, handed
+## the pilot almost nothing. Refused up front and held throughout, so the cap
+## below can read the delivered figure straight.
+const MIN_APPROACH_POWER := 0.05
 ## Minimum FBW authority to open (or keep) the pre-cut alignment. While
 ## ALIGNING the router routes pitch/yaw to the torch, so the pilot has no
 ## authority to cancel residual spin by hand — with the stabilisation degraded
@@ -213,13 +220,15 @@ func toggle_approach() -> void:
 					"APPROACH INHIBITED — DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)")
 			return
 		# It flies on the THRUST channel as well as on the drive, and the two fail
-		# independently: a stage can be turning with no amps reaching it. Delivering
-		# nothing against the channel is the electrical equivalent of a shut-down
-		# drive — manual thrust scales by this figure and goes to zero with it — so
-		# the autopilot must not fly on it either.
-		if GameState.power("THRUST") <= 0.0:
+		# independently: a stage can be turning with no amps reaching it. Manual
+		# thrust scales by this figure, so a channel delivering next to nothing is
+		# the electrical equivalent of a shut-down drive — and the autopilot must
+		# not fly on what the pilot could not. MIN_APPROACH_POWER, not zero: under
+		# it the closing profile would outrun the drive feeding it.
+		if GameState.power("THRUST") < MIN_APPROACH_POWER:
 			GameState.post_comms("OPS",
-					"APPROACH INHIBITED — THRUST CHANNEL UNPOWERED (RAISE THE ALLOCATION)")
+					"APPROACH INHIBITED — THRUST CHANNEL BELOW %d%% (RAISE THE ALLOCATION)"
+					% int(MIN_APPROACH_POWER * 100.0))
 			return
 		_set_approach("APPROACHING")
 		GameState.post_comms("OPS", "APPROACH BURN — MATCHING VELOCITY WITH %s"
@@ -553,13 +562,15 @@ func _update_approach(delta: float) -> void:
 		return
 	# The same hole on the electrical side, and the arm-time gate cannot cover it
 	# either: thrust_fraction() reports the stages TURNING, not the amps reaching
-	# them, so a dead alternator on a flat battery — or the allocation wound to
-	# zero — leaves it positive while the channel delivers nothing. The closing
-	# profile below floors its speed cap at 5% of rated whatever the channel reads,
-	# so an unpowered ship would crawl in and report MATCHED while manual thrust
-	# (ShipMotion, which scales by the delivered figure) gave the pilot nothing.
-	if GameState.power("THRUST") <= 0.0:
-		_disengage_approach("THRUST POWER LOST", "AUTOPILOT DISENGAGED — THRUST CHANNEL UNPOWERED")
+	# them, so a dead alternator on a flat battery — or the allocation wound down —
+	# leaves it positive while the channel delivers next to nothing. Held to the
+	# same floor the engagement is: below it the ship would crawl in and report
+	# MATCHED on a burn the drive cannot make, while manual thrust (ShipMotion,
+	# which scales by the delivered figure) gave the pilot almost nothing.
+	if GameState.power("THRUST") < MIN_APPROACH_POWER:
+		_disengage_approach("THRUST POWER LOST",
+				"AUTOPILOT DISENGAGED — THRUST CHANNEL BELOW %d%%"
+				% int(MIN_APPROACH_POWER * 100.0))
 		ShipMotion.step(delta)
 		return
 	# Fly to the *selected* member: its baked world centroid (published into the
@@ -577,9 +588,12 @@ func _update_approach(delta: float) -> void:
 	var member_radius: float = member.get("radius", 0.0)
 	var remaining: float = center_dist - (member_radius + _ship_radius() + STANDOFF_GAP)
 	# Closing speed profile: proportional braking, capped by ship performance
-	# scaled by THRUST allocation (starve the channel and the burn crawls).
+	# scaled by THRUST allocation (starve the channel and the burn crawls). The
+	# delivered figure is read straight — the guard above has already refused
+	# everything below MIN_APPROACH_POWER, so the cap never commands a closing
+	# rate the drive could not make by hand.
 	var speed: float = clampf(remaining * 0.4, 0.0,
-			GameState.ship_def.approach_speed * maxf(GameState.power("THRUST"), 0.05))
+			GameState.ship_def.approach_speed * GameState.power("THRUST"))
 	# The member orbits the wreck centre as the frame tumbles; feed-forward its
 	# orbital velocity so the ship holds station on it (without this the pure-closing
 	# controller lags a moving standoff and never settles inside MATCH_SLACK). The

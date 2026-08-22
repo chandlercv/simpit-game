@@ -72,7 +72,7 @@ func _run() -> void:
 
 	# The electrical half of the same interlock. The stages keep turning on a dead
 	# bus, so thrust_fraction() stays positive and only the DELIVERED THRUST figure
-	# falls — and the closing profile's 5% floor would otherwise crawl the ship in
+	# falls — and the seize is kinematic, so without this the ship would crawl in
 	# and report MATCHED on a channel handing the pilot nothing.
 	SalvageSystem.reset_site()
 	GameState.wreck["scanned"] = true
@@ -101,6 +101,26 @@ func _run() -> void:
 	_check(GameState.approach_state == "APPROACHING",
 			"...and arms again once the bus is back")
 	SalvageSystem.toggle_approach()
+
+	# The band between "delivering something" and MIN_APPROACH_POWER, which a
+	# zero-only guard misses entirely: the channel reads positive, so every check
+	# above stays quiet, while the closing profile is asked for a rate the drive
+	# cannot make — manual thrust scales by the same figure and would hand the
+	# pilot a twentieth of rated. The floor is held at engagement and in flight.
+	var thrust_set: float = GameState.power_target("THRUST")
+	SalvageSystem.toggle_approach()
+	_check(GameState.approach_state == "APPROACHING", "approach arms at the full allocation")
+	GameState.set_power("THRUST", SalvageSystem.MIN_APPROACH_POWER * 0.6)
+	_check(GameState.power("THRUST") > 0.0,
+			"an allocation under the floor still delivers something (a zero test cannot see it)")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_check(GameState.approach_state == "HOLDING",
+			"...and disengages a flying autopilot just as a dead bus does")
+	SalvageSystem.toggle_approach()
+	_check(GameState.approach_state == "HOLDING",
+			"...and will not re-arm until the allocation is back above the floor")
+	GameState.set_power("THRUST", thrust_set)
 
 	# The autopilot flies on the drive and the drive is fed from a tank, so a seize
 	# is still a burn: fly a real approach and watch the hydrogen move. Without the
