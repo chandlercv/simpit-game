@@ -31,6 +31,7 @@ signal display_setup_requested
 const ButtonThemeScript := preload("res://scenes/ui/ButtonTheme.gd")
 const ManualViewerScript := preload("res://scenes/displays/ManualViewer.gd")
 const PilotManualContentScript := preload("res://scenes/displays/PilotManualContent.gd")
+const ScreenLayoutScript := preload("res://scenes/displays/ScreenLayout.gd")
 const TerminalProceduresContentScript := preload("res://scenes/displays/TerminalProceduresContent.gd")
 
 ## The two documents the ship carries, each a row on the card. They are separate
@@ -388,9 +389,36 @@ func _display_status_text() -> String:
 		"%d screen%s   %s" % [count, "" if count == 1 else "s", "  ".join(parts)]]
 	if DisplayConfig.needs_setup_prompt():
 		lines.append("not assigned for this monitor setup yet — LAUNCH asks first")
-	elif count < DisplayConfig.ALL_ROLES.size():
-		lines.append("displays sharing a screen open as a tabbed panel")
+	elif _has_shared_screen():
+		lines.append(_sharing_status())
 	return "\n".join(lines)
+
+
+## True if two or more roles are assigned to the same physical screen. Checked
+## directly against the role→screen assignments rather than by comparing
+## screen count to role count — assignment is manual, so a rig with enough
+## screens for one role each can still have the player put two roles on one
+## screen and leave another spare.
+func _has_shared_screen() -> bool:
+	var seen: Dictionary = {}
+	for role in DisplayConfig.ALL_ROLES:
+		var screen: int = DisplayConfig.get_screen_for_role(role)
+		if seen.has(screen):
+			return true
+		seen[screen] = true
+	return false
+
+
+## What LAUNCH will actually do with the screens that carry more than one role:
+## tile them side by side, or — where tiling would shrink a panel past legible
+## size — fall back to a tabbed host. Reads WindowManager's own layout plan
+## rather than assuming tiling always fits, so this can't say "tiled" for an
+## arrangement that's really landing in the tabbed fallback; ScreenLayout does
+## the wording, which keeps a rig whose shared screens disagree describable
+## (and asserted headlessly, where this card's screens are not).
+func _sharing_status() -> String:
+	return ScreenLayoutScript.describe_sharing(WindowManager.screen_plans(),
+			DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN))
 
 
 func _controls_status_text() -> String:

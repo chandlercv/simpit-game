@@ -6,9 +6,10 @@ class_name DisplaySetup
 ##
 ## Factored from tools/ScreenLabeler: every screen gets a numbered overlay window
 ## whose role buttons assign that role to that screen (DisplayConfig.set_role_screen);
-## two or more roles on one screen become a tabbed host (a dimmed overlay on the
-## Main screen). The mapping is pre-filled with DisplayConfig's suggestion, so the
-## common case is a single confirming click.
+## two or more roles on one screen are tiled into it by ScreenLayout, falling back
+## to a tabbed host where the tiles would be too small to read. The mapping is
+## pre-filled with DisplayConfig's suggestion, so the common case is a single
+## confirming click.
 ##
 ## Emits `confirmed` once the player commits; what happens next is WindowManager's
 ## call — hand back to the title card, start the run, or just rebuild the layout
@@ -77,9 +78,11 @@ func _build_center(main_screen: int) -> void:
 
 	var hint := Label.new()
 	hint.text = "Fewer screens than displays. Each screen shows a card — tap a role\n" \
-		+ "to put it on that screen. Two or more roles on one screen share a\n" \
-		+ "tabbed panel (a dimmed overlay on the Main screen; F1/F2/F3 or the\n" \
-		+ "tabs switch between them). The suggestion below already works —\n" \
+		+ "to put it on that screen. Two or more roles on one screen are tiled\n" \
+		+ "side by side, all readable at once; on the Main screen they take the\n" \
+		+ "bottom third and the flight view keeps the rest. Where a screen is too\n" \
+		+ "small to tile they share a tabbed panel instead (F1/F2/F3 or the tabs\n" \
+		+ "switch between them). The suggestion below already works —\n" \
 		+ ("press %s to accept it, or reassign first." % confirm_label)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 18)

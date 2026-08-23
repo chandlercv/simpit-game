@@ -1,13 +1,19 @@
 extends Control
 class_name RoleTabHost
 ## Hosts one or more secondary-display role panels and shows one at a time,
-## switched by an on-screen tab strip and by hotkeys. One component, two modes:
+## switched by an on-screen tab strip and by hotkeys.
 ##
-##  - overlay (dimmed): lives in a CanvasLayer over the live Main view when
-##    roles have to share the Main screen. A MAIN tab hides the panel so the
-##    hull-cam is unobstructed; the panel floats over a dimmed backdrop.
-##  - opaque: fills its own borderless window on a spare screen shared by two or
-##    more roles. Solid backdrop, no MAIN tab, always showing a panel.
+## This is the fallback, not the usual case: WindowManager tiles the roles
+## sharing a screen so they are all visible at once, and only falls back here
+## when ScreenLayout finds the region too small to tile legibly. One component,
+## two modes, matching the two regions that can be too small:
+##
+##  - overlay (dimmed): lives in a CanvasLayer over the live Main view, for a
+##    Main screen too short to carry a panel strip under the flight view. A MAIN
+##    tab hides the panel so the hull-cam is unobstructed; the panel floats over
+##    a dimmed backdrop.
+##  - opaque: fills its own borderless window on a spare screen whose tiles would
+##    be too small. Solid backdrop, no MAIN tab, always showing a panel.
 ##
 ## Panels are the reused Root content of the standalone display windows,
 ## reparented in by WindowManager, so the UI and its input handling are

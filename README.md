@@ -27,7 +27,8 @@ locked-target box on the derelict frigate.*
 
 Displays are assigned to physical screens by role (see `autoload/DisplayConfig.gd`;
 roles are re-labelled with `tools/ScreenLabeler.tscn`). Each is its own OS window
-with its own input stream.
+with its own input stream — a whole screen where there's one to spare, otherwise a
+tile of one (see **Simpit / multi-display setup**).
 
 | Role | Window | What it shows | How you interact |
 | --- | --- | --- | --- |
@@ -141,7 +142,7 @@ before any other window opens. It's the one place that gathers everything you se
 | On the card | What it does |
 | --- | --- |
 | **SCENARIO** | Which run to fly, with a blurb for the selected one. Today there is exactly one — **DEMO RUN**, the shipped sandbox (tumbling frigate on a Freehold claim, a rival cutter, a patrol). Scenarios are a data list (`GameState.SCENARIOS`), so a second run is a catalog entry, not new UI. |
-| **SET UP DISPLAYS  (F6)** | Opens the same **Display Setup** chooser described under *Simpit / multi-display setup*, as a step you come back from — confirm it and you're back on the card with the new assignment shown. The status line reads the live mapping (`3 screens  MAIN→0  TACTICAL→1 …`) and turns amber when this monitor setup has never been assigned. |
+| **SET UP DISPLAYS  (F6)** | Opens the same **Display Setup** chooser described under *Simpit / multi-display setup*, as a step you come back from — confirm it and you're back on the card with the new assignment shown. The status line reads the live mapping (`3 screens  MAIN→0  TACTICAL→1 …`) and turns amber when this monitor setup has never been assigned. When two or more roles land on one screen it adds a second line saying what **LAUNCH** will do with them — tiled side by side, or tabbed where the tiles would be too small to read — and names the screen when the shared screens don't all come out the same way (`screen 0 is too tight to tile — LAUNCH tabs the displays there and tiles the rest`). |
 | **SET UP CONTROLS  (F7)** | Opens the same in-game **remapper** described under *Remapping the controls*. The status line lists the sticks currently detected, or says you're on the keyboard mapping. |
 | **PILOT'S MANUAL** | Opens the ship's handbook — her systems, her limits and the four checklists. See below. |
 | **TERMINAL PROCEDURES** | Opens the harbour's document — the approach lane and its plate, clearance, charges and local notices. A separate publication because it has a separate publisher. See below. |
@@ -728,9 +729,11 @@ button press). To inspect either on your unit, run `tools/InputEcho.tscn`.
 
 The game is **one process** that adapts to however many monitors you have — from
 the full four-screen rig down to a single laptop panel. With four (or more)
-screens it opens **one native OS window per monitor**; with fewer, displays that
-can't get their own screen share one via a **tabbed host** (`WindowManager`,
-`autoload/DisplayConfig.gd`). There is no split-screen or window-embedding.
+screens it opens **one native OS window per monitor**; with fewer, the displays
+that share a screen are **tiled** into it, one native window each, so they stay
+readable side by side instead of taking turns (`WindowManager`,
+`scenes/displays/ScreenLayout.gd`). There is no window-embedding — a tile is a
+real OS window, with its own input stream and its own content scale.
 
 - **You choose the layout.** The in-game **Display Setup** chooser is one of the
   launch screen's two setup steps (**SET UP DISPLAYS**), and it also comes up on
@@ -747,24 +750,39 @@ can't get their own screen share one via a **tabbed host** (`WindowManager`,
   never asks twice, but a different arrangement asks again. Press **F6** anytime to
   re-open the chooser; **F5** re-detects monitors and rebuilds the layout (a known
   setup applies silently, an unknown one re-opens the chooser). No restart needed.
-- **How shared screens look.** Two or more roles on one screen become a tabbed
-  host, switched by an on-screen tab strip **and** by `F1`/`F2`/`F3` (`Tab`
-  cycles). On a **spare** screen the host fills it opaquely. On the **Main**
-  screen the panels appear as a **dimmed overlay** over the live hull-cam view;
-  the `MAIN` tab (or the backtick `` ` `` key) hides the panel for an unobstructed
-  view. Everything works with mouse, touch, **or** keyboard.
+- **How shared screens look.** Roles that share a screen are tiled into it and are
+  all live at once — nothing has to be brought to the front to be read.
+  - On the **Main** screen the hull-cam view keeps the **top two thirds** and the
+    panels take an equal share of the **bottom third** each, left to right. The
+    Main window leaves fullscreen to make room, so the taskbar comes back and each
+    tile gets its own taskbar button.
+  - On a **spare** screen a lone role still covers it edge to edge. Two or three
+    share it as rows: the **MFDs take the full-width bottom row** — the display you
+    reach for, and the one that wants the width for two units — with the others
+    splitting the row above. So **two monitors show tactical, MFD and camera all
+    at once** on the spare screen, with the flight view fullscreen on the other.
+  - **Where a region is too small to tile legibly**, it falls back to the old
+    **tabbed host**: one panel at a time, switched by an on-screen tab strip
+    **and** by `F1`/`F2`/`F3` (`Tab` cycles). A spare screen gets an opaque host
+    filling it. A Main screen too short to carry a strip at all — a 1366×768
+    laptop panel, say — keeps the hull-cam fullscreen and puts the panels back
+    over it as a **dimmed overlay**, which the `MAIN` tab or the backtick
+    `` ` `` key hides. The threshold is `ScreenLayout.MIN_SCALE`: no panel is
+    tiled at under 42% of the size it was drawn at.
+  - Everything works with mouse, touch, **or** keyboard.
 - **No touchscreen needed.** Every secondary display is driven by mouse as well as
   touch, and the tab strip / chooser are keyboard-reachable — the game is fully
   playable at a plain desk.
 - **spacedesk.** The secondary displays are designed to run over spacedesk
-  virtual monitors. Because a dedicated role is full-coverage and borderless, and
-  input is process-global, windows stay in sync regardless of which one has OS
-  focus. spacedesk index order isn't stable across reconnects, but the saved
+  virtual monitors. Because a dedicated role is full-coverage and borderless (a
+  tiled one covers its tile), and input is process-global, windows stay in sync
+  regardless of which one has OS focus. A screen that gets split is laid out
+  inside its **usable** rect, so the taskbar doesn't clip the bottom row. spacedesk index order isn't stable across reconnects, but the saved
   layout is keyed by geometry and `F5` re-detects — reassign with the chooser
   (or the `tools/ScreenLabeler.tscn` dev tool) if a reconnect shuffles things.
 - **Adding a fifth display** is a role entry in `DisplayConfig` + a scene in
-  `WindowManager.SECONDARY_SCENES` — no changes to `GameState` or existing
-  windows.
+  `WindowManager.SECONDARY_SCENES` and its canvas in `WindowManager.ROLE_CANVAS`
+  — no changes to `GameState` or existing windows.
 
 `config/name` is **Salvager**; each secondary window is titled `Salvager — <Role>`.
 
@@ -778,9 +796,9 @@ screen** above); press **LAUNCH** to start the run. The game runs
 degraded-gracefully: with no HOTAS or switch panel it retries hardware in the
 background while you fly on the **default keyboard mapping** (mouse/touch on the
 secondary displays; rebind any key via **F7**), and with fewer than four
-monitors it prompts you (once per setup) to assign displays to screens and packs
-the overflow into a tabbed host (see **Simpit / multi-display setup** above; `F6`
-re-opens the chooser, `F5` re-detects monitors). The `hid-gd` GDExtension is
+monitors it prompts you (once per setup) to assign displays to screens and tiles
+the overflow into the screens it has (see **Simpit / multi-display setup** above;
+`F6` re-opens the chooser, `F5` re-detects monitors). The `hid-gd` GDExtension is
 required for the switch panel and the X55 POV glance; without it those inputs are
 disabled but the rest still works.
 
@@ -812,7 +830,7 @@ running game predates a change.
 | `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); a piece is **solid against static geometry** — it bounces off the derelict/station and is pushed clear rather than sinking through; the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
 | `DockSmoke.tscn` | Headless smoke for the docking/landing mini-game (DockingSystem): the transit burn hands over to a flown approach; the hold gates a clearance on being stopped and on the lane being clear of traffic; markers must be flown through in order, and a miss, a corridor departure or sustained overspeed sends you around; the gear travels in real time, is required at the final gate and interlocks the cutter; a hot touchdown bounces and a clean one books the berth; auto-berth is a paid alternative inbound and refused on final; the departure is flown too; and the 3D station agrees with the lane data it is built from. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
-| `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the content-harvest reparent, and the tab-host show/hide. |
+| `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the `ScreenLayout` planner (exact partitioning, the arrangement per screen shape, and which tier each 1/2/3/4-monitor topology lands in), the content-harvest reparent, and the tab-host show/hide. |
 | `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
 | `PilotManualSmoke.tscn` | Headless smoke for both of the ship's documents: each catalog is well-formed, sections are contiguous, and the required procedures are present; **neither document publishes the other's material** (the handbook names no harbour marker, the terminal procedures restate no airframe figure, and every harbour chapter names its issuing office); **every binding placeholder in the content names a real Input Map action** (so renaming an action fails the build instead of leaving a hole in a checklist); the resolver agrees with the effective profiles and reports an unassigned control as `NOT ASSIGNED` rather than an empty gap; every chapter renders with no placeholder left unsubstituted; and the card opens either document on a layer above itself but below the chooser and remapper, swaps rather than stacks when the other is opened, hides it for a setup step, and frees it on LAUNCH. |
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
