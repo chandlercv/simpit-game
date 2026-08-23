@@ -83,6 +83,14 @@ Controls are named throughout as they are [b]currently assigned[/b]. A control w
 		"title": "Description",
 		"body": """The [b]SV KESTREL[/b] is a single-seat salvage cutter. It carries a cutting torch on the starboard wing, a cargo hatch in the nose, four landing legs, and a reactor of limited output which is divided between four systems by the pilot.
 
+[color=#66ccff]IDENTIFICATION[/color]
+Name ..................................................... [b]SV KESTREL[/b]
+Registry ................................................. [b]LU-4471-K[/b]
+Hull ..................................................... [b]KS-017[/b]
+Built .................................................... [b]TESSERA YARDS, L4  2371[/b]
+
+The same particulars are stamped on the plate in the cockpit and reproduced at the foot of the Tactical display. The name is the vessel's callsign; a harbour will address her by it.
+
 [color=#66ccff]PERFORMANCE[/color]
 Main thruster acceleration, both drive stages ........... [b]4.0 m/s²[/b]
  — thermal stage alone .................................. [b]2.4 m/s²[/b]
@@ -571,7 +579,22 @@ Contacts include the derelict, unstable debris, the rival cutter, the claim oper
 [color=#66ccff]CHART[/color]
 The Tactical [b]CHART[/b] mode presents a system schematic. Its content is not builder data and is not reproduced here — see the [b]TERMINAL PROCEDURES[/b].
 
-[color=#8c9eb8]NOTE — No waypoint, route or navigation-computer facility is fitted to this ship.[/color]""",
+[color=#66ccff]REFERENCE DATUM[/color]
+Altitude, heading, range and attitude are measured against a selected datum, which fixes both the plane they are referred to and the direction taken as zero bearing. One datum serves all four, so the instruments cannot disagree with each other. The datum in force is named on the Tactical band and again on the attitude indicator's lower field.
+
+[b]AUTOMATIC[/b] .... the landing platform while an approach is being flown; otherwise the selected cut target; otherwise the derelict; otherwise inertial
+[b]PLATFORM[/b] ..... the landing platform designated for the vessel, and its deck
+[b]DERELICT[/b] ..... the derelict on site, and a level plane through it
+[b]TARGET[/b] ....... the selected member, or the designated contact
+[b]INERTIAL[/b] ..... no body; the vessel's own frame of reference
+
+The datum is stepped with {{act:nav_ref_cycle}}, taken directly to the platform with {{act:nav_ref_pad}} or to the target with {{act:nav_ref_target}}, and selected on the MFD SETTINGS page, which also reports which datum an automatic selection has resolved to.
+
+[color=#8c9eb8]NOTE — On the derelict and target datums the body fixes the ORIGIN only. The plane and the zero bearing remain those of the local frame, because a derelict under way is tumbling and an attitude reference taken from it could not be flown.[/color]
+
+[color=#f2bf59]CAUTION — A datum selected by hand and subsequently lost — no derelict on site, no target designated — is not held.[/color] The instruments revert to the automatic selection and annunciate that they have done so, on the band and on the SETTINGS page. Confirm the datum before flying to an altitude.
+
+[color=#8c9eb8]NOTE — No waypoint, route or navigation-computer facility is fitted to this ship. The reference datum is a convention for measurement. It computes nothing, stores nothing, and steers nothing.[/color]""",
 	},
 	{
 		"id": "displays",
@@ -579,8 +602,8 @@ The Tactical [b]CHART[/b] mode presents a system schematic. Its content is not b
 		"title": "Instruments & displays",
 		"body": """[color=#66ccff]THE FOUR DISPLAYS[/color]
 [b]MAIN[/b] — the hull camera with the flight HUD superimposed. The camera may be trained away from the nose without turning the ship.
-[b]TACTICAL[/b] — presentation only. SCOPE (contact plot or structural diagram, hull condition, structural risk) and CHART, selected with {{act:tactical_view_cycle}}.
-[b]MFD[/b] — two independent units. Pages: CHECKLIST, POWER, CARGO, SALVAGE, ALIGN, SCOOP, MARKET, DOCK, CONTACTS. The page index is reached with {{act:mfd_a_menu}} and {{act:mfd_b_menu}}. The primary unit presents ALIGN during an alignment, SCOOP while the hatch is open, and DOCK during an approach, returning to the previous page on completion.
+[b]TACTICAL[/b] — presentation only; nothing on it is operated. The flight instruments are carried down the left and across the top and bottom, framing one of two modes: SCOPE (contact plot or structural diagram, hull condition, structural risk) and CHART, selected with {{act:tactical_view_cycle}}.
+[b]MFD[/b] — two independent units. Pages: CHECKLIST, POWER, CARGO, SALVAGE, ALIGN, SCOOP, MARKET, DOCK, CONTACTS, SETTINGS. The page index is reached with {{act:mfd_a_menu}} and {{act:mfd_b_menu}}. The primary unit presents ALIGN during an alignment, SCOOP while the hatch is open, and DOCK during an approach, returning to the previous page on completion.
 
 [color=#66ccff]CHECKLIST PAGE[/color]
 The procedures of SECTION 4 are carried on the CHECKLIST page, one line to each item, marked against the condition of the ship. Select a procedure from the page index; return to it with BACK.
@@ -596,6 +619,27 @@ A small number of items cannot be tested from aboard: attitude held by hand duri
 
 [color=#f2bf59]CAUTION — BELLY is the landing view.[/color] The pad lies directly beneath the ship on short final and the hull camera is trained forward. Without the belly view the touchdown point cannot be seen.
 
+[color=#66ccff]TACTICAL FLIGHT INSTRUMENTS[/color]
+Speed, attitude and altitude are grouped as one block down the left of the Tactical display, in that order, with the heading tape above them.
+
+[b]Heading[/b] — the tape across the top, marked at 5° and figured at 10°, with the heading boxed at the index. A bug on the tape marks the bearing to the reference datum. This is the bearing of the HULL. The bearing at VEL / HDG on the flight HUD is the CAMERA's, and the two differ whenever the camera is trained off the nose.
+
+[b]Speed[/b] — the tape reads metres per second against a boxed figure. The ceiling the drive can currently hold is hatched across the top of the tape. With the gear extended a second band marks [b]18 m/s[/b], above which the legs are taking the load and wearing.
+
+[b]Attitude[/b] — the horizon, presented as a sky field over a stippled datum field. The waterline symbol at the centre is fixed; the horizon moves behind it. With the nose up the horizon falls below the waterline and the sky field fills the instrument; with the nose down the datum field fills it. The pitch ladder is barred at 5° and figured at 10°, solid above the horizon and broken below it. Roll is read from the pointer against the fixed scale above, graduated to 60°: the wings are level with the pointer on the index, and again with the horizon flat. Beyond the range of the instrument a chevron at the edge indicates the shorter direction back to level.
+
+[b]Altitude[/b] — height above the reference datum's plane, with a trend arrow showing rate of climb or descent. The arrow changes colour as the descent passes what the legs will accept.
+
+[b]Rotation[/b] — pitch, yaw and roll rates on centre-zero ribbons. Full scale is the rated [b]45°/s[/b], or [b]15°/s[/b] on the fine setting, selected on the MFD SETTINGS page.
+
+[b]Propellant[/b] — hydrogen and oxygen as tank tapes, marked at a quarter and reading empty at zero.
+
+[b]Plate[/b] — the vessel's plate, reproduced at the foot of the display.
+
+The whole band is removed from the display with {{act:tactical_band_toggle}}, which returns the full area to the mode in use.
+
+[color=#f2bf59]CAUTION — Altitude, heading, range and attitude are all measured against the selected reference datum.[/color] The instruments do not indicate that the datum is the wrong one for the work in hand; they indicate correctly against whichever is selected. See SCOPE & CONTACTS.
+
 [color=#66ccff]FLIGHT HUD[/color]
 [b]Nose reticle[/b] — marks the direction in which the hull is pointed. It moves off centre as the camera is trained away, reaching the edge of the display at full deflection.
 [b]Drift brackets[/b] — displaced from the nose reticle in proportion to lateral velocity. Coincident with the reticle, lateral drift is nulled. Speed along the nose is shown at VEL and is not represented here.
@@ -608,7 +652,7 @@ A small number of items cannot be tested from aboard: attitude held by hand duri
 [b]Drive[/b] — IMPULSE or BOOST beside VEL while a reaction stage is burning; DRIVE with the selector position when the drive is not making its rated thrust; THRUST UNPOWERED when the channel is delivering nothing to it; LH2 DEPLETED, pulsing, with the hydrogen tank empty.
 [b]ATC[/b] — the standing instruction during an approach, with altitude and sink rate on final.
 
-[color=#8c9eb8]NOTE — Electrical loading, the state of charge and the contents of the tanks are not repeated on the flight HUD. They are presented on the MFD POWER page, which carries demand against the alternator's output, the battery and which way it is going, the selector position and both tank levels. Hull condition is on the Tactical SCOPE.[/color]""",
+[color=#8c9eb8]NOTE — Electrical loading, the state of charge and the quantity in the tanks are not repeated on the flight HUD. They are presented on the MFD POWER page, which carries demand against the alternator's output, the battery and which way it is going, the selector position and both tank levels. Tank levels are also carried on the Tactical band, as a proportion of capacity rather than a quantity. Hull condition is on the Tactical SCOPE.[/color]""",
 	},
 	{
 		"id": "risk",

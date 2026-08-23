@@ -16,6 +16,13 @@ signal sensor_mode_changed(mode: String)
 signal external_view_changed(view: String)
 ## Tactical display mode changed (SCOPE / CHART), one of TACTICAL_VIEWS.
 signal tactical_view_changed(view: String)
+## Navigation reference datum changed, one of NAV_REFERENCES. NavReference
+## resolves the selection into the frame the Tactical band measures against.
+signal nav_reference_changed(id: String)
+## Tactical instrument band shown or hidden (gives the scope its full area back).
+signal tactical_band_changed(shown: bool)
+## Rotation-rate ribbon full scale changed, one of RATE_SCALES.
+signal rate_scale_changed(scale: String)
 signal power_changed
 ## Battery charge changed, as a 0..1 fraction of capacity.
 signal battery_changed(fraction: float)
@@ -112,6 +119,17 @@ const EXTERNAL_VIEWS: Array[String] = ["REAR", "SIDE", "CHASE", "TOP", "BELLY"]
 ## Tactical display modes (see TacticalContent): SCOPE (sensor scope + hull
 ## status) and CHART (system star chart).
 const TACTICAL_VIEWS: Array[String] = ["SCOPE", "CHART"]
+
+## Navigation reference datums (see NavReference, which resolves them into a
+## frame). The datum is what altitude, heading, range and attitude are all
+## measured against — in space there is no altitude without one. AUTO follows
+## the run: the landing platform on an approach, the cut target on site.
+const NAV_REFERENCES: Array[String] = ["AUTO", "PAD", "WRECK", "TARGET", "INERTIAL"]
+
+## Rotation-rate ribbon full scale on the Tactical band. RATED is the ship's
+## own full-deflection rate; FINE expands the scale for nulling a slow tumble.
+const RATE_SCALES: Array[String] = ["RATED", "FINE"]
+const RATE_SCALE_FINE_DEG := 15.0
 
 ## Power allocation channels, each 0..1. The reactor can't run everything at
 ## full: the UI warns when the summed allocation exceeds power_budget().
@@ -292,6 +310,17 @@ var external_view: String = "CHASE"
 
 ## Active Tactical display mode, one of TACTICAL_VIEWS (drives TacticalContent).
 var tactical_view: String = "SCOPE"
+
+## Selected navigation reference datum, one of NAV_REFERENCES. NavReference
+## turns this into an origin and a frame; AUTO lets it follow the run.
+var nav_reference: String = "AUTO"
+
+## Whether the Tactical instrument band is drawn. Hiding it hands the sensor
+## scope the whole display back, which is what you want while reading a wreck.
+var tactical_band: bool = true
+
+## Rotation-rate ribbon full scale, one of RATE_SCALES.
+var rate_scale: String = "RATED"
 
 ## 0..1, owned by SalvageSystem: eases toward a baseline that ratchets up with
 ## each structural cut, and spikes when a load-bearing member is severed.
@@ -783,6 +812,46 @@ func set_tactical_view(view: String) -> void:
 func cycle_tactical_view() -> void:
 	var idx := TACTICAL_VIEWS.find(tactical_view)
 	set_tactical_view(TACTICAL_VIEWS[(idx + 1) % TACTICAL_VIEWS.size()])
+
+
+## Navigation-reference intent: pick the datum altitude, heading, range and
+## attitude are measured against. AUTO follows the run (see NavReference).
+func set_nav_reference(id: String) -> void:
+	if id == nav_reference or not NAV_REFERENCES.has(id):
+		return
+	nav_reference = id
+	nav_reference_changed.emit(id)
+
+
+## Step to the next datum (mapped HOTAS-button intent).
+func cycle_nav_reference() -> void:
+	var idx := NAV_REFERENCES.find(nav_reference)
+	set_nav_reference(NAV_REFERENCES[(idx + 1) % NAV_REFERENCES.size()])
+
+
+## Show or hide the Tactical instrument band.
+func set_tactical_band(shown: bool) -> void:
+	if shown == tactical_band:
+		return
+	tactical_band = shown
+	tactical_band_changed.emit(shown)
+
+
+func toggle_tactical_band() -> void:
+	set_tactical_band(not tactical_band)
+
+
+## Rate-ribbon full scale intent, one of RATE_SCALES.
+func set_rate_scale(scale: String) -> void:
+	if scale == rate_scale or not RATE_SCALES.has(scale):
+		return
+	rate_scale = scale
+	rate_scale_changed.emit(scale)
+
+
+## Full-scale deflection of the rate ribbons, deg/s, for the current setting.
+func rate_scale_deg() -> float:
+	return RATE_SCALE_FINE_DEG if rate_scale == "FINE" else ship_def.rotation_rate_deg
 
 
 ## Touch-slider intent: set a channel's desired allocation. Always accepted — a

@@ -4,6 +4,7 @@ extends Node
 ##
 ##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close|rival] [title|manual|terminal] [<chapter-id>]
 ##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> mfd [<page>] [<procedure>]
+##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> tactical [SCOPE|CHART]
 ##
 ## Defaults to user://main_view.png. `close` parks the ship at cutting range;
 ## `rival` stands ThreatSystem's rival cutter and patrol up in front of the camera
@@ -13,6 +14,12 @@ extends Node
 ## `manual` opens the pilot's handbook over that card and `terminal` opens the
 ## terminal procedures, which is the only way to eyeball their layout short of
 ## launching the game. Add a chapter id to shoot a specific page.
+##
+## `tactical` shoots the Tactical display at its real 1280x720 canvas, with the
+## instrument band up — the only way to judge the tapes, the attitude indicator
+## and the plate against each other short of the physical panel. It parks the
+## ship at an attitude and a rate on purpose: a band shot straight and level says
+## nothing about whether its signs are the right way round.
 ##
 ## `mfd` shoots the MFD display instead of the Main view, at its real 1280x800
 ## canvas — the MENU home by default, or a named page (`mfd DOCK`), and for the
@@ -32,6 +39,10 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.has("mfd"):
 		_build_mfd(args)
+		_shoot.call_deferred()
+		return
+	if args.has("tactical"):
+		_build_tactical(args)
 		_shoot.call_deferred()
 		return
 	get_window().size = Vector2i(1720, 720)
@@ -70,6 +81,45 @@ func _ready() -> void:
 				elif not ["manual", "terminal", "title"].has(arg) and not arg.ends_with(".png"):
 					push_warning("no %s chapter '%s'; ids: %s" % [doc, arg, ", ".join(ids)])
 	_shoot.call_deferred()
+
+
+## The Tactical display, at the 1280x720 canvas it is authored in. Same Root
+## harvest as the MFD below — a Window instantiated as a child pops a second OS
+## window and shoots empty.
+func _build_tactical(args: PackedStringArray) -> void:
+	get_window().size = Vector2i(1280, 720)
+	var window: Window = load("res://scenes/displays/TacticalWindow.tscn").instantiate()
+	var root: Control = window.get_node("Root")
+	window.remove_child(root)
+	root.owner = null   # else reparenting warns TacticalWindow's ownership is inconsistent
+	add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	window.free()
+
+	for mode: String in GameState.TACTICAL_VIEWS:
+		if args.has(mode):
+			GameState.set_tactical_view(mode)
+	_pose_for_band()
+
+
+## Off level, off north and turning, so the band is shot doing its job. Straight
+## and level, every sign on it looks correct whichever way round it is — which is
+## exactly the mistake a screenshot ought to be able to catch.
+##
+## Re-applied immediately before the frame is taken as well: the fly-by-wire
+## spends the settling frames nulling precisely the rates being posed for.
+func _pose_for_band() -> void:
+	ShipMotion.seize(
+			Transform3D(Basis.from_euler(Vector3(deg_to_rad(8.0), deg_to_rad(-0.6), 0.0))
+					* Basis(Vector3.FORWARD, deg_to_rad(14.0)), Vector3(0, 26.0, 40.0)),
+			Vector3(0, -1.8, -18.0),
+			Vector3(deg_to_rad(4.0), 0.0, deg_to_rad(-6.0)))
+	GameState.lh2_fuel = GameState.ship_def.lh2_capacity * 0.78
+	GameState.lox_fuel = GameState.ship_def.lox_capacity * 0.31
+	# Gear down puts the legs' 18 m/s band on the speed tape under the drive's
+	# own ceiling, which is the only way to see the two bands together.
+	GameState.set_landing_gear(true)
+	GameState.gear_position = 1.0
 
 
 ## The MFD display, at the 1280x800 canvas it is authored in, with its Root
@@ -152,6 +202,14 @@ func _shoot() -> void:
 			var pos: Vector3 = GameState.get_contact(_rival_id)["position"]
 			GameState.rival_cut_fired.emit(pos, GameState.wreck["position"])
 		await get_tree().process_frame
+	# The band redraws on the shared 10 Hz tick, so the pose needs re-applying
+	# and then a tick's worth of frames to reach the instruments.
+	if OS.get_cmdline_user_args().has("tactical"):
+		_pose_for_band()
+		# Just past one tick. Longer and the fly-by-wire has nulled the rates
+		# again before the shutter, which is the one thing the pose is for.
+		for i in 8:
+			await get_tree().process_frame
 	var image := get_viewport().get_texture().get_image()
 	var path := "user://main_view.png"
 	var args := OS.get_cmdline_user_args()

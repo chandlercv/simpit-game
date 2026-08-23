@@ -30,6 +30,7 @@ ThreatSystem="*res://systems/ThreatSystem.gd"
 DriftSystem="*res://systems/DriftSystem.gd"
 DockingSystem="*res://systems/DockingSystem.gd"
 CollisionSystem="*res://systems/CollisionSystem.gd"
+NavReference="*res://systems/NavReference.gd"
 
 [display]
 
@@ -241,6 +242,22 @@ tactical_scope={
 "events": []
 }
 tactical_chart={
+"deadzone": 0.2,
+"events": []
+}
+nav_ref_cycle={
+"deadzone": 0.2,
+"events": []
+}
+nav_ref_pad={
+"deadzone": 0.2,
+"events": []
+}
+nav_ref_target={
+"deadzone": 0.2,
+"events": []
+}
+tactical_band_toggle={
 "deadzone": 0.2,
 "events": []
 }

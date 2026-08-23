@@ -93,7 +93,8 @@ const BUILTIN_PROFILES := [
 	##   RIGHT HAND ...... attitude on IJKL, glance on the arrows.
 	##   BOTTOM LEFT ..... the ops verbs, under the flight hand: Z X C V B.
 	##   BOTTOM RIGHT .... selection, under the attitude hand: N M , .
-	##   T G H [ ] ....... displays: tactical, the two MFD menus, and the cameras.
+	##   T Y G H [ ] ..... displays: tactical mode, the navigation reference,
+	##                     the two MFD menus, and the cameras.
 	##
 	## The camera keeps two keys, not six: ] steps every view and [ jumps straight
 	## to BELLY, which is the one the landing procedure requires. REAR/SIDE/CHASE/
@@ -151,6 +152,7 @@ const BUILTIN_PROFILES := [
 			{"key": KEY_PERIOD, "action": "salvage_next"},
 			# --- Displays ----------------------------------------------------------
 			{"key": KEY_T, "action": "tactical_view_cycle"},
+			{"key": KEY_Y, "action": "nav_ref_cycle"},
 			{"key": KEY_G, "action": "mfd_a_menu"},
 			{"key": KEY_H, "action": "mfd_b_menu"},
 			{"key": KEY_BRACKETLEFT, "action": "view_belly"},
@@ -617,6 +619,18 @@ func _process_panel_commands() -> void:
 		GameState.set_tactical_view("SCOPE")
 	if Input.is_action_just_pressed("tactical_chart"):
 		GameState.set_tactical_view("CHART")
+
+	# Navigation reference — the datum the Tactical band's altitude, heading,
+	# range and attitude are all measured against (see NavReference). PAD and
+	# TARGET are direct selects for the two that matter under workload.
+	if Input.is_action_just_pressed("nav_ref_cycle"):
+		GameState.cycle_nav_reference()
+	if Input.is_action_just_pressed("nav_ref_pad"):
+		GameState.set_nav_reference("PAD")
+	if Input.is_action_just_pressed("nav_ref_target"):
+		GameState.set_nav_reference("TARGET")
+	if Input.is_action_just_pressed("tactical_band_toggle"):
+		GameState.toggle_tactical_band()
 
 	# Market. Dock has no unambiguous target from a single button, so it docks at
 	# the first faction; SELL / DEPART are unambiguous.

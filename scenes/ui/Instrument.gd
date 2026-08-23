@@ -16,6 +16,9 @@ extends RefCounted
 ## Helpers take the Control they draw into, since a static function has no `self`
 ## to call draw_string on. Sizes are in the MFD window's 1280x800 virtual canvas.
 
+## The boxed numeral in a tape's pointer — the one figure on an instrument
+## that has to be readable without looking straight at it.
+const READOUT := 28
 ## "NO APPROACH RUNNING" and the like.
 const TITLE := 24
 ## Page header, ATC instruction, range readout.

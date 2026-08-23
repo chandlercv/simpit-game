@@ -6,6 +6,15 @@ extends Resource
 
 @export var display_name := "SHIP"
 
+## --- Identity ---------------------------------------------------------------
+## What is stamped on the builder's plate in the cockpit, and what the Tactical
+## display's plate reproduces. `display_name` doubles as the radio callsign —
+## the harbour addresses the ship by it in every ATC line.
+@export var registry := ""
+@export var hull_serial := ""
+@export var builder := ""
+@export var build_year := 0
+
 ## Cargo hold limits (CargoSystem enforces both).
 @export var cargo_mass_limit_t := 40.0
 @export var cargo_vol_limit_m3 := 30.0
