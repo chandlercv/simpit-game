@@ -173,6 +173,52 @@ static func describe(plan: Dictionary) -> String:
 	return "%d display%s tiled" % [roles.size(), "" if roles.size() == 1 else "s"]
 
 
+## The launch card's one-line summary of what LAUNCH will do with the screens
+## that carry more than one display, given every screen's plan (keyed by screen
+## index, as WindowManager.screen_plans returns them) and which screen the Main
+## view is on.
+##
+## Only screens that actually share count: a role alone on its own screen is
+## neither tiled against anything nor tabbed with anything, so a tabbed lone
+## screen must not be described as a sharing outcome. And where the shared
+## screens don't all land in the same tier, the tabbed ones are named — reading
+## the tier off whichever plan came first reported every shared screen as tabbed
+## the moment one of them was.
+static func describe_sharing(plans: Dictionary, main_screen: int) -> String:
+	var tabbed_screens: Array[int] = []
+	var tiled := 0
+	for screen: int in plans:
+		var plan: Dictionary = plans[screen]
+		var roles: Array = plan["tab_roles"] if plan["tabbed"] else plan["tiles"].keys()
+		# MAIN has no entry in either list — it is the screen's other occupant.
+		if roles.size() + (1 if screen == main_screen else 0) < 2:
+			continue
+		if plan["tabbed"]:
+			tabbed_screens.append(screen)
+		else:
+			tiled += 1
+	if tabbed_screens.is_empty():
+		return "displays sharing a screen are tiled side by side"
+	if tiled == 0:
+		return "displays sharing a screen are too tight to tile — LAUNCH tabs them instead"
+	tabbed_screens.sort()
+	var tight := "screens %s are" % _join_screens(tabbed_screens)
+	if tabbed_screens.size() == 1:
+		tight = "screen %d is" % tabbed_screens[0]
+	return "%s too tight to tile — LAUNCH tabs the displays there and tiles the rest" % tight
+
+
+## "0", "0 and 2", "0, 1 and 3" — screen indices in a sentence.
+static func _join_screens(screens: Array[int]) -> String:
+	var names: PackedStringArray = []
+	for screen in screens:
+		names.append(str(screen))
+	if names.size() < 2:
+		return "".join(names)
+	return "%s and %s" % [", ".join(names.slice(0, names.size() - 1)),
+			names[names.size() - 1]]
+
+
 ## Cut coordinates for n equal parts, rounded as boundaries rather than as
 ## widths, so adjacent cells share an edge exactly — no 1px seam, no overlap,
 ## and the parts always sum back to `length`.

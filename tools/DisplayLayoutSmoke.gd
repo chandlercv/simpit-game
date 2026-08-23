@@ -34,6 +34,7 @@ func _run() -> void:
 	_test_partitions()
 	_test_arrangements()
 	_test_topologies()
+	_test_sharing_line()
 	_test_canvas_table()
 	await _test_harvest_and_host()
 	_restore_cfg()
@@ -221,6 +222,59 @@ func _test_topologies() -> void:
 	_check(kept, "no screen shape or role count ever drops a display")
 	_check(readable, "a tiled panel is never scaled below MIN_SCALE of its canvas")
 
+
+## The launch card's one-line summary of what a rig's shared screens will do.
+## Built here from hand-made plans because the card can't be shown a second
+## monitor headlessly — and because the case that was wrong is precisely a rig
+## whose shared screens land in different tiers.
+func _test_sharing_line() -> void:
+	# A short screen carrying MAIN and one panel: too little room to dock, so
+	# that screen tabs. A spare 1080p screen carrying the other two tiles.
+	var tabbed_main := ScreenLayoutScript.plan_screen(
+			Rect2i(0, 0, 1366, 720), true, ["tactical"], WindowManager.ROLE_CANVAS)
+	var tiled_spare := ScreenLayoutScript.plan_screen(
+			Rect2i(1920, 0, 1920, 1032), false, ["mfd", "camera"], WindowManager.ROLE_CANVAS)
+	var tabbed_spare := ScreenLayoutScript.plan_screen(
+			Rect2i(1920, 0, 800, 480), false, ["mfd", "camera"], WindowManager.ROLE_CANVAS)
+	var lone_tabbed := ScreenLayoutScript.plan_screen(
+			Rect2i(3840, 0, 400, 200), false, ["camera"], WindowManager.ROLE_CANVAS)
+	var main_alone := ScreenLayoutScript.plan_screen(
+			Rect2i(0, 0, 1920, 1080), true, [], WindowManager.ROLE_CANVAS)
+	var all_tiled := ScreenLayoutScript.plan_screen(
+			Rect2i(0, 0, 1920, 1032), true, ROLES, WindowManager.ROLE_CANVAS)
+	_check(tabbed_main["tabbed"] and tabbed_spare["tabbed"] and lone_tabbed["tabbed"]
+			and not tiled_spare["tabbed"] and not all_tiled["tabbed"],
+			"the sharing-line fixtures land in the tiers the checks below assume")
+
+	var mixed := ScreenLayoutScript.describe_sharing({0: tabbed_main, 1: tiled_spare}, 0)
+	_check(mixed.contains("screen 0") and mixed.contains("tiles the rest"),
+			"a rig with one tabbed and one tiled shared screen names the tabbed one")
+	_check(not mixed.contains("screens "),
+			"one tabbed screen is named in the singular")
+
+	_check(ScreenLayoutScript.describe_sharing({0: tabbed_main, 1: tabbed_spare}, 0)
+			== "displays sharing a screen are too tight to tile — LAUNCH tabs them instead",
+			"every shared screen tabbing is still reported as one plain outcome")
+	_check(ScreenLayoutScript.describe_sharing({0: main_alone, 1: tiled_spare}, 0)
+			== "displays sharing a screen are tiled side by side",
+			"every shared screen tiling is still reported as one plain outcome")
+
+	# A single role on a screen too small for it tabs, but it shares with nothing
+	# — reading the tier off that plan used to call the whole rig tabbed.
+	_check(ScreenLayoutScript.describe_sharing(
+			{0: main_alone, 1: tiled_spare, 2: lone_tabbed}, 0)
+			== "displays sharing a screen are tiled side by side",
+			"a lone role tabbing on its own screen is not a sharing outcome")
+
+	# More tabbed shared screens than one only arrives with a fourth panel role,
+	# but the sentence they'd be named in is written, so it is checked.
+	var two_tabbed := ScreenLayoutScript.describe_sharing(
+			{0: tabbed_main, 1: tiled_spare, 2: tabbed_spare}, 0)
+	_check(two_tabbed.begins_with("screens 0 and 2 are too tight to tile"),
+			"two tabbed shared screens are listed, in screen order")
+	# Plan order must not decide the wording: the same rig, iterated the other way.
+	_check(ScreenLayoutScript.describe_sharing({1: tiled_spare, 0: tabbed_main}, 0) == mixed,
+			"the summary doesn't depend on which screen's plan comes first")
 
 ## The planner measures tiles against a table of canvases; a .tscn edit must not
 ## be able to move the real one out from under it.

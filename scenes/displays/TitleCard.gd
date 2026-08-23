@@ -31,6 +31,7 @@ signal display_setup_requested
 const ButtonThemeScript := preload("res://scenes/ui/ButtonTheme.gd")
 const ManualViewerScript := preload("res://scenes/displays/ManualViewer.gd")
 const PilotManualContentScript := preload("res://scenes/displays/PilotManualContent.gd")
+const ScreenLayoutScript := preload("res://scenes/displays/ScreenLayout.gd")
 const TerminalProceduresContentScript := preload("res://scenes/displays/TerminalProceduresContent.gd")
 
 ## The two documents the ship carries, each a row on the card. They are separate
@@ -408,17 +409,16 @@ func _has_shared_screen() -> bool:
 	return false
 
 
-## What LAUNCH will actually do with a screen that carries more than one role:
+## What LAUNCH will actually do with the screens that carry more than one role:
 ## tile them side by side, or — where tiling would shrink a panel past legible
 ## size — fall back to a tabbed host. Reads WindowManager's own layout plan
 ## rather than assuming tiling always fits, so this can't say "tiled" for an
-## arrangement that's really landing in the tabbed fallback.
+## arrangement that's really landing in the tabbed fallback; ScreenLayout does
+## the wording, which keeps a rig whose shared screens disagree describable
+## (and asserted headlessly, where this card's screens are not).
 func _sharing_status() -> String:
-	var plans := WindowManager.screen_plans()
-	for screen: int in plans:
-		if plans[screen]["tabbed"]:
-			return "displays sharing a screen are too tight to tile — LAUNCH tabs them instead"
-	return "displays sharing a screen are tiled side by side"
+	return ScreenLayoutScript.describe_sharing(WindowManager.screen_plans(),
+			DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN))
 
 
 func _controls_status_text() -> String:
