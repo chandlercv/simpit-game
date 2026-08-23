@@ -61,6 +61,13 @@ signal hull_impact(section: String, amount: float)
 signal ship_contact(body_name: String, closing: float)
 signal site_reset
 signal panel_switch_changed(switch_name: String, on: bool)
+## An exterior light group was selected on or off (see exterior_lights). The 3D
+## ships listen; passive_signature and the electrical bus read the state directly.
+signal exterior_lights_changed
+## ThreatSystem: the rival fired its torch to sever a member, from its own hull to
+## the piece it cut. A one-shot cue for the 3D view — the cut itself is already
+## resolved by the time this lands.
+signal rival_cut_fired(from: Vector3, to: Vector3)
 ## Pre-cut alignment mini-game phase changed (SalvageSystem), one of ALIGN_STATES.
 signal align_changed(state: String)
 ## DriftSystem: an adrift salvage piece's lifecycle. Views (SalvagePieces, HUD)
@@ -138,6 +145,18 @@ const BATTERY_CHARGE_RATE := 1.0
 ## Charge fraction below which the low-battery call is made — once per crossing,
 ## not every frame (see _advance_electrical).
 const BATTERY_LOW := 0.2
+
+## Electrical draw of one SELECTED exterior light group, in the units
+## power_total() sums. Token by design: all three lit is 0.06 against the
+## Kestrel's 2.5 budget, a tenth of a single channel's power_low. The bus notices
+## the lights; it never has to ration them.
+const LIGHT_GROUP_DRAW := 0.02
+
+## What extinguishing one exterior light group multiplies passive signature by.
+## Deliberately a long way short of a master's 0.5 — a master shuts the ship's
+## emissions down, this turns off a few watts of lamp — so a blacked-out fit is
+## worth about a seventh of the signature, not a half.
+const LIGHT_GROUP_SIGNATURE := 0.95
 
 ## Drive selector positions, in the order the panel's magneto sweeps them, which
 ## is also the order step_drive_mode() walks. They are NOT power settings: the
@@ -242,12 +261,16 @@ var ships: Dictionary = {}
 
 ## Sensor contacts. Replication-friendly Dictionaries:
 ## { "id": int, "name": String, "position": Vector3, "threat": bool,
-##   "radius": float }.
+##   "radius": float, "kind": String, "heading": Vector3 }.
 ## World nodes register the static ones at scene setup; ThreatSystem spawns,
 ## moves, and removes the gameplay-driven ones. "radius" > 0 marks a contact as
 ## a solid body CollisionSystem tests the ship against (moving ships like the
 ## rival/patrol); 0 means sensor-only (the wreck and debris blips, whose solid
 ## bodies live in `obstacles` / the wreck graph instead — see register_contact).
+## "kind" is the model key a 3D view keys its mesh off ("RIVAL", "PATROL"), empty
+## for a contact with no body of its own; "heading" is the unit vector its nose
+## points along, ZERO where nothing has a facing. Both are written by whoever owns
+## the contact's motion — see ThreatShips.gd for the only reader.
 var contacts: Array[Dictionary] = []
 
 ## Static solid bodies the ship can run into that are NOT sensor contacts: the
@@ -369,9 +392,18 @@ var market_factions: Array[String] = []
 var market_goods: Array[Dictionary] = []
 
 ## Saitek switch panel state, switch name -> bool (SwitchPanelBridge). Views
-## may read cosmetic switches directly (e.g. NAV/LANDING lights on Ship.gd);
+## may read cosmetic switches directly (e.g. the LANDING light on Ship.gd);
 ## systemic switches route through intents in the bridge.
 var panel_switches: Dictionary = {}
+
+## Exterior lighting groups, on/off as SELECTED — not as lit. Default on: the ship
+## is lit unless a switch says otherwise, which is what makes the fit right on a
+## keyboard with no switch panel plugged in. Whether a selected group is actually
+## burning also needs the bus (light_group_lit).
+##   NAV    — red to port, green to starboard, white on the tail. Steady.
+##   BEACON — flashing red, above and below the fuselage.
+##   STROBE — white, on the wingtips and the tail.
+var exterior_lights: Dictionary = {"NAV": true, "BEACON": true, "STROBE": true}
 
 ## Comms/mission log entries: { "tick": int, "source": String, "text": String }.
 var comms: Array[Dictionary] = []
@@ -498,8 +530,12 @@ func launch_scenario() -> void:
 ## radius > 0 also makes the contact a solid body for CollisionSystem (moving
 ## ships). Leave it 0 for sensor-only blips whose collidable form lives
 ## elsewhere (the wreck via the wreck graph, debris via `obstacles`).
+## `kind` names the model a 3D view should stand up for this contact ("RIVAL",
+## "PATROL"); leave it empty for a contact whose body is drawn some other way (the
+## wreck, the debris chunks, station traffic) or not at all, which is what keeps
+## ThreatShips from drawing a second copy of something already on screen.
 func register_contact(contact_name: String, position: Vector3, threat := false,
-		radius := 0.0) -> int:
+		radius := 0.0, kind := "") -> int:
 	var id := _next_contact_id
 	_next_contact_id += 1
 	contacts.append({
@@ -508,6 +544,8 @@ func register_contact(contact_name: String, position: Vector3, threat := false,
 		"position": position,
 		"threat": threat,
 		"radius": radius,
+		"kind": kind,
+		"heading": Vector3.ZERO,
 	})
 	contacts_changed.emit()
 	return id
@@ -794,7 +832,10 @@ func electrical_supply() -> float:
 ## Electrical demand: the sum of what the channels are SET to, with THRUST scaled
 ## by what the drive is actually doing. The field stage is electrically expensive
 ## and the thermal stage is nearly free, so demand moves with the drive selector
-## and with whether there is hydrogen left to burn — see ShipDefinition.
+## and with whether there is hydrogen left to burn — see ShipDefinition. The
+## exterior lights add their token draw on top: they are not a channel (nothing
+## allocates them and nothing rations them), just a load that is there when they
+## are selected on.
 func electrical_demand() -> float:
 	var total := 0.0
 	for channel: String in POWER_CHANNELS:
@@ -802,7 +843,41 @@ func electrical_demand() -> float:
 		if channel == "THRUST":
 			value *= thrust_draw_factor()
 		total += value
+	for group: String in exterior_lights:
+		if exterior_lights[group]:
+			total += LIGHT_GROUP_DRAW
 	return total
+
+
+## Whether the bus has ANY source behind it: the alternator running, or a battery
+## that is switched in and has something left. False is a dark ship — both masters
+## off, or the alternator off and the battery finally flat.
+##
+## This is the gate the exterior lights hang off, rather than delivery_fraction(),
+## because delivery would be circular: the lights draw, a starved bus puts them
+## out, demand drops, the bus recovers, the lights come back — every tick.
+func bus_live() -> bool:
+	return electrical_supply() > 0.0 or (master_bat and battery_charge > 0.0)
+
+
+## Whether an exterior light group is actually BURNING, as opposed to selected.
+## Everything that cares what the ship looks like from outside — the 3D fit, the
+## signature, the checklists — asks this rather than reading exterior_lights, so a
+## dark ship reads the same way to all three.
+func light_group_lit(group: String) -> bool:
+	return bool(exterior_lights.get(group, false)) and bus_live()
+
+
+## Exterior-light intent (SwitchPanelBridge, MFD). Selecting a group changes what
+## the bus is asked for and what a passive scanner can see, so it is a real intent
+## rather than a cosmetic switch read straight off the panel.
+func set_exterior_light(group: String, on: bool) -> void:
+	if not exterior_lights.has(group) or exterior_lights[group] == on:
+		return
+	exterior_lights[group] = on
+	exterior_lights_changed.emit()
+	_apply_electrical()
+	signature_changed.emit(passive_signature())
 
 
 ## Multiplier on THRUST-channel demand for the stages currently running. Nothing
@@ -895,14 +970,24 @@ func battery_flow() -> float:
 	return 0.0
 
 
-## Visibility to passive scanners, 0..1. Running dark on a master halves it;
-## both off multiply to 0.25. Consumed by ThreatSystem (patrol enforce range).
+## Visibility to passive scanners, 0..1. Running dark on a master halves it; both
+## off multiply to 0.25. Each exterior light group that is not burning takes a
+## further LIGHT_GROUP_SIGNATURE off, so a fully blacked-out ship is worth about a
+## seventh less again than a lit one — a fraction of what a master is worth,
+## because a navigation lamp is not an emitter. Consumed by ThreatSystem (patrol
+## enforce range).
+##
+## Note this counts groups that are LIT, not groups that are selected: lights the
+## bus cannot carry are not shining, so they are not showing you to anyone.
 func passive_signature() -> float:
 	var s := 1.0
 	if not master_alt:
 		s *= 0.5
 	if not master_bat:
 		s *= 0.5
+	for group: String in exterior_lights:
+		if not light_group_lit(group):
+			s *= LIGHT_GROUP_SIGNATURE
 	return s
 
 

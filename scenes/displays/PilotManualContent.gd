@@ -228,7 +228,9 @@ Any of the following may be used. All act on the same allocation.
 [color=#8c9eb8]NOTE — The master switches do not stop the drive. That is the drive selector's function, and the two are independent.[/color]
 
 [color=#66ccff]EMISSIONS[/color]
-Each master switch turned off halves the ship's signature to passive detection — one switch off gives one half, both give one quarter. A patrol must close to the corresponding fraction of its normal 60 m enforcement range before it can act.""",
+Each master switch turned off halves the ship's signature to passive detection — one switch off gives one half, both give one quarter. A patrol must close to the corresponding fraction of its normal 60 m enforcement range before it can act.
+
+The exterior lights are the third term, and a much smaller one: each group extinguished takes a further five per cent off. They compound with the masters rather than replacing them — shutting the bus down puts the lights out as well, so a blacked-out ship on a dead bus sits below the quarter the masters alone would give. See [b]Exterior lighting[/b].""",
 	},
 	{
 		"id": "propulsion",
@@ -523,6 +525,36 @@ The hull diagram on the Tactical [b]SCOPE[/b] presents all six sections by condi
 [color=#f2705c]WARNING — No repair is available.[/color] Sections do not recover, and integrity lost is lost for the remainder of the tour.""",
 	},
 	{
+		"id": "lighting",
+		"group": "SECTION 2 — SYSTEMS",
+		"title": "Exterior lighting",
+		"body": """[color=#66ccff]THE FIT[/color]
+Three groups, each on its own switch.
+
+[b]NAVIGATION[/b] — {{sw:NAV}}
+     Red to port, green to starboard, white on the tail. Steady while selected.
+
+[b]ANTI-COLLISION BEACON[/b] — {{sw:BEACON}}
+     Red, above and below the fuselage. Flashes at about forty-five a minute.
+
+[b]STROBES[/b] — {{sw:STROBE}}
+     White, on both wingtips and on the tail. A double pulse, about one a second.
+
+The landing light ({{sw:LANDING}}) is not part of this fit. It is a lamp for the deck in front of the ship, draws nothing, and is not covered here.
+
+[color=#66ccff]ELECTRICAL[/color]
+All three groups are carried on the bus. Each draws 0.02 units while it is selected on, so the whole fit is 0.06 against an alternator output of 2.5. It will not displace an allocation, and it cannot starve a channel.
+
+[color=#f2bf59]CAUTION — The lights require a source. With the alternator off and the battery either isolated or flat they are out, whatever their switches are set to, and they light again when the bus is restored. The switches record what has been asked for; they do not hold the lamps burning.[/color]
+
+[color=#66ccff]SIGNATURE[/color]
+A lit ship is a visible ship. Each group extinguished reduces the vessel's signature to passive detection by five per cent, and all three out leave her a little under six sevenths of her lit figure.
+
+[color=#8c9eb8]NOTE — That is a fraction of what a master switch is worth, each of which halves the signature outright. A few watts of navigation lamp is not a transmitter. See [b]Electrical & power[/b] for the whole of the emissions picture.[/color]
+
+[color=#f2705c]WARNING — Running unlit is not free. Nothing aboard reports that the vessel cannot be seen, and every other vessel working the volume is as blind to her as the one she is hiding from.[/color]""",
+	},
+	{
 		"id": "nav",
 		"group": "SECTION 2 — SYSTEMS",
 		"title": "Scope & contacts",
@@ -609,38 +641,41 @@ Secondary members may be taken at little cost to the frame. Primary members shou
 		"title": "Departure",
 		"body": """[color=#8c9eb8]Vacating a berth, and the systems set-up required from cold.
 
-Items 1 to 7 are ship configuration and are ordered by dependency: the gear lever is confirmed first so it agrees with the ship standing on its legs, then the bus, then the drive that cannot be started without it. Items 8 onward are flown in compliance with the berth's departure procedure, which is not builder data — see the [b]TERMINAL PROCEDURES[/b].[/color]
+Items 1 to 8 are ship configuration and are ordered by dependency: the gear lever is confirmed first so it agrees with the ship standing on its legs, then the bus, then the drive that cannot be started without it. Items 9 onward are flown in compliance with the berth's departure procedure, which is not builder data — see the [b]TERMINAL PROCEDURES[/b].[/color]
 
 [color=#66ccff]BEFORE DEPARTURE[/color]
 [b]1  LANDING GEAR[/b] — [color=#59f28c]DOWN[/color]
      [color=#8c9eb8]The ship is standing on it. Confirm the lever agrees before anything else is touched.[/color]
 [b]2  MASTER SWITCHES[/b] — {{sw:MASTER_BAT}} and {{sw:MASTER_ALT}} [color=#59f28c]ON[/color]
-[b]3  BATTERY[/b] — [color=#59f28c]CHARGING[/color]
+[b]3  EXTERIOR LIGHTS[/b] — [color=#59f28c]NAV, BEACON AND STROBE ON[/color] · {{sw:NAV}}, {{sw:BEACON}}, {{sw:STROBE}}
+     [color=#f2bf59]CAUTION — The lights are carried on the bus. They will not light before item 2, whatever their switches are set to.[/color]
+     [color=#8c9eb8]The beacon is lit before the drive is started. See [b]Exterior lighting[/b].[/color]
+[b]4  BATTERY[/b] — [color=#59f28c]CHARGING[/color]
      [color=#8c9eb8]Read on the MFD POWER page header. A battery discharging on the pad means demand is already above the alternator's output.[/color]
-[b]4  POWER CHANNELS[/b] — [color=#59f28c]SET[/color]
+[b]5  POWER CHANNELS[/b] — [color=#59f28c]SET[/color]
      [color=#8c9eb8]THRUST raised. SENSORS raised if a scan is to be run on arrival. CUTTER is not required for the transit.[/color]
-[b]5  CARGO HATCH[/b] — [color=#59f28c]SECURED[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
+[b]6  CARGO HATCH[/b] — [color=#59f28c]SECURED[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
      [color=#f2bf59]CAUTION — Departure is refused with the hatch open: "DEPARTURE HELD — SECURE CARGO HATCH FIRST"[/color]
 
 [color=#66ccff]STARTING[/color]
-[b]6  DRIVE SELECTOR[/b] — [color=#59f28c]START, 10 SECONDS[/color] · {{sw:ENGINE_START}}
+[b]7  DRIVE SELECTOR[/b] — [color=#59f28c]START, 10 SECONDS[/color] · {{sw:ENGINE_START}}
      [color=#f2bf59]CAUTION — The starter requires the bus. Do not attempt it before item 2.[/color]
-[b]7  DRIVE SELECTOR[/b] — [color=#59f28c]BOTH[/color] · {{sw:ENGINE_BOTH}}
+[b]8  DRIVE SELECTOR[/b] — [color=#59f28c]BOTH[/color] · {{sw:ENGINE_BOTH}}
      [color=#f2bf59]CAUTION — Nothing moves the ship until the selector is off START. START is not a running position.[/color]
      [color=#8c9eb8]L is available for an economical transit — 60% thrust for a fraction of the electrical draw. See [b]Drive & propellant[/b].[/color]
 
 [color=#66ccff]LEAVING THE BERTH[/color]
-[b]8  UNDOCK[/b] — {{act:market_depart}}, or DEPART on the MFD MARKET page
+[b]9  UNDOCK[/b] — {{act:market_depart}}, or DEPART on the MFD MARKET page
      [color=#8c9eb8]This lifts the ship off the pad and into the berth's departure hold. It is not the transit; the lane is flown first.[/color]
-[b]9  DOCK PAGE[/b] — [color=#59f28c]SELECTED[/color]
+[b]10 DOCK PAGE[/b] — [color=#59f28c]SELECTED[/color]
      [color=#8c9eb8]Presented automatically on the primary MFD. It carries the berth's live requirements — speed, lane and clearance — for the rest of the departure.[/color]
-[b]10 BERTH DEPARTURE PROCEDURE[/b] — [color=#59f28c]COMPLY[/color]
+[b]11 BERTH DEPARTURE PROCEDURE[/b] — [color=#59f28c]COMPLY[/color]
      [color=#8c9eb8]Clearance, the outbound lane and its limits are the berth's, and are given in the [b]TERMINAL PROCEDURES[/b] for the station you are leaving.[/color]
-[b]11 LANDING GEAR[/b] — [color=#59f28c]STOWED ONCE OFF THE PAD[/color] · {{act:landing_gear}}
+[b]12 LANDING GEAR[/b] — [color=#59f28c]STOWED ONCE OFF THE PAD[/color] · {{act:landing_gear}}
      [color=#f2705c]WARNING — Above 18 m/s with the gear extended the DRIVE section wears continuously. Raise it as soon as the pad is clear.[/color]
      [color=#8c9eb8]Three seconds of travel each way, and Control withholds the release from the pattern until it is stowed.[/color]
 
-[color=#8c9eb8]FROM COLD — On the first launch of a tour there is no berth to leave. Items 2 to 7 are the whole of the set-up — the bus and a start — the gear is already stowed, and the ship begins on station at the claim.[/color]""",
+[color=#8c9eb8]FROM COLD — On the first launch of a tour there is no berth to leave. Items 2 to 8 are the whole of the set-up — the bus and a start — the gear is already stowed, and the ship begins on station at the claim.[/color]""",
 	},
 	{
 		"id": "checklist-arrival",
@@ -687,8 +722,10 @@ This is the [b]ship's[/b] half of an arrival — what the Kestrel must be config
      [color=#8c9eb8]A shutdown costs a full 10-second start to undo. See [b]Drive & propellant[/b].[/color]
 [b]12 CARGO HATCH[/b] — [color=#59f28c]OPEN[/color] · {{act:cargo_hatch_open}} or {{sw:COWL}}
      [color=#8c9eb8]The hold is discharged through the hatch. A buttoned-up ship has nothing to hand over: "DISCHARGE HELD — OPEN THE CARGO HATCH FIRST"[/color]
-[b]13 {{sw:MASTER_ALT}}[/b] — [color=#59f28c]OFF[/color]
-[b]14 {{sw:MASTER_BAT}}[/b] — [color=#59f28c]OFF[/color]
+[b]13 EXTERIOR LIGHTS[/b] — [color=#59f28c]OFF[/color] · {{sw:NAV}}, {{sw:BEACON}}, {{sw:STROBE}}
+     [color=#8c9eb8]The ship goes dark before the bus is opened. Switching them off is what keeps them off — pulling the masters alone puts them out only until the bus comes back.[/color]
+[b]14 {{sw:MASTER_ALT}}[/b] — [color=#59f28c]OFF[/color]
+[b]15 {{sw:MASTER_BAT}}[/b] — [color=#59f28c]OFF[/color]
      [color=#8c9eb8]The ship is quiet on the pad. Both are the first items of the next departure.[/color]
 
 [color=#8c9eb8]ABANDONING THE APPROACH — {{act:market_depart}} leaves the pattern and returns the ship to the claim, with the derelict as it was left.[/color]""",

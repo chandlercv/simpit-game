@@ -17,7 +17,10 @@ const RIVAL_STRIP_INTERVAL := 25.0
 const RIVAL_COLLECT_RANGE := 6.0
 const RIVAL_COLLECT_TIME := 2.0
 ## Collision radius for the rival/patrol ships (they're solid to ram into).
-const SHIP_CONTACT_RADIUS := 4.0
+## This is the sphere the hulls in tools/build_ships.py are built to fit inside —
+## that script refuses to export a vertex outside it — so the model can never
+## outgrow what the player actually collides with. Move one, move both.
+const SHIP_CONTACT_RADIUS := 2.0
 
 ## Patrol: how long the claim window stays open, enforcement bite.
 const PATROL_WINDOW_MIN := 240.0
@@ -100,7 +103,7 @@ func _update_rival(delta: float) -> void:
 			var spawn := wreck_pos + Vector3(cos(bearing), _rng.randf_range(-0.2, 0.2),
 					sin(bearing)) * RIVAL_SPAWN_RANGE
 			_rival_contact_id = GameState.register_contact(
-					"RIVAL CUTTER", spawn, true, SHIP_CONTACT_RADIUS)
+					"RIVAL CUTTER", spawn, true, SHIP_CONTACT_RADIUS, "RIVAL")
 			_rival_state = RivalState.APPROACH
 			GameState.post_comms("SENSORS",
 					"NEW CONTACT — RIVAL CUTTER CLOSING ON THE WRECK")
@@ -123,6 +126,7 @@ func _update_rival(delta: float) -> void:
 ## Close on the wreck; once in reach, start the cutting cadence.
 func _update_rival_approach(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
 	var to_wreck: Vector3 = wreck_pos - contact["position"]
+	contact["heading"] = to_wreck.normalized()
 	if to_wreck.length() > RIVAL_WORK_RANGE:
 		contact["position"] += to_wreck.normalized() * RIVAL_SPEED * delta
 		return
@@ -136,6 +140,8 @@ func _update_rival_approach(contact: Dictionary, wreck_pos: Vector3, delta: floa
 ## can start the next one. Nothing left to strip: burn for home.
 func _update_rival_cut(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
 	var to_wreck: Vector3 = wreck_pos - contact["position"]
+	# Station-keeping, but nose on the work: the torch points at what it is cutting.
+	contact["heading"] = to_wreck.normalized()
 	if to_wreck.length() > RIVAL_WORK_RANGE:
 		_rival_state = RivalState.APPROACH
 		return
@@ -149,6 +155,13 @@ func _update_rival_cut(contact: Dictionary, wreck_pos: Vector3, delta: float) ->
 		return
 	GameState.post_comms("SALVAGE",
 			"RIVAL CUTTER FLARE — %s STRIPPED BY RIVAL" % result["name"])
+	# The flare that comms line names, for anything drawing the volume: the rival's
+	# hull, and the piece it has just taken off. A cue, not a cause — the cut is
+	# already resolved above, and nothing here waits on it being seen.
+	var flare := GameState.get_salvage_piece(int(result["piece_id"]))
+	if not flare.is_empty():
+		GameState.rival_cut_fired.emit(contact["position"],
+				(flare["transform"] as Transform3D).origin)
 	_rival_piece_id = result["piece_id"]
 	_rival_collect_timer = 0.0
 	_rival_state = RivalState.COLLECT
@@ -168,6 +181,7 @@ func _update_rival_collect(contact: Dictionary, delta: float) -> void:
 	var pos: Vector3 = (piece["transform"] as Transform3D).origin
 	var to_piece: Vector3 = pos - contact["position"]
 	var dist := to_piece.length()
+	contact["heading"] = to_piece.normalized()
 	if dist > RIVAL_COLLECT_RANGE:
 		contact["position"] += to_piece.normalized() * RIVAL_SPEED * delta
 		_rival_collect_timer = 0.0
@@ -186,6 +200,7 @@ func _update_rival_collect(contact: Dictionary, delta: float) -> void:
 ## window for a future rival.
 func _update_rival_depart(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
 	var away: Vector3 = (contact["position"] - wreck_pos).normalized()
+	contact["heading"] = away
 	contact["position"] += away * RIVAL_SPEED * 2.0 * delta
 	if contact["position"].distance_to(wreck_pos) > PATROL_SPAWN_RANGE:
 		GameState.remove_contact(_rival_contact_id)
@@ -211,7 +226,7 @@ func _update_patrol(delta: float) -> void:
 					* PATROL_SPAWN_RANGE
 			_patrol_contact_id = GameState.register_contact(
 					"%s PATROL" % MarketSystem.claim_faction(), spawn, true,
-					SHIP_CONTACT_RADIUS)
+					SHIP_CONTACT_RADIUS, "PATROL")
 			GameState.post_comms("SENSORS", "PATROL CONTACT ON INTERCEPT VECTOR")
 		return
 	var contact := GameState.get_contact(_patrol_contact_id)
@@ -220,6 +235,8 @@ func _update_patrol(delta: float) -> void:
 		return
 	var ship_pos: Vector3 = GameState.local_ship()["transform"].origin
 	var to_ship: Vector3 = ship_pos - contact["position"]
+	# Facing the ship whether it is still closing or already holding at range.
+	contact["heading"] = to_ship.normalized()
 	# Running dark (a master electrical switch off) shrinks the range at which the
 	# patrol can pick the ship out and enforce the claim.
 	var enforce_range := PATROL_ENFORCE_RANGE * GameState.passive_signature()

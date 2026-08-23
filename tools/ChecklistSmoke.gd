@@ -235,6 +235,60 @@ func _test_ticks() -> void:
 	_check(_status("arrival", "SINK RATE") == ChecklistContent.Status.NA,
 			"a touchdown limit reads N/A with no approach running")
 
+	# The exterior lights, both ends of the tour. The two rows deliberately read
+	# DIFFERENT things — departure wants them burning, arrival wants the switches
+	# off — so both directions are pinned here.
+	GameState.set_master_alt(true)
+	GameState.set_master_battery(true)
+	for group: String in GameState.exterior_lights.keys():
+		GameState.set_exterior_light(group, true)
+	_check(_status("departure", "EXTERIOR LIGHTS") == ChecklistContent.Status.PASS,
+			"a lit ship passes the departure lights item")
+	GameState.set_exterior_light("STROBE", false)
+	_check(_status("departure", "EXTERIOR LIGHTS") == ChecklistContent.Status.FAIL,
+			"one group switched off fails it")
+	_check(_read("departure", "EXTERIOR LIGHTS").get("value", "") == "STROBE OFF",
+			"...and the row names the group that is out")
+	GameState.set_exterior_light("STROBE", true)
+
+	# Selected on but with nothing behind the bus is not "on" — the row states what
+	# the pilot could see out of the window, not what the switches are asking for.
+	GameState.set_master_alt(false)
+	GameState.set_master_battery(false)
+	_check(_status("departure", "EXTERIOR LIGHTS") == ChecklistContent.Status.FAIL,
+			"lights selected on with a dead bus still fail the departure item")
+	_check(_read("departure", "EXTERIOR LIGHTS").get("value", "") == "NO BUS",
+			"...and the row says why rather than blaming a switch")
+	GameState.set_master_alt(true)
+	GameState.set_master_battery(true)
+
+	# The arrival item is N/A until there is a pad under the ship: she is lit for
+	# the whole flight by design, and a row red from the claim to touchdown is
+	# exactly the red row that trains a pilot to ignore red.
+	GameState.docking_state = "INACTIVE"
+	var saved_phase := GameState.run_phase
+	GameState.run_phase = "ON_SITE"
+	_check(_status("arrival", "EXTERIOR LIGHTS") == ChecklistContent.Status.NA,
+			"the arrival lights item reads N/A off the pad")
+	GameState.run_phase = "DOCKED"
+	_check(_status("arrival", "EXTERIOR LIGHTS") == ChecklistContent.Status.FAIL,
+			"...and comes live on the pad, with the ship still lit")
+	for group: String in GameState.exterior_lights.keys():
+		GameState.set_exterior_light(group, false)
+	_check(_status("arrival", "EXTERIOR LIGHTS") == ChecklistContent.Status.PASS,
+			"switching all three off passes it")
+	# Going dark by pulling the masters must NOT tick the item: the switches are
+	# what stops the lights coming back with the bus.
+	for group: String in GameState.exterior_lights.keys():
+		GameState.set_exterior_light(group, true)
+	GameState.set_master_alt(false)
+	GameState.set_master_battery(false)
+	_check(_status("arrival", "EXTERIOR LIGHTS") == ChecklistContent.Status.FAIL,
+			"a dark bus does not tick the item for you — the switches do")
+	GameState.set_master_alt(true)
+	GameState.set_master_battery(true)
+	GameState.run_phase = saved_phase
+
 
 # --- The panel --------------------------------------------------------------
 

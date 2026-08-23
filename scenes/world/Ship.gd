@@ -2,8 +2,7 @@ extends Node3D
 ## Own ship's 3D body. View-side only: mirrors the authoritative transform
 ## SalvageSystem writes into GameState each frame (approach/match-velocity
 ## and Phase 5 manual flight), carrying the hull camera rig with it, and
-## reflects cosmetic switch-panel state (nav/landing lights). No mutation
-## here, per the convention.
+## wears the standard exterior light fit. No mutation here, per the convention.
 
 const GEAR_MESH := "res://assets/cc0/station/landing_gear.glb"
 ## Where the four legs bolt on, in ship space, and which way each folds when it
@@ -43,8 +42,6 @@ const GEAR_LEGS := [
 ## How far a stowed leg swings up from vertical.
 const GEAR_STOW_DEG := 82.0
 
-@onready var _nav_l: OmniLight3D = $NavLightL
-@onready var _nav_r: OmniLight3D = $NavLightR
 @onready var _landing: SpotLight3D = $LandingLight
 
 var _gear_legs: Array[Node3D] = []
@@ -54,6 +51,7 @@ var _gear_folds: Array[float] = []
 func _ready() -> void:
 	GameState.panel_switch_changed.connect(_on_panel_switch)
 	_build_gear()
+	_build_lights()
 
 
 func _process(_delta: float) -> void:
@@ -94,10 +92,24 @@ func _update_gear() -> void:
 		leg.rotation = Vector3(deg_to_rad(swing), 0.0, 0.0)
 
 
+## The standard exterior fit, measured off the hull mesh rather than placed by
+## hand — see ShipLights. Own ship, so the groups follow the panel switches and
+## the bus; and unlike the AI ships the nav pair and the beacons get real lights
+## as well as their lamps, because this is the one hull anything is ever close
+## enough to for a light to fall on.
+func _build_lights() -> void:
+	var hull := get_node_or_null("Hull")
+	if hull == null:
+		push_warning("Ship: no Hull node — no exterior lights fitted")
+		return
+	ShipLights.attach(self, hull, true, true)
+
+
+## NAV, BEACON and STROBE are NOT here: they are systemic now (a bus load and a
+## signature term), so SwitchPanelBridge routes them through
+## GameState.set_exterior_light and the fit follows that. The landing light is
+## still a cosmetic switch — it lights the pad, not the ship, and costs nothing.
 func _on_panel_switch(switch_name: String, on: bool) -> void:
 	match switch_name:
-		"NAV":
-			_nav_l.visible = on
-			_nav_r.visible = on
 		"LANDING":
 			_landing.visible = on

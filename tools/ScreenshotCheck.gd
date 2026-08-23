@@ -2,10 +2,13 @@ extends Node
 ## Renders a display for a hundred frames and saves a PNG so graphics changes can
 ## be eyeballed without a full playtest:
 ##
-##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close] [title|manual|terminal] [<chapter-id>]
+##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> [close|rival] [title|manual|terminal] [<chapter-id>]
 ##   godot --path . res://tools/ScreenshotCheck.tscn ++ <output.png> mfd [<page>] [<procedure>]
 ##
 ## Defaults to user://main_view.png. `close` parks the ship at cutting range;
+## `rival` stands ThreatSystem's rival cutter and patrol up in front of the camera
+## with the rival's torch firing, which is how their models and the exterior light
+## fit get judged without waiting out a spawn window in a real run;
 ## `title` puts the launch title card over the view, the way it appears at boot;
 ## `manual` opens the pilot's handbook over that card and `terminal` opens the
 ## terminal procedures, which is the only way to eyeball their layout short of
@@ -136,7 +139,18 @@ func _shoot() -> void:
 	# the one where a geometry mistake in the berth actually shows up.
 	if OS.get_cmdline_user_args().has("berth"):
 		await _park_on_final()
+	# The "rival" flag stands ThreatSystem's two ships up in front of the camera —
+	# the only way to look at the rival cutter and the patrol short of waiting out
+	# their spawn windows in a real run.
+	var rival := OS.get_cmdline_user_args().has("rival")
+	if rival:
+		await _park_on_the_threats()
 	for i in 100:
+		# Fire the rival's torch partway through, so the flare is standing when the
+		# frame is taken rather than having burnt out before it.
+		if rival and i == 55:
+			var pos: Vector3 = GameState.get_contact(_rival_id)["position"]
+			GameState.rival_cut_fired.emit(pos, GameState.wreck["position"])
 		await get_tree().process_frame
 	var image := get_viewport().get_texture().get_image()
 	var path := "user://main_view.png"
@@ -146,6 +160,52 @@ func _shoot() -> void:
 	image.save_png(path)
 	print("saved: " + path)
 	get_tree().quit(0)
+
+
+## Where the two AI ships are parked for the "rival" shot, and where the Kestrel
+## sits to look at them: close enough that a 3 m hull fills usable frame, far
+## enough apart that neither hides the other or sits inside the derelict.
+const RIVAL_VIEWPOINT := Vector3(0.0, 0.5, -14.0)
+const RIVAL_PARK := Vector3(-2.6, 0.7, -20.5)
+const PATROL_PARK := Vector3(2.9, -0.5, -21.5)
+
+var _rival_id := -1
+
+
+## Force ThreatSystem's spawn windows, freeze the two ships where they can be
+## seen, and park the Kestrel looking at them. ThreatSystem is stopped rather than
+## slowed once they are placed: the ships hold still for the shot while the lights
+## keep flashing at their real rate, which is the whole point of the picture.
+func _park_on_the_threats() -> void:
+	InputRouter.set_process(false)
+	for child in InputRouter.get_children():
+		child.set_process(false)
+	Engine.time_scale = 10.0
+	ThreatSystem._rival_timer = 0.0
+	ThreatSystem._patrol_timer = 0.0
+	var waited := 0.0
+	while (ThreatSystem._rival_contact_id == -1
+			or ThreatSystem._patrol_contact_id == -1) and waited < 30.0:
+		await get_tree().process_frame
+		waited += get_process_delta_time()
+	Engine.time_scale = 1.0
+	ThreatSystem.set_physics_process(false)
+	_rival_id = ThreatSystem._rival_contact_id
+	_pose_contact(_rival_id, RIVAL_PARK, GameState.wreck["position"])
+	_pose_contact(ThreatSystem._patrol_contact_id, PATROL_PARK, RIVAL_VIEWPOINT)
+	var ship: Dictionary = GameState.local_ship()
+	var t: Transform3D = ship["transform"]
+	t.origin = RIVAL_VIEWPOINT
+	ship["transform"] = t
+
+
+func _pose_contact(id: int, at: Vector3, facing: Vector3) -> void:
+	var contact := GameState.get_contact(id)
+	if contact.is_empty():
+		push_warning("ScreenshotCheck: contact %d never spawned" % id)
+		return
+	contact["position"] = at
+	contact["heading"] = (facing - at).normalized()
 
 
 ## Start a real approach and put the ship on short final over the pad, gear down,

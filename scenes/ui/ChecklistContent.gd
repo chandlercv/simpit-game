@@ -76,6 +76,37 @@ static func _torch_idle() -> Dictionary:
 	return _gate(not aligning, "ALIGNING" if aligning else "IDLE")
 
 
+## The exterior fit on departure, as the pilot can SEE it rather than as the
+## switches are set: a group selected on with no bus behind it is not burning, and
+## saying "NO BUS" is more use than a green tick on a ship nobody can see. This is
+## also why the item sits after MASTER SWITCHES in the procedure.
+static func _lights_lit() -> Dictionary:
+	if not GameState.bus_live():
+		return _gate(false, "NO BUS")
+	var out: Array[String] = []
+	for group: String in GameState.exterior_lights:
+		if not GameState.exterior_lights[group]:
+			out.append(group)
+	if out.is_empty():
+		return _gate(true, "NAV · BEACON · STROBE")
+	return _gate(false, "%s OFF" % " · ".join(out))
+
+
+## The same fit at the other end of a tour. This one reads the SWITCHES, not what
+## is burning — the opposite of _lights_lit, and deliberately. Going dark on the
+## pad is something the pilot does; a green tick earned because the masters
+## happened to be off already would let the item be skipped, and the lights would
+## come straight back on with the bus.
+static func _lights_dark() -> Dictionary:
+	var on: Array[String] = []
+	for group: String in GameState.exterior_lights:
+		if GameState.exterior_lights[group]:
+			on.append(group)
+	if on.is_empty():
+		return _gate(true, "DARK")
+	return _gate(false, "%s ON" % " · ".join(on))
+
+
 static func _gear_down() -> Dictionary:
 	if GameState.gear_locked_down():
 		return _gate(true, "DOWN & LOCKED")
@@ -133,6 +164,12 @@ static func _departure() -> Array[Dictionary]:
 				return _gate(on, "BAT %s · ALT %s" % [
 					"ON" if GameState.master_bat else "OFF",
 					"ON" if GameState.master_alt else "OFF"]),
+		},
+		{
+			# After the masters, because the lights are on the bus and will not
+			# light without one. The beacon is lit before the drive is started.
+			"group": "BEFORE DEPARTURE", "label": "EXTERIOR LIGHTS", "want": "ON",
+			"read": func() -> Dictionary: return _lights_lit(),
 		},
 		{
 			"group": "BEFORE DEPARTURE", "label": "BATTERY", "want": "CHARGING",
@@ -312,6 +349,15 @@ static func _arrival() -> Array[Dictionary]:
 				# lets the berth take the cargo — not a formality.
 				return _gate(GameState.cargo_hatch_open,
 					"OPEN" if GameState.cargo_hatch_open else "SECURED"),
+		},
+		{
+			# The ship goes dark before the bus is opened, so the last thing done
+			# to her is the same thing the next departure undoes first.
+			"group": "AFTER LANDING", "label": "EXTERIOR LIGHTS", "want": "OFF",
+			"read": func() -> Dictionary:
+				if GameState.docking_state != "LANDED" and GameState.run_phase != "DOCKED":
+					return _na("ON")
+				return _lights_dark(),
 		},
 		{
 			"group": "AFTER LANDING", "label": "MASTER ALT", "want": "OFF",

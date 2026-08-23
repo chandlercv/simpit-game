@@ -123,6 +123,11 @@ func _route_intent(switch_name: String, on: bool) -> void:
 			GameState.set_master_alt(on)
 		"AVIONICS", "FUEL_PUMP", "DE_ICE", "PITOT_HEAT":
 			GameState.set_power_switch(switch_name, on)
+		# The three light groups share their names with GameState.exterior_lights.
+		# LANDING is NOT here: it stays a cosmetic switch Ship.gd reads directly,
+		# because it lights the pad rather than the ship and costs nothing.
+		"NAV", "BEACON", "STROBE":
+			GameState.set_exterior_light(switch_name, on)
 		"COWL":
 			GameState.set_cargo_hatch(on)
 		# The panel's gear lever is a two-position switch decoded as a pair, so

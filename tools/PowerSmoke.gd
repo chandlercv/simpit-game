@@ -5,6 +5,11 @@ extends Node
 ## until it is flat, the battery switch is the buffer rather than a kill switch,
 ## and passive-scanner visibility halves per master that is off.
 ##
+## It also covers the exterior lights, because they are an electrical item and not
+## a decoration: they are a token load on the bus, they go out when the bus has no
+## source behind it, and every group that is not burning takes a bite out of the
+## ship's signature.
+##
 ## THE ASSERTION THAT MATTERS MOST is the last group: an electrical condition
 ## changes what is DELIVERED and never what is SET. A starved bus that quietly
 ## rewrote the pilot's allocation would be indistinguishable, on the instrument,
@@ -121,14 +126,72 @@ func _run() -> void:
 			and is_equal_approx(GameState.power("CUTTER"), lo),
 			"power returns to exactly what was set while it was out")
 
-	# 7. Passive-scanner visibility halves per master off, stacking to 0.25.
+	# 7. Passive-scanner visibility halves per master off, stacking to 0.25 — with
+	# the lights burning, which is how the ship boots.
 	_check(GameState.passive_signature() == 1.0, "signature 1.0 with both masters on")
 	GameState.set_master_alt(false)
 	_check(GameState.passive_signature() == 0.5, "signature 0.5 with ALT off")
 	GameState.set_master_battery(false)
-	_check(GameState.passive_signature() == 0.25, "signature 0.25 with both off")
+	# Both masters off is a DARK ship: the lights go out with everything else, so
+	# the two effects compound and a blacked-out hull sits below a bare quarter.
+	# That is the whole point of the lights being on the bus rather than beside it.
+	var lights_out: float = pow(GameState.LIGHT_GROUP_SIGNATURE,
+			GameState.exterior_lights.size())
+	_check(is_equal_approx(GameState.passive_signature(), 0.25 * lights_out),
+			"signature 0.25 with both off, less again for the lights they took out")
 	GameState.set_master_alt(true)
 	GameState.set_master_battery(true)
+
+	# 8. The exterior lights: a load, a bus dependency, and a signature term.
+	await _wait(0.2)
+	_check(GameState.bus_live(), "a healthy bus is live")
+	_check(GameState.light_group_lit("NAV") and GameState.light_group_lit("BEACON")
+			and GameState.light_group_lit("STROBE"),
+			"every light group burns on a healthy bus")
+	_check(GameState.passive_signature() == 1.0, "a fully lit ship has signature 1.0")
+
+	var lit_demand := GameState.electrical_demand()
+	GameState.set_exterior_light("STROBE", false)
+	_check(GameState.electrical_demand() < lit_demand,
+			"a group switched off stops drawing")
+	_check(is_equal_approx(GameState.electrical_demand(),
+			lit_demand - GameState.LIGHT_GROUP_DRAW),
+			"the draw it stops is exactly one group's worth")
+	_check(is_equal_approx(GameState.passive_signature(),
+			GameState.LIGHT_GROUP_SIGNATURE),
+			"one group out takes LIGHT_GROUP_SIGNATURE off the signature")
+	_check(GameState.passive_signature() > 0.5,
+			"the whole fit is still worth less than a single master")
+	_check(GameState.delivery_fraction() == 1.0,
+			"the lights are too small a load to starve a healthy bus")
+	GameState.set_exterior_light("STROBE", true)
+
+	# The lights need a source, not merely a switch: selected on, both masters off,
+	# and they are not burning. Same rule as everything else on the bus — an
+	# electrical condition changes what is DELIVERED and never what is SET.
+	GameState.set_master_alt(false)
+	GameState.set_master_battery(false)
+	_check(not GameState.bus_live(), "both masters off -> no source behind the bus")
+	_check(not GameState.light_group_lit("NAV"),
+			"the lights are out on a dark ship")
+	_check(GameState.exterior_lights["NAV"] == true,
+			"...with the switch still selected on")
+	GameState.set_master_alt(true)
+	await _wait(0.2)
+	_check(GameState.light_group_lit("NAV"),
+			"restoring the bus lights them again with no switch touched")
+
+	# A flat battery on the alternator alone is the same dark ship, which is the
+	# case the literal "both masters off" test would miss.
+	GameState.set_master_alt(false)
+	var saved_charge := GameState.battery_charge
+	GameState.battery_charge = 0.0
+	_check(not GameState.bus_live(), "ALT off and the battery flat -> no source")
+	_check(not GameState.light_group_lit("BEACON"),
+			"a flat battery puts the lights out too")
+	GameState.battery_charge = saved_charge
+	GameState.set_master_alt(true)
+	await _wait(0.2)
 
 	if _failures.is_empty():
 		print("POWER SMOKE: ALL CHECKS PASSED")
