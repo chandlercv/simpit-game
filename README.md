@@ -167,7 +167,7 @@ and both are written as operating documents rather than as a guide.
 
 | Button | Publisher | What's in it |
 | --- | --- | --- |
-| **PILOT'S MANUAL** | The builder. True of the Kestrel wherever she's flown. | The ship: description, flight controls, **electrical & power** (alternator, battery, the bus), **drive & propellant** (the selector's positions, the two tanks, the starter), **drive failures** (what to do when she stops making thrust), sensors, cutting torch, cargo hatch, landing gear, **landing limitations** (what the legs will take), hull, scope, instruments; **how a derelict hull behaves under the torch**; and the four checklists — **departure, arrival, cutting, collecting**. |
+| **PILOT'S MANUAL** | The builder. True of the Kestrel wherever she's flown. | The ship: description, flight controls, **electrical & power** (alternator, battery, the bus), **drive & propellant** (the selector's positions, the two tanks, the starter), **drive failures** (what to do when she stops making thrust), sensors, cutting torch, cargo hatch, landing gear, **landing limitations** (what the legs will take), hull, **exterior lighting** (the three groups, what they draw, what they cost in signature), scope, instruments; **how a derelict hull behaves under the torch**; and the four checklists — **departure, arrival, cutting, collecting**. |
 | **TERMINAL PROCEDURES** | The harbour, the claim office, the commercial agent. Changes without the handbook changing, and differs berth to berth. | The approach lane and its plate, speed limits and compliance, clearance and traffic, the berth and how an arrival is assessed, the arrival and departure procedures, claim conditions, the schedule of prices (cargo **and propellant**), and the system chart. |
 
 **The division is authorship, not subject.** The builder can state what the legs
@@ -311,6 +311,8 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
    so you open it only to collect, then secure it to keep working. Adrift pieces are
    **free-for-all** — the rival cutter runs the same sever-then-retrieve loop (minus
    the alignment step), and whoever reaches a piece first keeps it, including yours.
+   It's a ship you can see doing it, lit and lying off the hull with its torch
+   flaring each time it takes a member — not just a bracket on the glass.
    Pieces are **solid**: they bounce off the derelict, the station and each other
    rather than sinking through, so one you shove into the frame has to settle
    before it's slow enough to scoop.
@@ -469,6 +471,12 @@ also the state you leave her in on the pad. Running dark halves the ship's
 visibility to passive scanners — the claim-holder's patrol has to close to half
 its usual range before it can fine you (a quarter if both masters are off).
 
+**The exterior lights are the third term**, and a much smaller one: each of the
+three groups you switch off takes a further 5% off the signature. They *compound*
+with the masters rather than replacing them — a dark bus puts the lights out too —
+so a blacked-out ship sits a little below the quarter the masters alone give. See
+**Exterior lighting** in the pilot's handbook.
+
 **The masters don't stop the drive.** That's the selector's job, and the two are
 independent (see *Propulsion* below).
 
@@ -527,8 +535,10 @@ the comms log, but only these are wired to gameplay today:
 | **PITOT HEAT** | LIFE power: On = 100% (life support runs full), Off = low (20%). |
 | **COWL** | Open/close the cargo hatch — On = open (required to scoop an adrift salvage piece); Off = secured (required to fire the cutter or dock/jump). Same intent as the `cargo_hatch_open` keybind. |
 | **GEAR UP / DOWN** | Raise/lower the landing gear. The gear then *travels* over 3 s — down and locked is what a landing needs, and what interlocks the cutter. Same intent as the `landing_gear` keybind. |
-| **NAV** | Ship nav lights on/off. |
-| **LANDING** | Ship landing light on/off. |
+| **NAV** | Position lights — red to port, green to starboard, white on the tail. Steady. |
+| **BEACON** | Anti-collision beacons, red, above and below the fuselage. ~45 flashes a minute. |
+| **STROBE** | White strobes on both wingtips and the tail. A double pulse, ~1 Hz. |
+| **LANDING** | Ship landing light on/off. Lights the pad, not the ship; draws nothing. |
 
 The four channel switches toggle between shared **high (80%)** and **low (20%)**
 settings; the MFD **POWER** page sliders (or a mapped power axis / nudge
@@ -536,8 +546,15 @@ key) can still set any value in between (until the next switch flip). Neither
 master locks anything: an allocation you set is yours, and only what's *delivered*
 against it changes when the bus can't carry it.
 
-The remaining switches — PANEL, BEACON, STROBE and TAXI — are decoded and logged
-but have no gameplay effect yet.
+**The three light groups are a real system, not decoration.** Each draws a token
+0.02 units off the bus while it's selected on (0.06 for the whole fit, against an
+alternator making 2.5 — it will never starve a channel), each is *out* whenever the
+bus has no source behind it whatever its switch says, and each one you extinguish
+cuts your passive signature by 5%. They're on the **departure** and **arrival**
+checklists for that reason.
+
+The remaining switches — PANEL and TAXI — are decoded and logged but have no
+gameplay effect yet.
 
 ### Keyboard (default mapping — overridable in the remapper)
 
@@ -819,8 +836,9 @@ running game predates a change.
 | --- | --- |
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
-| `ScreenshotCheck.tscn` | Render a display to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). **`mfd` shoots the MFD display instead**, at its real 1280×800 canvas — the MENU home by default, a named page with `mfd DOCK`, a named procedure with `mfd CHECKLIST cutting`, and combined with `berth` (`mfd DOCK berth`) to catch the DOCK page with its gate checklist live rather than reading NO APPROACH RUNNING. This is how MFD layout and type sizing get judged short of the physical panel. |
+| `ScreenshotCheck.tscn` | Render a display to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close\|rival] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `rival` stands the rival cutter and the patrol up in front of the camera with the rival's torch firing (the only way to judge their models and the light fit without waiting out a spawn window), `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). **`mfd` shoots the MFD display instead**, at its real 1280×800 canvas — the MENU home by default, a named page with `mfd DOCK`, a named procedure with `mfd CHECKLIST cutting`, and combined with `berth` (`mfd DOCK berth`) to catch the DOCK page with its gate checklist live rather than reading NO APPROACH RUNNING. This is how MFD layout and type sizing get judged short of the physical panel. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
+| `build_ships.py` | Blender script (not a Godot scene) that regenerates the two AI ships — the rival cutter (with the torch boom its cut flare fires from) and the claim-holder's patrol — into `assets/cc0/ships/*.glb` (`blender --background --python tools/build_ships.py`). Every vertex is **checked against `ThreatSystem.SHIP_CONTACT_RADIUS` at build time**: the script refuses to write a hull that pokes out of the sphere the game actually collides against, so the model and the constant can't drift apart. |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; a drive shutdown or a dead THRUST channel under a flying autopilot disengages it; a flown approach is charged propellant like the burn it is, and a settled standoff isn't; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
@@ -829,6 +847,7 @@ running game predates a change.
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
 | `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); a piece is **solid against static geometry** — it bounces off the derelict/station and is pushed clear rather than sinking through; the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
 | `DockSmoke.tscn` | Headless smoke for the docking/landing mini-game (DockingSystem): the transit burn hands over to a flown approach; the hold gates a clearance on being stopped and on the lane being clear of traffic; markers must be flown through in order, and a miss, a corridor departure or sustained overspeed sends you around; the gear travels in real time, is required at the final gate and interlocks the cutter; a hot touchdown bounces and a clean one books the berth; auto-berth is a paid alternative inbound and refused on final; the departure is flown too; and the 3D station agrees with the lane data it is built from. |
+| `ThreatShipsSmoke.tscn` | Headless smoke for the rival/patrol 3D bodies and the shared exterior light fit: a contact tagged RIVAL or PATROL stands a hull up and removing it takes the hull away; a contact with no kind gets none (the guard that keeps the derelict, the debris and the station's traffic from being drawn twice); the hull follows the contact's position and points along its heading, wings level; both `.glb`s fit inside `SHIP_CONTACT_RADIUS` **and** actually fill it; and the light fit measures its own mounts off the hull it's bolted to, carries all eight lamps, and switches by group. It also pins the Kestrel's own fit: she wears the same eight lamps, they follow the bus, and they stay off the **hull camera** — a two-file contract (the lamps' visual layer and the camera's cull mask) that does nothing unless both halves agree, since the wingtip lamps sit less than a metre either side of the pilot's eye. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the `ScreenLayout` planner (exact partitioning, the arrangement per screen shape, and which tier each 1/2/3/4-monitor topology lands in), the content-harvest reparent, and the tab-host show/hide. |
 | `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
