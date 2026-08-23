@@ -25,18 +25,22 @@ const AlignPanelScript := preload("res://scenes/ui/AlignPanel.gd")
 const ScoopPanelScript := preload("res://scenes/ui/ScoopPanel.gd")
 const DockPanelScript := preload("res://scenes/ui/DockPanel.gd")
 const ChecklistPanelScript := preload("res://scenes/ui/ChecklistPanel.gd")
+const SettingsPanelScript := preload("res://scenes/ui/SettingsPanel.gd")
 
 ## Page order (also the menu grid order). Empty string = the MENU home.
 ## CHECKLIST comes first because it's the page you consult BEFORE doing a thing —
 ## it's the one page that's about all the others. ALIGN and SCOOP sit together:
 ## they're the two halves of a salvage run (cut the member free, then go collect
 ## it). DOCK follows MARKET, which is where an approach is started from.
+## SETTINGS comes last: it is the page you visit once to set something up and
+## then leave, not one you fly from.
 const PAGES: Array[String] = ["CHECKLIST", "POWER", "CARGO", "SALVAGE", "ALIGN",
-		"SCOOP", "MARKET", "DOCK", "CONTACTS"]
+		"SCOOP", "MARKET", "DOCK", "CONTACTS", "SETTINGS"]
 
-## MENU grid sizing. Nine pages at two columns is five rows, which at this
+## MENU grid sizing. Ten pages at two columns is five rows, which at this
 ## minimum height fills the unit in the 1280x800 canvas without scrolling; the
-## buttons then expand into whatever room is left over.
+## buttons then expand into whatever room is left over. Ten is the ceiling — an
+## eleventh page makes a sixth row and the grid starts scrolling.
 const MENU_BUTTON_H := 120
 const MENU_FONT := 26
 ## Gap between grid buttons — enough that a near-miss lands on nothing rather
@@ -223,6 +227,10 @@ func _build_page(page: String) -> Control:
 			var checklist := ChecklistPanelScript.new()
 			checklist.accent = accent
 			return checklist
+		"SETTINGS":
+			var settings := SettingsPanelScript.new()
+			settings.accent = accent
+			return settings
 		"MARKET":
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 8)

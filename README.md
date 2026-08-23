@@ -4,7 +4,8 @@ A space-sim that treats HOTAS, switches and multi-monitors as first-class compon
 
 A cyberpunk mercenary **salvage sim** built for a multi-display hardware simpit.
 One process drives one native window per monitor — an external hull-camera view,
-a read-only tactical scope, two touch MFDs, and a second external camera — fed by
+a read-only glass-cockpit instrument panel, two touch MFDs, and a second
+external camera — fed by
 a HOTAS, a Saitek switch panel, and touch/mouse on the secondary screens.
 
 > Status: Phases 1–5 complete and hardware-verified. Engine: Godot 4.7
@@ -33,8 +34,8 @@ tile of one (see **Simpit / multi-display setup**).
 | Role | Window | What it shows | How you interact |
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
-| **Tactical** | `TacticalWindow` | **Read-only instruments in two modes** — SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) and CHART (system star chart). | Mode buttons; mouse pan/zoom on the chart. No touch controls — it's an instrument you read. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
+| **Tactical** | `TacticalWindow` | **A glass-cockpit instrument band** — heading tape, speed tape, attitude indicator, altitude tape, rotation-rate ribbons, LH2/LOX tank tapes and the ship's builder's plate — framing one of two modes: SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) or CHART (system star chart). Altitude, heading, range and attitude are all measured against a selectable **navigation reference** (see below). | **No buttons at all** — it's an instrument you read. Mode and datum are stepped by mapped controls; anything these instruments need setting is on the MFD **SETTINGS** page. Mouse pan/zoom still works on the chart. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list), **SETTINGS** (navigation reference, Tactical band show/hide, rate-ribbon scale). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP**, and **BELLY** (straight down past the hull — the landing view) — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -130,6 +131,80 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   DRIVE section, or both. It pulses red once authority drops below the half the
   alignment mini-game requires, which is the point at which the degradation
   starts costing you salvage rather than just feel.
+
+---
+
+## The Tactical instrument band
+
+The Tactical display frames whichever mode is up (SCOPE or CHART) with a
+glass-cockpit instrument band, drawn in `scenes/ui/InstrumentBand.gd`. **VEL, the
+attitude indicator and ALT form one flight block** down the left in that order,
+with the tactical picture outboard on the right — the arrangement a pilot's eye
+is trained on, and the reason the attitude indicator is the biggest thing on the
+display. Nothing on it is clickable.
+
+- **Heading tape** — across the top. Ticks every 5°, labels every 10°, the live
+  hull heading boxed on the lubber line. A **bug** on the tape marks the bearing
+  to the navigation reference. This is the **hull's** heading; the Main HUD's
+  `HDG` is the **camera's**, and they differ whenever you're glancing.
+- **Speed tape** — m/s, with the live figure boxed. The drive's current ceiling
+  draws a hatched band across the top of the tape; with the gear out, a second
+  amber band marks the 18 m/s the legs are rated for; and inside a station
+  pattern ATC's speed limit rides the tape as a bug that reddens the moment
+  you're over it.
+- **Attitude indicator** — the horizon, split into a dark sky field and a
+  stippled ground field. The **waterline symbol at the centre never moves**;
+  everything else moves behind it. Pitch up and the horizon drops below the
+  waterline and the ball fills with sky; pitch down and the stipple fills it. The
+  **pitch ladder** is barred every 5° and labelled every 10°, **solid above the
+  horizon and dashed below**, tapering with angle. A **roll pointer** rides a
+  fixed sky scale marked to 60° — wings are level when it sits on the index at
+  the top, which is the same fact the flat horizon line reports a second way. If
+  a steep attitude takes the horizon out of the ball entirely, a chevron at the
+  edge points the short way back to level. The ground field is captioned with the
+  plane it belongs to, because *level* means level with the **selected datum**.
+- **Altitude tape** — height above the datum's plane, with a **vertical-speed
+  trend arrow** off the pointer that ambers and then reddens past the sink rates
+  the legs will take. On the landing platform the datum plane is a real deck, so
+  it gets a ground band — and the tape then reads the same number as the Main
+  HUD's landing ladder.
+- **Rotation-rate ribbons** — pitch, yaw and roll body rates as centre-zero
+  tapes. Nulling a tumble is driving three pointers onto one centre line. Full
+  scale is the ship's rated 45°/s, or ±15°/s on the **FINE** setting.
+- **Propellant** — LH2 and LOX as vertical tank tapes, amber under a quarter and
+  red when dry.
+- **Builder's plate** — the ship's name, registry, hull serial, yard and year,
+  etched on a plate at the bottom left. It is the one thing on the display that
+  never changes.
+
+### The navigation reference
+
+Altitude, heading, range **and** attitude all need something to be measured
+against — in space there is no altitude without one. They share a single
+selectable **datum** (`systems/NavReference.gd`), so they can never disagree
+about which way is up. The datum is named on the band's legend and again on the
+attitude indicator's ground field.
+
+| Datum | Measured from |
+| --- | --- |
+| **AUTO** | Follows the run: the landing platform while an approach is being flown, otherwise the cut target, otherwise the derelict, otherwise inertial. |
+| **PLATFORM** | The harbour's landing platform and its deck plane. |
+| **DERELICT** | The derelict on site, and a level plane through it. |
+| **TARGET** | The selected cut target, or the designated contact. |
+| **INERTIAL** | The world's own frame. |
+
+The derelict and the target supply only the *origin* — the horizon stays level
+with the station's plane, because a derelict tumbles and an attitude ball pinned
+to a tumbling hull is unusable.
+
+Step the datum with **Y** (or a bound HOTAS button), jump straight to the
+platform or the target with the unbound `nav_ref_pad` / `nav_ref_target`, or pick
+one on the MFD **SETTINGS** page — which also reports what AUTO has resolved to.
+Pin a datum that has no fix and the band says so and holds a fallback rather than
+quietly reading from somewhere you didn't choose.
+
+The band can be hidden entirely (`tactical_band_toggle`, or SETTINGS), which
+hands the sensor scope the whole display back.
 
 ---
 
@@ -603,14 +678,17 @@ as −/+ pairs, then the two electrical masters, then the drive selector.
 | Key | Action | | Key | Action |
 | --- | --- | --- | --- | --- |
 | **T** | Toggle Tactical SCOPE / CHART | | **[** | Camera → BELLY (the landing view) |
-| **G / H** | MFD-A / MFD-B → MENU | | **]** | Cycle external camera |
+| **Y** | Cycle the navigation reference | | **]** | Cycle external camera |
+| **G / H** | MFD-A / MFD-B → MENU | | | |
 
 The camera keeps two keys rather than six: `]` steps every view and `[` jumps
 straight to **BELLY**, the one the landing procedure requires. REAR / SIDE /
 CHASE / TOP are reachable by stepping and ship **unbound**, rather than eating the
 number row the ship's systems now need. MFD paging, cargo, market, the throttle
-command-law toggle (`throttle_cmd_toggle`) and the flight-assist switch
-(`fbw_mode_cycle`) also ship unbound — bind any of them in the remapper. Every
+command-law toggle (`throttle_cmd_toggle`), the flight-assist switch
+(`fbw_mode_cycle`), the two direct navigation-reference selects (`nav_ref_pad`,
+`nav_ref_target`) and the Tactical band's show/hide (`tactical_band_toggle`)
+also ship unbound — bind any of them in the remapper. Every
 default here is also HOTAS-bindable, and a key + a HOTAS bind can coexist on one
 function.
 
@@ -631,17 +709,21 @@ remapper at all:
 
 | Display | Controls |
 | --- | --- |
-| **Tactical** | Read-only. **SCOPE** / **CHART** mode buttons; mouse pan/zoom on the chart. |
-| **MFDs** | Tap **MENU** to open a page. **CHECKLIST** tap a procedure, then BACK / ▲ / ▼ / RESET (and tap a hand-marked item to tick it); **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock. |
+| **Tactical** | Read-only, and there is nothing to click. Mouse pan/zoom on the chart is the only mouse input it takes; mode, datum and the instrument band are driven by mapped controls or the MFD **SETTINGS** page. |
+| **MFDs** | Tap **MENU** to open a page. **CHECKLIST** tap a procedure, then BACK / ▲ / ▼ / RESET (and tap a hand-marked item to tick it); **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock; **SETTINGS** tap a navigation reference, show/hide the Tactical band, pick the rate-ribbon scale. |
 | **Camera** | View is picked by a mapped control (no on-screen buttons). |
 
 Any input surface can drive the same intent — e.g. the four power channels are
 set from an MFD's touch sliders, from a mapped power axis (slider) or key/button
 (nudge), and, equivalently, from the switch panel's channel toggles (FUEL PUMP / AVIONICS / DE-ICE / PITOT
 HEAT). Everything you can do on an MFD is also bindable to a HOTAS button or
-axis (see the remapper groups **MFD / SALVAGE / TACTICAL / CARGO / MARKET / VIEW
-/ POWER**). The Tactical SCOPE⇄CHART toggle is in **TACTICAL** — bind it to a
-HOTAS button to flip the Tactical display without touching the screen. **Throttle
+axis (see the remapper groups **MFD / SALVAGE / TACTICAL / NAV / CARGO / MARKET
+/ VIEW / POWER**). The Tactical SCOPE⇄CHART toggle is in **TACTICAL** — bind it
+to a HOTAS button to flip the Tactical display without touching the screen. The
+**NAV** group holds the navigation reference (cycle, or straight to the landing
+platform or the cut target) and the Tactical band's show/hide — hiding the band
+hands the sensor scope the whole display back, which is what you want while
+reading a wreck. **Throttle
 Cmd Mode** (group **THROTTLE**) ships unbound — map it to a button to flip
 between speed- and thrust-command throttle in flight.
 
@@ -836,7 +918,7 @@ running game predates a change.
 | --- | --- |
 | `ScreenLabeler.tscn` | Identify physical screens and assign display roles (dev shortcut; the game shows an in-game chooser when needed). |
 | `InputEcho.tscn` | Live dump of joystick axes/buttons and raw HID reports (used to derive the HOTAS bindings). |
-| `ScreenshotCheck.tscn` | Render a display to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close\|rival] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `rival` stands the rival cutter and the patrol up in front of the camera with the rival's torch firing (the only way to judge their models and the light fit without waiting out a spawn window), `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). **`mfd` shoots the MFD display instead**, at its real 1280×800 canvas — the MENU home by default, a named page with `mfd DOCK`, a named procedure with `mfd CHECKLIST cutting`, and combined with `berth` (`mfd DOCK berth`) to catch the DOCK page with its gate checklist live rather than reading NO APPROACH RUNNING. This is how MFD layout and type sizing get judged short of the physical panel. |
+| `ScreenshotCheck.tscn` | Render a display to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close\|rival] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `rival` stands the rival cutter and the patrol up in front of the camera with the rival's torch firing (the only way to judge their models and the light fit without waiting out a spawn window), `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). **`tactical` shoots the Tactical display** at its real 1280×720 canvas with the instrument band up (`tactical SCOPE` / `tactical CHART`), deliberately parking the ship off level, off north and turning — shot straight and level, every sign on the band looks correct whichever way round it is. **`mfd` shoots the MFD display instead**, at its real 1280×800 canvas — the MENU home by default, a named page with `mfd DOCK`, a named procedure with `mfd CHECKLIST cutting`, and combined with `berth` (`mfd DOCK berth`) to catch the DOCK page with its gate checklist live rather than reading NO APPROACH RUNNING. This is how MFD layout and type sizing get judged short of the physical panel. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `build_ships.py` | Blender script (not a Godot scene) that regenerates the two AI ships — the rival cutter (with the torch boom its cut flare fires from) and the claim-holder's patrol — into `assets/cc0/ships/*.glb` (`blender --background --python tools/build_ships.py`). Every vertex is **checked against `ThreatSystem.SHIP_CONTACT_RADIUS` at build time**: the script refuses to write a hull that pokes out of the sphere the game actually collides against, so the model and the constant can't drift apart. |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
@@ -852,6 +934,7 @@ running game predates a change.
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the `ScreenLayout` planner (exact partitioning, the arrangement per screen shape, and which tier each 1/2/3/4-monitor topology lands in), the content-harvest reparent, and the tab-host show/hide. |
 | `TitleCardSmoke.tscn` | Headless smoke for the launch screen: the scenario catalog and its intents (an unknown id changes nothing, LAUNCH starts the run exactly once), and that the card builds one button per scenario and reports the live display/controls state. |
 | `PilotManualSmoke.tscn` | Headless smoke for both of the ship's documents: each catalog is well-formed, sections are contiguous, and the required procedures are present; **neither document publishes the other's material** (the handbook names no harbour marker, the terminal procedures restate no airframe figure, and every harbour chapter names its issuing office); **every binding placeholder in the content names a real Input Map action** (so renaming an action fails the build instead of leaving a hole in a checklist); the resolver agrees with the effective profiles and reports an unassigned control as `NOT ASSIGNED` rather than an empty gap; every chapter renders with no placeholder left unsubstituted; and the card opens either document on a layer above itself but below the chooser and remapper, swaps rather than stacks when the other is opened, hides it for a setup step, and frees it on LAUNCH. |
+| `InstrumentBandSmoke.tscn` | Headless smoke for the Tactical instrument band and the navigation reference. Asserts the SIGNS every reading depends on (nose-up fills the ball with sky, a right wing down tilts the horizon the way the world tilts, a climb reads positive) — none of which is visible in a screenshot of a level ship; that the band's ALT under the platform datum is the SAME number DockingSystem reports to the HUD's landing ladder, and its heading under the inertial datum is the same formula the HUD uses; that every datum resolves to a real orthonormal frame, that AUTO picks the right one for the phase being flown, and that a pinned datum with no fix reports the fallback it is holding; and that the band's reserves leave a usable mode pane in the 1280×720 canvas. |
 | `MfdNavSmoke.tscn` | Headless smoke for MFD page navigation: paging wraps through the pages alone (a full lap visits each once and never lands on the MENU), while the MENU home stays reachable on demand for a direct jump to any page. |
 | `ChecklistSmoke.tscn` | Headless smoke for the MFD **CHECKLIST** page: the catalog is well-formed and carries all four procedures with contiguous sections; **every live read is called against real state** and must return a status and a value (so a renamed `GameState` field fails the build instead of blanking a row); rows follow the ship when the real intents are driven (hatch, gear travel, power channels); a limit is **read from the constant that enforces it** rather than transcribed; no live row can be hand-ticked, and RESET / a site reset clear the ones that can; and the shared vertical budget holds — each checklist reserve fits its rows at the current type scale, and the DOCK / SCOOP / ALIGN pages still draw on a unit far smaller than any real MFD. |
 | `PowerSmoke.tscn` | Headless smoke for the alternator/battery power model: channel switches drive their mapped channel; a surplus charges the battery and a deficit discharges it; ALT off runs the ship off the battery until it's flat; BAT off caps delivery at the alternator's output; and — the assertion that matters most — **an electrical condition changes what is delivered and never what is set**, with edits made on a dark ship surviving and taking effect on restoration. Passive-scanner visibility still halves per master off. |

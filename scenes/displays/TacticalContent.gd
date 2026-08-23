@@ -1,94 +1,87 @@
 extends Control
-## Read-only Tactical display with two selectable modes:
+## Read-only Tactical display: a glass-cockpit instrument band framing one of two
+## selectable modes.
 ##   SCOPE — sensor scope + hull-damage heatmap + structural-risk meter.
 ##   CHART — the system star chart (mouse pan/zoom).
-## Everything here is an instrument you READ. The controls that used to live on
-## Tactical — sensor mode, approach/cut, contact locking, and cut-target
-## selection — moved to the MFD, so the scope is no longer clickable; it only
-## draws. State is shared through GameState, so the MFD driving those intents is
+##
+## Everything here is an instrument you READ. There are no buttons: the controls
+## that used to live on Tactical — sensor mode, approach/cut, contact locking,
+## cut-target selection — moved to the MFD, and the SCOPE/CHART tabs that
+## outlasted them are gone too. Mode is stepped with a mapped control
+## (tactical_view_cycle), the navigation datum with nav_ref_cycle, and anything
+## else these instruments need is on the MFD SETTINGS page. The mode still shows
+## on the band's legend — it reports the mode, it does not offer it.
+##
+## State is shared through GameState, so whatever drives those intents is
 ## reflected here automatically.
 
 const TacticalScopeScript := preload("res://scenes/ui/TacticalScope.gd")
 const HullHeatmapScript := preload("res://scenes/ui/HullHeatmap.gd")
 const RiskMeterScript := preload("res://scenes/ui/RiskMeter.gd")
 const StarChartScript := preload("res://scenes/ui/StarChart.gd")
-const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
+const InstrumentBandScript := preload("res://scenes/ui/InstrumentBand.gd")
 
 const MODES: Array[String] = ["SCOPE", "CHART"]
 
 @export var accent: Color = Color(1.0, 0.72, 0.2)
 
 var _panels: Dictionary = {}
-var _buttons: Dictionary = {}
 var _current := ""
+var _band: Control
+## The mode panels live in here; its margins are the band's reserves, so hiding
+## the band hands the scope the whole display back rather than leaving a hole.
+var _content: MarginContainer
 
 
 func _ready() -> void:
 	_build()
-	# Mode is shared GameState (TacticalContent is one of possibly several views of
-	# it), so a mapped HOTAS button — GameState.cycle_tactical_view — and the tabs
-	# stay in agreement. Tabs call the intent; we mirror the resulting state.
+	# Mode is shared GameState (TacticalContent is one of possibly several views
+	# of it), so a mapped HOTAS button — GameState.cycle_tactical_view — and any
+	# other view stay in agreement. We mirror the resulting state.
 	GameState.tactical_view_changed.connect(show_mode)
+	GameState.tactical_band_changed.connect(_apply_band)
 	show_mode(GameState.tactical_view)
+	_apply_band(GameState.tactical_band)
 
 
 func _build() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	var outer := VBoxContainer.new()
-	outer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	outer.add_theme_constant_override("separation", 10)
-	add_child(outer)
 
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 10)
-	outer.add_child(bar)
-	var caption := Label.new()
-	caption.text = "VIEW"
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption.add_theme_font_size_override("font_size", 16)
-	caption.add_theme_color_override("font_color", Color(accent, 0.7))
-	bar.add_child(caption)
-	for mode: String in MODES:
-		var btn := Button.new()
-		btn.text = mode
-		btn.toggle_mode = true
-		btn.focus_mode = Control.FOCUS_NONE
-		btn.custom_minimum_size = Vector2(170, 46)
-		btn.add_theme_font_size_override("font_size", 18)
-		# Bright, clearly-bordered inactive tab (the old 8%-fill/dark-text style was
-		# nearly invisible under the scanline overlay); solid fill when active.
-		btn.add_theme_stylebox_override("normal", _tab_style(false, false))
-		btn.add_theme_stylebox_override("hover", _tab_style(false, true))
-		btn.add_theme_stylebox_override("pressed", _tab_style(true, false))
-		btn.add_theme_stylebox_override("hover_pressed", _tab_style(true, false))
-		btn.add_theme_color_override("font_color", accent)
-		btn.add_theme_color_override("font_hover_color", accent.lightened(0.3))
-		btn.add_theme_color_override("font_pressed_color", Color(0.06, 0.04, 0.0))
-		btn.add_theme_color_override("font_hover_pressed_color", Color(0.06, 0.04, 0.0))
-		btn.pressed.connect(GameState.set_tactical_view.bind(mode))
-		bar.add_child(btn)
-		_buttons[mode] = btn
-
-	var content := MarginContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	outer.add_child(content)
+	_content = MarginContainer.new()
+	_content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_content)
 	_panels["SCOPE"] = _build_scope()
 	_panels["CHART"] = _build_chart()
 	for mode: String in MODES:
-		content.add_child(_panels[mode])
+		# Both modes draw past their own bounds — the chart pans and zooms
+		# freely, the scope labels its blips at their edges. That was invisible
+		# while a mode had the whole display; with the band framing it, an
+		# unclipped panel writes over the instruments.
+		_panels[mode].clip_contents = true
+		_content.add_child(_panels[mode])
+
+	# The band draws over the panels rather than beside them: it is chrome, it
+	# is mouse-transparent, and the margins above are what actually keeps the
+	# instruments clear of it.
+	_band = InstrumentBandScript.new()
+	_band.accent = accent
+	_band.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_band)
 
 
-func _tab_style(active: bool, hovering: bool) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	if active:
-		style.bg_color = accent
-	else:
-		style.bg_color = Color(accent, 0.22 if hovering else 0.14)
-	style.border_color = accent
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(4)
-	style.set_content_margin_all(8)
-	return style
+## Show or hide the band, and give the mode panels back the room either way.
+func _apply_band(shown: bool) -> void:
+	if _band == null or _content == null:
+		return
+	_band.visible = shown
+	var pad := 6.0
+	_content.add_theme_constant_override("margin_left",
+			roundi(InstrumentBandScript.FLIGHT_W + pad) if shown else 0)
+	_content.add_theme_constant_override("margin_top",
+			roundi(InstrumentBandScript.HDG_H + pad) if shown else 0)
+	_content.add_theme_constant_override("margin_right", 0)
+	_content.add_theme_constant_override("margin_bottom",
+			roundi(InstrumentBandScript.BOTTOM_H + pad) if shown else 0)
 
 
 func _build_scope() -> Control:
@@ -132,8 +125,8 @@ func show_mode(mode: String) -> void:
 	_current = mode
 	for m: String in _panels:
 		_panels[m].visible = (m == mode)
-	for m: String in _buttons:
-		_buttons[m].button_pressed = (m == mode)
+	if _band != null:
+		_band.queue_redraw()
 
 
 func current_mode() -> String:

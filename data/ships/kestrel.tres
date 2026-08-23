@@ -5,6 +5,10 @@
 [resource]
 script = ExtResource("1_def")
 display_name = "SV KESTREL"
+registry = "LU-4471-K"
+hull_serial = "KS-017"
+builder = "TESSERA YARDS, L4"
+build_year = 2371
 cargo_mass_limit_t = 40.0
 cargo_vol_limit_m3 = 30.0
 power_budget = 2.5

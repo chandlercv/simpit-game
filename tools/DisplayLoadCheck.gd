@@ -49,6 +49,17 @@ func _finish() -> void:
 	GameState.cycle_external_view()
 	GameState.cycle_tactical_view()
 	GameState.set_tactical_view("SCOPE")
+	# Every navigation datum, and the band's own visibility. Each datum is a
+	# different resolution path through NavReference, and each one repaints the
+	# whole Tactical band — a divide-by-zero on a missing origin surfaces here
+	# rather than the first time someone pins a datum in flight.
+	for datum: String in GameState.NAV_REFERENCES:
+		GameState.set_nav_reference(datum)
+	GameState.cycle_nav_reference()
+	GameState.toggle_tactical_band()
+	GameState.toggle_tactical_band()
+	for scale: String in GameState.RATE_SCALES:
+		GameState.set_rate_scale(scale)
 	GameState.cycle_sensor_mode()
 	SalvageSystem.cycle_member(1)
 	SalvageSystem.cycle_member(-1)

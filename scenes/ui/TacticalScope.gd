@@ -193,7 +193,7 @@ func _draw_struct(font: Font) -> void:
 		_draw_member(member, font)
 
 	var selected := GameState.get_member(GameState.selected_member_id)
-	var info := "CLICK A MEMBER TO SELECT CUT POINT"
+	var info := "NO MEMBER SELECTED — PICK ONE ON AN MFD SALVAGE PAGE"
 	if not selected.is_empty():
 		var good: GoodDefinition = MarketSystem.good(selected["good"])
 		info = "%s — LOAD %s — EST RISK +%d%% — YIELD %.1f %s %s" % [
