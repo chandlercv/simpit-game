@@ -24,9 +24,13 @@ extends Node3D
 ## ten metres and useless at a hundred — and a hundred is where you are when you
 ## are trying to work out what a contact is. The quad reads as a source at any
 ## range, and it clears the environment's glow_hdr_threshold so it blooms.
-## Kept only just over the environment's glow_hdr_threshold for the steady lamps.
-## Higher and the bloom swells a 0.15 m lamp into a blob the size of the ship
-## carrying it, which is worse at every range, not just close up.
+##
+## The quad is MASKED by a radial ramp (see _lamp_texture). A bare QuadMesh draws
+## its whole square, which is the one shape a light is never seen as.
+##
+## Energies are kept only just over the environment's glow_hdr_threshold for the
+## steady lamps. Higher and the bloom swells a 0.15 m lamp into a blob the size of
+## the ship carrying it, which is worse at every range, not just close up.
 const NAV_ENERGY := 2.0
 const STROBE_ENERGY := 7.0
 const BEACON_ENERGY := 4.0
@@ -47,9 +51,10 @@ const STROBE_PULSE := 0.05
 const STROBE_GAP := 0.12
 
 ## Billboard size as a fraction of the hull's longest horizontal dimension, floored
-## so a small hull still gets a lamp you can pick out.
-const LAMP_SCALE := 0.05
-const LAMP_MIN := 0.10
+## so a small hull still gets a lamp you can pick out. The quad is bigger than the
+## lamp looks: most of its width is the falloff's tail, which is nearly black.
+const LAMP_SCALE := 0.11
+const LAMP_MIN := 0.2
 
 ## Visual layer the OWN SHIP's lamps are put on (layer 2), so the hull camera can
 ## be told not to draw them.
@@ -134,6 +139,39 @@ func _refresh() -> void:
 
 # --- Construction -----------------------------------------------------------
 
+## The radial ramp every lamp is masked by: a hot core, a quick shoulder, then a
+## long tail into nothing. Without it a lamp is a square, because that is the
+## shape of the quad it is drawn on.
+##
+## Built in code from a Gradient rather than shipped as an image, the same way the
+## gas giant's surface is made in DebrisField.tscn — there is no texture asset to
+## keep in step with anything, and one texture serves every lamp on every ship.
+static var _falloff: GradientTexture2D
+
+
+static func _lamp_texture() -> GradientTexture2D:
+	if _falloff != null:
+		return _falloff
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.16, 0.42, 1.0])
+	ramp.colors = PackedColorArray([
+		Color(1.0, 1.0, 1.0, 1.0),
+		Color(1.0, 1.0, 1.0, 0.85),
+		Color(0.45, 0.45, 0.45, 0.28),
+		Color(0.0, 0.0, 0.0, 0.0),
+	])
+	_falloff = GradientTexture2D.new()
+	_falloff.gradient = ramp
+	_falloff.width = 64
+	_falloff.height = 64
+	_falloff.fill = GradientTexture2D.FILL_RADIAL
+	# Centre out to the edge: half the quad's width is the ramp's full travel, so
+	# the tail reaches zero exactly at the rim and the square never shows.
+	_falloff.fill_from = Vector2(0.5, 0.5)
+	_falloff.fill_to = Vector2(1.0, 0.5)
+	return _falloff
+
+
 func _build(host: Node3D, hull: Node3D, with_omni: bool) -> void:
 	var box := _hull_box(host, hull)
 	if box.size == Vector3.ZERO:
@@ -171,14 +209,16 @@ func _build(host: Node3D, hull: Node3D, with_omni: bool) -> void:
 ## The hull's bounding box in `host`-local space. MeshInstance3D only, so a camera
 ## rig or an existing light under the hull is not measured as structure.
 func _hull_box(host: Node3D, hull: Node3D) -> AABB:
-	var to_local := host.global_transform.affine_inverse()
+	# Named to_host, not to_local: Node3D already has a to_local() method, and this
+	# script is one (ShipColliderBake, where the idiom comes from, extends Node).
+	var to_host := host.global_transform.affine_inverse()
 	var merged := AABB()
 	var have_box := false
 	for node in hull.find_children("*", "MeshInstance3D", true, false):
 		var mi: MeshInstance3D = node
 		if mi.mesh == null:
 			continue
-		var box := (to_local * mi.global_transform) * mi.get_aabb()
+		var box := (to_host * mi.global_transform) * mi.get_aabb()
 		merged = box if not have_box else merged.merge(box)
 		have_box = true
 	return merged if have_box else AABB()
@@ -197,9 +237,14 @@ func _add(group: String, at: Vector3, color: Color, energy: float, size: float,
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.disable_receive_shadows = true
+	# The ramp masks BOTH channels: the albedo so the additive blend fades out at
+	# the rim, and the emission so the bloom does too. Mask only one and the lamp
+	# still bleeds a square, just a dimmer one.
 	mat.albedo_color = color
+	mat.albedo_texture = _lamp_texture()
 	mat.emission_enabled = true
 	mat.emission = color
+	mat.emission_texture = _lamp_texture()
 	mat.emission_energy_multiplier = energy
 	quad.material = mat
 
