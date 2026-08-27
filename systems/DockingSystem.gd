@@ -434,7 +434,7 @@ func status() -> Dictionary:
 		"outbound": _outbound(),
 		"gear_ok": GameState.gear_locked_down(),
 		"gear_position": GameState.gear_position,
-		"hatch_ok": not GameState.cargo_hatch_open,
+		"hatch_ok": GameState.hatch_secured(),
 		"altitude": altitude - GEAR_HEIGHT,
 		"descent": -velocity.dot(up),
 		"lateral": pad_offset.length(),
@@ -566,15 +566,18 @@ func request_clearance() -> void:
 			or GameState.docking_state == "DEPARTING":
 		# Already cleared: the same control reads back the standing instruction,
 		# which is what an acknowledge button is for.
+		AudioSystem.transmit("readback")
 		_repeat_instruction()
 		return
 	if GameState.docking_state == "DEPART_HOLD":
 		_request_departure()
 		return
 	if GameState.docking_state != "HOLD":
+		AudioSystem.transmit("request_clearance")
 		GameState.post_comms("ATC", "%s — CONTINUE TO MARKER ALPHA AND HOLD"
 				% GameState.ship_def.display_name)
 		return
+	AudioSystem.transmit("request_clearance")
 	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
 	if speed > HOLD_SPEED:
 		_atc("HOLD AT ALPHA — YOU ARE STILL MOVING",
@@ -598,6 +601,7 @@ func request_clearance() -> void:
 func request_auto_berth() -> void:
 	if not is_active() or _outbound():
 		return
+	AudioSystem.transmit("auto_berth")
 	if GameState.docking_state == "FINAL":
 		_atc("AUTO-BERTH REFUSED — YOU ARE ON FINAL",
 				"TOO LATE TO HAND IT OVER. LAND IT OR GO AROUND.", true)
@@ -625,6 +629,7 @@ func request_auto_berth() -> void:
 func abort_approach() -> void:
 	if not is_active() or _outbound():
 		return
+	AudioSystem.transmit("abort")
 	GameState.post_comms("ATC", "%s CANCELLING THE APPROACH — LEAVING THE PATTERN"
 			% GameState.ship_def.display_name)
 	end_approach()
@@ -845,7 +850,7 @@ func _pass_gate(index: int, target: Vector3) -> void:
 	if not GameState.gear_locked_down():
 		_wave_off("GEAR NOT DOWN AND LOCKED AT THE FINAL GATE")
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		_wave_off("CARGO HATCH OPEN ON FINAL")
 		return
 	GameState.docking["gate"] = GATES.size()
@@ -863,7 +868,7 @@ func _update_final(delta: float) -> void:
 	if not GameState.gear_locked_down():
 		_wave_off("GEAR RAISED ON FINAL")
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		_wave_off("CARGO HATCH OPENED ON FINAL")
 		return
 	# The deck itself is handled by _check_deck, every frame and in every state —
@@ -883,6 +888,7 @@ func _update_depart_hold(delta: float) -> void:
 
 ## The pilot asking for the departure slot rather than waiting to be called.
 func _request_departure() -> void:
+	AudioSystem.transmit("request_departure")
 	var blocker := _lane_conflict()
 	if not blocker.is_empty():
 		_atc("HOLD ON THE PAD — TRAFFIC IN THE LANE",
@@ -1579,6 +1585,10 @@ func _place_ship_on_pad() -> void:
 			pad_world() + up * GEAR_HEIGHT), Vector3.ZERO)
 	GameState.gear_down = true
 	GameState.gear_position = 1.0
+	# The legs are already down because the ship is already standing on them —
+	# they did not travel, so nothing should be heard to travel. Without this the
+	# spawn fires a downlock clunk for a gear cycle that never happened.
+	AudioSystem.suppress_gear_cycle()
 	GameState.landing_gear_changed.emit(true)
 
 

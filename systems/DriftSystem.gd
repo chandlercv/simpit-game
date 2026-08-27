@@ -186,7 +186,8 @@ func collection_status(piece: Dictionary) -> Dictionary:
 	var lateral := Vector2(local.x, -local.y)
 	var aim := (lateral.normalized() * off_axis) if lateral.length() > 0.0001 else Vector2.ZERO
 	var rel_local := inv * rel
-	var hatch: bool = GameState.cargo_hatch_open
+	# The aperture, not the lever: a door still travelling will not take a piece.
+	var hatch: bool = GameState.hatch_open_locked()
 	var in_range := gap < SCOOP_RANGE
 	var speed_ok := rel_speed < COLLECT_REL_SPEED
 	var in_cone := off_axis <= COLLECT_CONE_DEG

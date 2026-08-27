@@ -94,7 +94,7 @@ func request_dock(faction_index: int) -> void:
 	if GameState.wreck["cutting_id"] != -1:
 		GameState.post_comms("OPS", "DEPARTURE HELD — CUTTER ACTIVE")
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		GameState.post_comms("OPS", "DEPARTURE HELD — SECURE CARGO HATCH FIRST")
 		return
 	var faction_name: String = GameState.market_factions[faction_index]
@@ -142,7 +142,7 @@ func sell_hold() -> void:
 	# The hold is discharged through the cargo hatch, so it has to be open. This
 	# is why the arrival procedure opens up before anything else: a buttoned-up
 	# ship has nothing to hand over.
-	if not GameState.cargo_hatch_open:
+	if not GameState.hatch_open_locked():
 		GameState.post_comms("MARKET", "DISCHARGE HELD — OPEN THE CARGO HATCH FIRST")
 		return
 	var faction_index := GameState.docked_faction
@@ -207,7 +207,7 @@ func buy_propellant(kind: String) -> void:
 func request_undock() -> void:
 	if GameState.run_phase != "DOCKED":
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		GameState.post_comms("OPS", "DEPARTURE HELD — SECURE CARGO HATCH FIRST")
 		return
 	var faction_index := GameState.docked_faction

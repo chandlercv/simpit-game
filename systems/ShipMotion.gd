@@ -72,6 +72,31 @@ func throttle_command() -> float:
 	return _cmd_thrust.z
 
 
+## The whole commanded translation, body-local (x right, y up, z forward), each
+## component -1..1. Exposed for readers that need the manoeuvring axes and not
+## just the throttle — the audio layer fires a thruster valve per axis, which it
+## cannot do from thrust.z alone. Compare against CMD_DEADBAND to decide whether
+## an axis is being held at all.
+func command_thrust() -> Vector3:
+	return _cmd_thrust
+
+
+## The commanded rotation, (pitch, yaw, roll), each -1..1. Same reason.
+func command_rotation() -> Vector3:
+	return _cmd_rot
+
+
+## How hard the drive is being worked right now, 0..1: the throttle plus whatever
+## the manoeuvring thrusters are doing, since they are fed by the same drive.
+##
+## This is the figure the propellant meter charges a burn against (see
+## _burn_propellant), and it is exposed rather than inlined so that the engine
+## note and the fuel gauge cannot disagree about how hard you are pushing.
+func drive_load() -> float:
+	var lateral := Vector3(_cmd_thrust.x, _cmd_thrust.y, 0.0)
+	return clampf(absf(_cmd_thrust.z) + lateral.length(), 0.0, 1.0)
+
+
 ## Bindable (throttle_cmd_toggle): flip between SPEED and THRUST throttle
 ## command law. See ThrottleCmdMode above.
 func toggle_throttle_cmd_mode() -> void:
@@ -171,7 +196,7 @@ func step(delta: float) -> void:
 		velocity += transform.basis * lateral \
 				* (accel * GameState.ship_def.secondary_thrust_fraction) * delta
 	velocity = _apply_throttle_axis(transform, velocity, accel, delta)
-	_burn_propellant(lateral, delta)
+	_burn_propellant(delta)
 
 	# 3. Fly-by-wire — slews omega onto the commanded rate and nulls the
 	# uncommanded translation axes. Runs after every contributor so what it
@@ -227,10 +252,8 @@ func thrust_accel() -> float:
 ## Meter propellant against COMMANDED thrust rather than against speed: holding
 ## station beside a wreck costs almost nothing and a hard burn costs plenty,
 ## which is the shape that makes a tank a resource rather than a timer.
-func _burn_propellant(lateral: Vector3, delta: float) -> void:
-	# How hard the drive is being worked, 0..1 — the throttle plus whatever the
-	# manoeuvring thrusters are doing, since they are fed by the same drive.
-	_meter_propellant(clampf(absf(_cmd_thrust.z) + lateral.length(), 0.0, 1.0), delta)
+func _burn_propellant(delta: float) -> void:
+	_meter_propellant(drive_load(), delta)
 
 
 ## Meter propellant for a burn flown as a KINEMATIC OVERRIDE rather than through

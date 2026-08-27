@@ -35,7 +35,7 @@ tile of one (see **Simpit / multi-display setup**).
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
 | **Tactical** | `TacticalWindow` | **A glass-cockpit instrument band** — heading tape, speed tape, attitude indicator, altitude tape, rotation-rate ribbons, LH2/LOX tank tapes and the ship's builder's plate — framing one of two modes: SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) or CHART (system star chart). Altitude, heading, range and attitude are all measured against a selectable **navigation reference** (see below). | **No buttons at all** — it's an instrument you read. Mode and datum are stepped by mapped controls; anything these instruments need setting is on the MFD **SETTINGS** page. Mouse pan/zoom still works on the chart. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list), **SETTINGS** (navigation reference, Tactical band show/hide, rate-ribbon scale). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list), **SETTINGS** (navigation reference, Tactical band show/hide, rate-ribbon scale, and the audio mixer — a level per bus plus MUTE). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP**, and **BELLY** (straight down past the hull — the landing view) — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -95,9 +95,12 @@ The Main display overlays a thin HUD on the hull-camera feed (drawn in
   gate still blocking you — **CLOSE IN**, **OFF-AXIS nn°**, **MATCH SPEED**, then
   **SCOOPING** — so a stalled scoop always tells you what to fix. The full
   instrument version is the MFD **SCOOP** page.
-- **Cargo hatch indicator** — a pulsing **CARGO HATCH OPEN** reminder, top-right,
-  whenever the hatch is open — your cue that the cutter and dock/jump are both
-  interlocked off until you secure it.
+- **Cargo hatch indicator** — a pulsing reminder, top-right, whenever the door is
+  anything but shut. Reads **CARGO HATCH IN TRANSIT nn%** through its 2.5-second
+  travel and **CARGO HATCH OPEN** once it's on the stop — your cue that the cutter
+  and dock/jump are both interlocked off until you secure it. Like the gear, the
+  door is *slow on purpose*: a door still moving will neither pass a piece nor
+  clear you to cut, so opening the hold is something you commit to on the run-in.
 - **Docking markers** — only while a station pattern is being flown. The next
   gate gets a diamond `◆` with its name and range, and its **ring is drawn at the
   size it actually subtends** from where you are, so it grows as you close and
@@ -558,6 +561,134 @@ independent (see *Propulsion* below).
 
 ---
 
+## Sound
+
+### One rule: you are inside a hull, in vacuum
+
+Outside the pressure hull there is no air, so nothing out there radiates sound to
+you. Every sound in the game arrives by exactly one of two paths, and that
+decides what it is allowed to sound like:
+
+| Path | What you hear | What travels it |
+| --- | --- | --- |
+| **Structure-borne** | Hard-lowpassed, no crisp top end, smeared by the frame's own ring. Felt as much as heard. | Everything bolted to the outside — the legs, the cargo door's leadscrew, the cutting head, the thrusters, the drive. |
+| **Cabin air** | The only sounds with any top end. Dry, close, present. | The ventilation, the annunciator panel, the inboard capacitor bank, and the hold's air arriving through the bulkhead. |
+
+That distinction lives on an audio **bus**, not in the clips, so the hull colours
+everything mechanical identically. The payoff is what happens when you starve the
+**LIFE** channel: the ventilation is the only continuous airborne machine on the
+ship, so the cabin falls to silence — while a landing-gear clunk still arrives
+through the frame. Nothing else sells vacuum half as well.
+
+A few consequences you can hear:
+
+- The **landing gear** is three legs, and they don't arrive together — three
+  staggered downlock clunks, all of it conducted, with no air rush anywhere,
+  because the legs are outside.
+- The **cargo door** is the exception, and deliberately so: the hold sits behind
+  a pressure bulkhead. Opening it dumps the hold's residual air, and you hear
+  that go — a gasp that filters downward and dies as the air runs out. Closing it
+  repressurises, and the hiss builds *into* existence.
+- The **cutter** never roars, because there's nothing out there to roar in. You
+  get the capacitor bank charging (inboard, so it's crisp), a contactor snap, the
+  conducted crackle of ablation coming back down the boom — and a coolant pump
+  that keeps running for a second after you let go, because the head is still hot.
+- **Thrusters** are valves and reaction loads. The plume is silent; what reaches
+  you is the solenoid cracking and the load going through the mounts. The main
+  drive is mostly sub-200 Hz — felt more than heard — and the **10-second starter
+  crank** rises the whole way.
+
+### Three voices
+
+| Voice | Who | Treatment |
+| --- | --- | --- |
+| **Station** | ATC and the harbour — someone else, on a radio | 300–3400 Hz channel, compressed, announced by a chirp and closed by a squelch tail |
+| **Ship** | Your own annunciator, reading a state back to you | Dry and close. It's a machine, and it's allowed to sound like one |
+| **Pilot** | You, transmitting | Sidetone in your own headset — it never went over the air, so it keeps its body |
+
+**The ship knows when to shut up.** Three rules keep the annunciator from
+narrating:
+
+- It **stands down entirely while the torch is live** — aligning or cutting.
+  That's the one thing you're concentrating on, and it's exactly what a real
+  annunciator is built not to talk over. The harbour is *not* hushed (that's
+  someone else, and it's never chatter), and neither are the warning tones.
+- It reports **the state it's in, not how it got there**. Only one of its lines
+  can be pending, so a burst of changes is answered by the last of them rather
+  than read out as a list you've already flown past.
+- Boot banners and settings echoes are **never spoken at all**. An annunciator
+  that reads back the switch you're looking at while you move it is noise.
+
+Anything still queued after six seconds is dropped unspoken. The text hits the
+instrument instantly and the voice can't keep up with a backlog; reading out a
+clearance that was superseded ten seconds ago is worse than silence.
+
+**The harbour addresses you by your tail number.** Full identity on first contact
+— name spelled out, registry read letter by letter — and the last three of the
+registry for every call after that, which is how a real lane keeps a pattern from
+becoming a recital. Both come from the ship's own `ShipDefinition`, so a second
+hull answers to its own:
+
+```
+FIRST    "SIERRA VICTOR KESTREL, LIMA UNIFORM FOUR FOUR SEVEN ONE KILO —
+          MERIDIAN CO. CONTROL. SEQUENCING YOU INTO THE PATTERN FOR BERTH TWO."
+AFTER    "SEVEN ONE KILO, CLEARED TO LAND, BERTH TWO."
+YOU      "MERIDIAN CONTROL, SEVEN ONE KILO, HOLDING AT ALPHA,
+          REQUESTING CLEARANCE."
+```
+
+Pressing **Request Clearance / Ack** transmits in your own voice, and it branches
+the same four ways the control does: a clearance request, a departure request, a
+readback, or the call that tells the harbour you're leaving the pattern.
+
+Numbers are spoken the way a harbour speaks them — digit by digit, so **ONE FIVE**
+can't be misheard as fifty, and **NINER** so nine can't be heard as five. Round
+money is the exception, because nobody says "two zero zero credits".
+
+### Warning, caution, note
+
+The ship's alarms use the **same three callouts the printed handbook uses**, and
+they *latch* — a condition raises once when it starts and clears once when it
+stops, rather than re-announcing itself every frame:
+
+| Level | Means | Sound |
+| --- | --- | --- |
+| **WARNING** | Damage to the ship, or salvage lost | An alternating two-tone warble that repeats until the condition clears. Deliberately the only piercing thing on the ship — that's why it cuts through |
+| **CAUTION** | An interlock, a refusal, a limit | One triple-chirp, softer |
+| **NOTE** | Clarification | One soft chime |
+
+**WARNING is deliberately rare.** It is held — it sounds until the condition
+clears — so it is reserved for the two things you can end *right now*: an open
+electrical bus, and the gear out above its limit. Serious conditions you can't
+silence by flying well are cautions instead. Structural risk is the clear case:
+the resting value never falls, so a held warning there would start on the cut
+that crosses the collapse floor and sound for the rest of the site whatever you
+did — and an alarm you can't answer is an alarm you stop hearing, taking the two
+that mean something down with it.
+
+Nothing new appears on screen for these: the HUD annunciator stack already shows
+every one of them. This adds the ear.
+
+### The mixer
+
+Five levels and a mute, on the MFD **SETTINGS** page — **ALL**, **CABIN**,
+**HULL**, **RADIO** and **ALARMS** — plus **`\`** on the keyboard. A simpit runs
+at odd hours and may have no keyboard within reach, so the one control someone
+will want at two in the morning is a touch target. Settings persist under
+`user://audio.cfg`.
+
+### Where the sounds come from
+
+Both banks are generated and committed, the same way the derelict's hull is:
+
+| Script | Produces |
+| --- | --- |
+| `tools/build_sfx.py` | `assets/generated/sfx/*.wav` — every machine on the ship, synthesised from first principles in numpy. None of these could be recorded; a leadscrew heard through a pressure bulkhead in vacuum has no field recording. |
+| `tools/build_speech.py` | `assets/generated/voice/*.ogg` — the spoken vocabulary. It reads the comms **format strings straight out of the source**, renders each literal piece between the `%` specifiers, and writes a manifest for putting them back together with the numbers spoken in between. So the lines are never copied: change a comms line, rebuild, and the spoken form follows. |
+
+
+---
+
 ## Controls
 
 The physical rig is a **Saitek X55 Rhino stick** + **Saitek X52 throttle** +
@@ -679,7 +810,7 @@ as −/+ pairs, then the two electrical masters, then the drive selector.
 | --- | --- | --- | --- | --- |
 | **T** | Toggle Tactical SCOPE / CHART | | **[** | Camera → BELLY (the landing view) |
 | **Y** | Cycle the navigation reference | | **]** | Cycle external camera |
-| **G / H** | MFD-A / MFD-B → MENU | | | |
+| **G / H** | MFD-A / MFD-B → MENU | | **\** | Mute / unmute all audio |
 
 The camera keeps two keys rather than six: `]` steps every view and `[` jumps
 straight to **BELLY**, the one the landing procedure requires. REAR / SIDE /
@@ -921,6 +1052,8 @@ running game predates a change.
 | `ScreenshotCheck.tscn` | Render a display to a PNG without a full playtest (`godot --path . res://tools/ScreenshotCheck.tscn ++ <out.png> [close\|rival] [title\|manual]`) — `berth` flies out to the station and parks on short final over the pad (wings level, gear down), `close` parks the ship at cutting range, `rival` stands the rival cutter and the patrol up in front of the camera with the rival's torch firing (the only way to judge their models and the light fit without waiting out a spawn window), `title` lays the launch title card over the view, and `manual` opens the pilot's manual over that card (add a chapter id, e.g. `manual checklist-arrival`, to shoot a specific page). **`tactical` shoots the Tactical display** at its real 1280×720 canvas with the instrument band up (`tactical SCOPE` / `tactical CHART`), deliberately parking the ship off level, off north and turning — shot straight and level, every sign on the band looks correct whichever way round it is. **`mfd` shoots the MFD display instead**, at its real 1280×800 canvas — the MENU home by default, a named page with `mfd DOCK`, a named procedure with `mfd CHECKLIST cutting`, and combined with `berth` (`mfd DOCK berth`) to catch the DOCK page with its gate checklist live rather than reading NO APPROACH RUNNING. This is how MFD layout and type sizing get judged short of the physical panel. |
 | `build_hull.py` | Blender script (not a Godot scene) that regenerates the derelict frigate's continuous hull — one fuselage split into member-named sections plus modeled radiator/mast/engine-bell appendages — into `assets/cc0/derelict-frigate/*.glb` (`blender --background --python tools/build_hull.py`). Edit the profile/appendages here, not the `.glb`s. |
 | `build_ships.py` | Blender script (not a Godot scene) that regenerates the two AI ships — the rival cutter (with the torch boom its cut flare fires from) and the claim-holder's patrol — into `assets/cc0/ships/*.glb` (`blender --background --python tools/build_ships.py`). Every vertex is **checked against `ThreatSystem.SHIP_CONTACT_RADIUS` at build time**: the script refuses to write a hull that pokes out of the sphere the game actually collides against, so the model and the constant can't drift apart. |
+| `build_sfx.py` | Python script (not a Godot scene) that synthesises every machine on the ship into `assets/generated/sfx/*.wav` (`python tools/build_sfx.py`). Nothing here is recorded — a leadscrew heard through a pressure bulkhead in vacuum has no field recording — so it is built from first principles in numpy, which also makes it ours outright. Loops are filtered in the FFT domain, which is circular, so every `_loop` clip is seamless by construction with no crossfade. |
+| `build_speech.py` | Python script (not a Godot scene) that renders the spoken vocabulary into `assets/generated/voice/*.ogg` plus a manifest (`python tools/build_speech.py`). It reads the comms **format strings out of the source** and renders each literal piece between the `%` specifiers, so the lines are never copied and a changed comms line changes what is said. The raw voice comes from a swappable engine stage (`tools/tts_sapi.ps1` by default) — see [CREDITS.md](CREDITS.md). |
 | `build_station.py` | Blender script (not a Godot scene) that regenerates the docking station — hub, habitat drums, berth bay, pad and markings, three traffic ships and the ship's landing-gear leg — into `assets/cc0/station/*.glb` (`blender --background --python tools/build_station.py`). Every solid part is **clearance-checked against DockingSystem's lane at build time**: the script refuses to write geometry that intrudes into a corridor the pilot is required to fly inside, so re-run it after changing a gate. |
 | `Phase4Smoke.tscn` / `Phase5Smoke.tscn` | Headless smoke tests for the salvage/market and input/flight systems. |
 | `AlignSmoke.tscn` | Headless smoke for the per-member approach + pre-cut alignment mini-game: approach needs a selected target and re-selecting forces a reposition; a drive shutdown or a dead THRUST channel under a flying autopilot disengages it; a flown approach is charged propellant like the burn it is, and a settled standoff isn't; the cutter trigger opens alignment (not a cut); on-target aim locks and commits at high quality; a sustained slip aborts and nudges risk; and quality binds the stakes (clean cut is faster and preserves more yield). |
@@ -929,6 +1062,7 @@ running game predates a change.
 | `CollisionSmoke.tscn` | Headless smoke for collision consequences: the capsule volume follows the hull (not the origin), ramming a body damages the hull and stops the ship at the surface, a gentle nudge does no damage. |
 | `DriftSmoke.tscn` | Headless smoke for the post-cut collection mini-game (DriftSystem): a completed cut detaches a drifting piece instead of stowing directly; collisions impart velocity to movable bodies (ramming a piece, and one movable body knocking another); a piece is **solid against static geometry** — it bounces off the derelict/station and is pushed clear rather than sinking through; the hatch/range/speed/cone collection gates are all required and holding them stows the piece; the cargo hatch interlocks the cutter and dock/jump while open; and the rival runs the same sever-then-retrieve loop, with pieces free-for-all. |
 | `DockSmoke.tscn` | Headless smoke for the docking/landing mini-game (DockingSystem): the transit burn hands over to a flown approach; the hold gates a clearance on being stopped and on the lane being clear of traffic; markers must be flown through in order, and a miss, a corridor departure or sustained overspeed sends you around; the gear travels in real time, is required at the final gate and interlocks the cutter; a hot touchdown bounces and a clean one books the berth; auto-berth is a paid alternative inbound and refused on final; the departure is flown too; and the 3D station agrees with the lane data it is built from. |
+| `AudioSmoke.tscn` | Headless smoke for sound and speech: every clip `SoundBank` names resolves and every bus it names exists; the cargo door **travels** rather than teleporting, and its two predicates disagree while it moves; numbers are spoken digit by digit; the harbour uses the full tail number on first contact, abbreviates after, and starts again next pattern; and — the check that matters most — alerts **latch**, so a condition held across its threshold raises exactly once. It also drives real intents and asserts the lines they produce can still be spoken, so editing a comms line without rebuilding the voice bank fails here instead of going quietly mute in flight. |
 | `ThreatShipsSmoke.tscn` | Headless smoke for the rival/patrol 3D bodies and the shared exterior light fit: a contact tagged RIVAL or PATROL stands a hull up and removing it takes the hull away; a contact with no kind gets none (the guard that keeps the derelict, the debris and the station's traffic from being drawn twice); the hull follows the contact's position and points along its heading, wings level; both `.glb`s fit inside `SHIP_CONTACT_RADIUS` **and** actually fill it; and the light fit measures its own mounts off the hull it's bolted to, carries all eight lamps, and switches by group. It also pins the Kestrel's own fit: she wears the same eight lamps, they follow the bus, and they stay off the **hull camera** — a two-file contract (the lamps' visual layer and the camera's cull mask) that does nothing unless both halves agree, since the wingtip lamps sit less than a metre either side of the pilot's eye. |
 | `ShipColliderBake.tscn` | Bake the ship's collision capsule from its model into `data/ships/*.tres` (`godot --headless res://tools/ShipColliderBake.tscn`). Re-run after swapping the hull mesh. |
 | `DisplayLayoutSmoke.tscn` | Headless smoke for the display layout: per-setup config persistence, the `ScreenLayout` planner (exact partitioning, the arrangement per screen shape, and which tier each 1/2/3/4-monitor topology lands in), the content-harvest reparent, and the tab-host show/hide. |

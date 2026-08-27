@@ -1,0 +1,155 @@
+{
+  "_readme": [
+    "The speech catalogue. Read by BOTH tools/build_speech.py (which renders the",
+    "clips) and systems/audio/Speech.gd (which plays them), so the two cannot",
+    "drift apart about who says what.",
+    "",
+    "What is NOT in here: the lines themselves. Those live in the code that",
+    "already writes them - post_comms, DockingSystem._atc, _call and the",
+    "wave-off reasons - and build_speech.py reads them straight out of the",
+    "source. Copying them here would make this a second script for the ship to",
+    "read from, and the two would disagree within a week.",
+    "",
+    "This file holds only what the source cannot tell you: which voice speaks",
+    "for which source, how to pronounce the things a synthesiser gets wrong,",
+    "and the handful of lines the PILOT transmits, which no existing call site",
+    "writes because until now the pilot never said anything out loud."
+  ],
+
+  "voices": {
+    "station": {
+      "_note": "The harbour. Someone else, on a radio - so a different person from the ship, and the only voice that gets the 300-3400 Hz treatment.",
+      "engine_voice": "Microsoft Zira",
+      "rate": 1,
+      "bus": "RADIO",
+      "band": [300, 3400],
+      "rate_hz": 8000,
+      "noise": 0.012,
+      "squelch": true
+    },
+    "ship": {
+      "_note": "The ship's own annunciator. It is a machine reading a state back to you and it should sound like one - dry, close, and deliberately synthetic.",
+      "engine_voice": "Microsoft David Desktop",
+      "rate": 0,
+      "bus": "CABIN",
+      "band": [180, 7000],
+      "rate_hz": 16000,
+      "noise": 0.0,
+      "squelch": false
+    },
+    "pilot": {
+      "_note": "Us, transmitting. Heard as sidetone in your own headset, which never went over the air - so it keeps its body and gets no squelch.",
+      "engine_voice": "Microsoft Mark",
+      "rate": 0,
+      "bus": "SIDETONE",
+      "band": [200, 5000],
+      "rate_hz": 12000,
+      "noise": 0.0,
+      "squelch": false
+    }
+  },
+
+  "sources": {
+    "_note": "Which voice speaks each comms source, or 'silent' for the ones that only get the comms chirp. Every segment is rendered for whichever voice its source uses, so changing a source here needs a rebuild - but flipping one to 'silent' does not.",
+    "ATC": "station",
+    "HARBOR": "station",
+    "OPS": "ship",
+    "SYSTEM": "ship",
+    "SENSORS": "ship",
+    "SALVAGE": "silent",
+    "MARKET": "silent",
+    "PANEL": "silent"
+  },
+
+  "never_speak": {
+    "_note": "Lines that are written to the log but never said aloud, as regexes against the format string. Two kinds: boot banners, which would have the ship read out its own start-up three lines deep before the pilot had touched anything; and settings echoes, which confirm a control the pilot is looking at while they move it. An annunciator that reads back your own switch is noise.",
+    "patterns": [
+      "ONLINE",
+      "RUN START",
+      "^THROTTLE",
+      "^SWEEP MODE",
+      "^AUDIO ",
+      "^FLIGHT ASSIST"
+    ]
+  },
+
+  "hush_while_cutting": {
+    "_note": "The ship's own voice stands down while the torch is live - aligning or cutting. It is a precision task the pilot is concentrating on, and an annunciator that narrates over it is exactly the thing a real one is designed not to do. The harbour is NOT hushed: that is someone else talking, and it is never chatter. Warnings are not hushed either - they are tones, not speech, and they are the one thing worth interrupting for.",
+    "voices": ["ship"]
+  },
+
+  "pilot_lines": {
+    "_note": "The four things the transmit key can mean, and the one the abort button means. These are the only lines in the game with no existing call site, because until the ship had a voice the pilot never spoke.",
+    "request_clearance": "{station}, {callsign}, holding at ALPHA, requesting clearance.",
+    "request_departure": "{station}, {callsign}, ready for departure.",
+    "readback": "{callsign}, roger.",
+    "auto_berth": "{station}, {callsign}, requesting handling.",
+    "abort": "{station}, {callsign}, cancelling the approach."
+  },
+
+  "pronounce": {
+    "_note": "Ordered text fixes applied before the synthesiser sees a line. A speech engine reads 'M/S' as a fraction and '7741-C' as a subtraction; these are the places the written form and the spoken form genuinely differ.",
+    "rules": [
+      ["\\bM/S\\b", "metres per second"],
+      ["\\bLH2\\b", "L H two"],
+      ["\\bLOX\\b", "locks"],
+      ["\\bCR\\b", "credits"],
+      ["\\bREP\\b", "reputation"],
+      ["\\bATC\\b", "ay tee see"],
+      ["\\bMFD\\b", "em eff dee"],
+      ["\\bFBW\\b", "fly by wire"],
+      ["\\bRCS\\b", "are see ess"],
+      ["\\bT\\+", "tee plus "],
+      ["%%", " percent "],
+      ["°", " degrees "],
+      ["7741-C", "seven seven four one charlie"],
+      ["—", ", "],
+      ["\\bID\\b", "eye dee"]
+    ]
+  },
+
+  "slot_words": {
+    "_note": "Values that arrive through a %s at runtime and are worth a clip of their own. Marker and berth names, the station callsigns, the traffic in the lane. Anything not listed and not a number is skipped rather than mispronounced - a slot the ship cannot say is better silent than wrong.",
+    "words": [
+      "ALPHA", "BRAVO", "CHARLIE", "DELTA",
+      "LANE TUG BOLLARD", "SHUTTLE MERIDIAN 9", "ORE BARGE THRENODY",
+      "MERIDIAN CO.", "LAGRANGE UNION", "FREEHOLD",
+      "MERIDIAN CO. CONTROL", "LAGRANGE UNION CONTROL", "FREEHOLD CONTROL",
+      "GREASED", "FIRM", "HARD",
+      "OFF", "R", "L", "BOTH", "START",
+      "HOLDING", "APPROACHING", "MATCHED",
+      "SPEED", "THRUST",
+      "PASSIVE", "ACTIVE", "DEEP",
+      "NOSE", "SPINE", "DRIVE", "HOLD", "SENSOR MAST",
+      "HULL FORE", "SPINE", "HULL AFT", "ENGINE BELL",
+      "ANTENNA MAST", "PANEL A", "PANEL B",
+      "STATION", "BAYFLOOR", "STRUCTURE"
+    ]
+  },
+
+  "numbers": {
+    "_note": "Spoken the way a harbour speaks them: digit by digit, NINER for nine so it cannot be heard as five. HUNDRED and THOUSAND are only used for round money, where 'two hundred credits' is what a person would actually say.",
+    "digits": ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINER"],
+    "point": "POINT",
+    "minus": "MINUS",
+    "hundred": "HUNDRED",
+    "thousand": "THOUSAND"
+  },
+
+  "phonetic": {
+    "_note": "Used to spell the registry on first contact. A tail number is read letter by letter or it is not a tail number.",
+    "A": "ALFA", "B": "BRAVO", "C": "CHARLIE", "D": "DELTA", "E": "ECHO",
+    "F": "FOXTROT", "G": "GOLF", "H": "HOTEL", "I": "INDIA", "J": "JULIETT",
+    "K": "KILO", "L": "LIMA", "M": "MIKE", "N": "NOVEMBER", "O": "OSCAR",
+    "P": "PAPA", "Q": "QUEBEC", "R": "ROMEO", "S": "SIERRA", "T": "TANGO",
+    "U": "UNIFORM", "V": "VICTOR", "W": "WHISKEY", "X": "XRAY",
+    "Y": "YANKEE", "Z": "ZULU"
+  },
+
+  "callsign": {
+    "_note": "How the harbour addresses this hull. Full identity on first contact - the name spelled out and the registry read letter by letter - and the last three of the registry for every call after that, which is how a real lane works and the reason a pattern does not become a recital. Both fields are quoted from the ShipDefinition, so a second hull answers to its own.",
+    "full": "{name_phonetic}, {registry_phonetic}",
+    "short": "{registry_last3}",
+    "abbreviate_after_first": true
+  }
+}

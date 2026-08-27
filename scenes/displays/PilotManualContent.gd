@@ -89,7 +89,7 @@ Registry ................................................. [b]LU-4471-K[/b]
 Hull ..................................................... [b]KS-017[/b]
 Built .................................................... [b]TESSERA YARDS, L4  2371[/b]
 
-The same particulars are stamped on the plate in the cockpit and reproduced at the foot of the Tactical display. The name is the vessel's callsign; a harbour will address her by it.
+The same particulars are stamped on the plate in the cockpit and reproduced at the foot of the Tactical display. Name and registry together are the vessel's identity on the air; how a given harbour uses them is that harbour's business and is published in its terminal procedures.
 
 [color=#66ccff]PERFORMANCE[/color]
 Main thruster acceleration, both drive stages ........... [b]4.0 m/s²[/b]
@@ -423,6 +423,14 @@ A severed piece is solid. It will strike the derelict, the structure of a harbou
 
 Hatch control: {{act:cargo_hatch_open}}, the {{sw:COWL}} switch, or the hatch control on the MFD [b]SCOOP[/b] page, which the primary MFD presents automatically when the hatch is opened.
 
+[color=#66ccff]TRAVEL[/color]
+The control selects; the door then travels.
+Secured to open, or open to secured .... [b]2.5 seconds[/b]
+
+A door in travel is neither open nor secured. It will not pass a piece, and it does not satisfy any interlock that requires the hatch shut. The HUD annunciates CARGO HATCH IN TRANSIT with the percentage travelled, and the MFD [b]CHECKLIST[/b] row reads the same.
+
+[color=#f2bf59]CAUTION — Select the hatch open on the run-in, not on arrival at the piece.[/color] Two and a half seconds at a closing rate of 1.5 m/s is most of the recovery range.
+
 [color=#66ccff]CONDITIONS FOR RECOVERY[/color]
 All four must be held together.
 Hatch ................................. [b]OPEN[/b]
@@ -437,7 +445,7 @@ The HUD marker and the SCOOP page both annunciate the governing condition, in or
 [color=#66ccff]HATCH INTERLOCKS[/color]
 The hatch is required open for recovery. While open it [b]inhibits the cutting torch[/b], [b]inhibits docking[/b] and [b]inhibits departure[/b]. Opening it terminates any alignment or cut in progress.
 
-[color=#f2bf59]CAUTION — Secure the hatch on completion of recovery.[/color] A pulsing CARGO HATCH OPEN indication is displayed on the HUD throughout, and no further cutting or docking is possible until the hatch is closed.
+[color=#f2bf59]CAUTION — Secure the hatch on completion of recovery.[/color] A pulsing CARGO HATCH indication is displayed on the HUD throughout, and no further cutting or docking is possible until the door is [b]fully[/b] closed — a door still travelling holds those interlocks as firmly as an open one.
 
 [color=#66ccff]HOLD FULL[/color]
 Where a piece exceeds the remaining capacity the recovery is refused and the indication resets:
@@ -647,12 +655,53 @@ The whole band is removed from the display with {{act:tactical_band_toggle}}, wh
 [b]Cut target[/b] — a diamond on the selected member with identification and range, replaced by an edge marker when off-screen. Amber while closing; green with MATCHED — FIRE TO ALIGN when the approach has matched on that member.
 [b]Alignment reticle[/b] — displayed over the member during alignment: seam, torch reticle, tolerance ring, lock arc and SLIP warning.
 [b]Salvage markers[/b] — a diamond on each adrift piece with identification and range. With the hatch open, relative speed and a recovery ring are added, together with the governing condition.
-[b]CARGO HATCH OPEN[/b] — upper right, pulsing, whenever the hatch is open.
+[b]CARGO HATCH[/b] — upper right, pulsing, whenever the door is not secured: IN TRANSIT with percentage during travel, then CARGO HATCH OPEN.
 [b]Gear[/b] — GEAR IN TRANSIT with percentage, then GEAR DOWN; GEAR OVERSPEED in red above 18 m/s.
 [b]Drive[/b] — IMPULSE or BOOST beside VEL while a reaction stage is burning; DRIVE with the selector position when the drive is not making its rated thrust; THRUST UNPOWERED when the channel is delivering nothing to it; LH2 DEPLETED, pulsing, with the hydrogen tank empty.
 [b]ATC[/b] — the standing instruction during an approach, with altitude and sink rate on final.
 
 [color=#8c9eb8]NOTE — Electrical loading, the state of charge and the quantity in the tanks are not repeated on the flight HUD. They are presented on the MFD POWER page, which carries demand against the alternator's output, the battery and which way it is going, the selector position and both tank levels. Tank levels are also carried on the Tactical band, as a proportion of capacity rather than a quantity. Hull condition is on the Tactical SCOPE.[/color]""",
+	},
+	{
+		"id": "audio",
+		"group": "SECTION 2 — SYSTEMS",
+		"title": "Aural annunciation",
+		"body": """The ship annunciates aloud as well as visually. Nothing is annunciated aloud that is not also displayed; the aural channel exists so that a condition can be taken in while the eyes are elsewhere.
+
+[color=#66ccff]WHAT REACHES THE CABIN[/color]
+There is no atmosphere outside the pressure hull, and machinery mounted outside it therefore radiates no sound to the cabin. What is heard from the legs, the cargo door, the cutting head, the manoeuvring thrusters and the drive arrives [b]through the structure[/b]: it is low in pitch, without definition, and carries the frame's own note. It is felt as much as heard.
+
+Only the ventilation, the annunciator, the capacitor bank and the hold's air crossing the aft bulkhead are heard through the cabin's own atmosphere.
+
+[color=#8c9eb8]NOTE — The ventilation is the only continuous atmospheric source aboard. It follows the LIFE channel, and on a bus that is opened or starved it runs down and stops. The cabin then falls silent while structure-borne indications continue undiminished. This is normal and is not a fault of the annunciator.[/color]
+
+[color=#66ccff]LEVELS[/color]
+Three, and they are the three used throughout this handbook.
+[color=#f2705c]WARNING[/color] ...... two-tone, repeating ....... damage to the ship, or salvage lost
+[color=#f2bf59]CAUTION[/color] ...... triple chirp, once ......... an interlock, a refusal, a limit
+[color=#8c9eb8]NOTE[/color] ......... single chime, once ........ clarification
+
+A WARNING sounds for as long as its condition stands and stops when the condition is corrected. A CAUTION and a NOTE sound once. A condition that persists is not re-announced.
+
+[color=#8c9eb8]NOTE — A silent annunciator is not evidence of a serviceable ship. It is evidence that no condition has newly arisen. The displayed annunciations remain the record of what is standing.[/color]
+
+[color=#66ccff]VOICE[/color]
+Two voices are heard aboard, and they are distinguishable by treatment as well as by content.
+
+The [b]ship's[/b] voice reads back the state of her own systems and is heard directly in the cabin. It is a machine and is not to be answered.
+
+It reports the state the ship is in and not the sequence by which she arrived at it: where several conditions change together, the last of them is announced and the others are not. It does not read back a control while the pilot is moving it, and it does not annunciate the ship's own start-up.
+
+[color=#8c9eb8]NOTE — The ship's voice stands down while the cutting head is aligning or cutting, and resumes on completion. Warnings are not suppressed and sound throughout. A harbour is never suppressed.[/color]
+
+A [b]harbour[/b] is heard on the radio, band-limited, preceded by a call tone and followed by the carrier dropping. What a harbour says, and how it addresses this vessel, is that harbour's business and is published in its terminal procedures.
+
+Transmissions made from this ship are returned to the headset as sidetone so that the pilot can hear that the set has keyed.
+
+[color=#66ccff]VOLUME[/color]
+Levels are set on the MFD [b]SETTINGS[/b] page — the whole, the cabin, the structure-borne channel, the radio and the annunciator separately — together with a mute. {{act:audio_mute}} mutes and restores everything.
+
+[color=#f2bf59]CAUTION — Muting the annunciator suppresses the aural warning only.[/color] The condition, and its display, are unaffected."""
 	},
 	{
 		"id": "risk",

@@ -95,11 +95,11 @@ func _run() -> void:
 	# The hold is discharged through the cargo hatch, so a buttoned-up ship has
 	# nothing to hand over — that refusal is what makes opening up the first item
 	# of the arrival procedure rather than a courtesy.
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 	MarketSystem.sell_hold()
 	_check(GameState.credits == credits_before,
 			"a sale is refused with the cargo hatch secured")
-	GameState.set_cargo_hatch(true)
+	await _set_hatch(true)
 	MarketSystem.sell_hold()
 	_check(GameState.credits == credits_before + quote and quote > 0,
 			"hold sold for the quoted %d CR" % quote)
@@ -115,7 +115,7 @@ func _run() -> void:
 	MarketSystem.request_undock()
 	_check(GameState.run_phase == "DOCKED",
 			"departure is refused while the hatch is still open for the discharge")
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 	MarketSystem.request_undock()
 	_check(await _wait_until(
 			func() -> bool: return GameState.docking_state == "DEPART_HOLD", 20.0),
@@ -190,7 +190,7 @@ func _collect_piece(member_name: String, timeout: float) -> bool:
 	# Hand control back from the (now-stale, member-cut) approach autopilot to
 	# manual flight so it doesn't fight this positioning every frame.
 	GameState.approach_state = "HOLDING"
-	GameState.set_cargo_hatch(true)
+	await _set_hatch(true)
 	var elapsed := 0.0
 	while elapsed < timeout:
 		var piece := _find_piece(member_name)
@@ -204,7 +204,7 @@ func _collect_piece(member_name: String, timeout: float) -> bool:
 		ship["velocity"] = piece_vel
 		await get_tree().physics_frame
 		elapsed += get_physics_process_delta_time()
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 	return _find_piece(member_name).is_empty()
 
 
@@ -223,6 +223,23 @@ func _wait_until(predicate: Callable, timeout_game_s: float) -> bool:
 		await get_tree().process_frame
 		elapsed += get_process_delta_time()
 	return predicate.call()
+
+
+## Move the hatch LEVER and wait for the DOOR to get there.
+##
+## The lever is instant; the door travels over HATCH_TRAVEL_TIME, and every
+## interlock downstream reads the door rather than the lever. The wait is taken
+## from the constant that sets the travel and never transcribed — the same rule
+## the limit rows follow.
+func _set_hatch(open: bool) -> void:
+	GameState.set_cargo_hatch(open)
+	var elapsed := 0.0
+	while elapsed < GameState.HATCH_TRAVEL_TIME * 2.0:
+		var arrived := GameState.hatch_open_locked() if open else GameState.hatch_secured()
+		if arrived:
+			return
+		await get_tree().process_frame
+		elapsed += get_process_delta_time()
 
 
 func _check(condition: bool, label: String) -> void:

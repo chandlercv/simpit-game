@@ -101,6 +101,37 @@ A period of [b]5 seconds[/b] follows an impact in which the speed and corridor l
 [color=#8c9eb8]NOTE — Damage to the vessel is a matter between the pilot and the vessel. The harbour charges only for its own structure.[/color]""",
 	},
 	{
+		"id": "radio",
+		"group": "ARRIVAL",
+		"title": "Radio & identification",
+		"body": """[color=#8c9eb8]HARBOUR CONTROL · TERMINAL PROCEDURES[/color]
+
+[color=#66ccff]HOW CONTROL ADDRESSES A VESSEL[/color]
+On first contact in a pattern, in full: the vessel's name, followed by her registry read letter by letter.
+
+     [i]"SIERRA VICTOR KESTREL, LIMA UNIFORM FOUR FOUR SEVEN ONE KILO —
+      MERIDIAN CO. CONTROL."[/i]
+
+Thereafter, abbreviated to the last three characters of the registry for every call in that pattern.
+
+     [i]"SEVEN ONE KILO, CLEARED TO LAND, BERTH TWO."[/i]
+
+The abbreviation is dropped and the full identity used again at the start of the next pattern. A vessel leaving the pattern ends the exchange.
+
+[color=#8c9eb8]NOTE — Name and registry are the vessel's own particulars and are published by her builder. This chapter states only what this harbour does with them.[/color]
+
+[color=#66ccff]NUMBERS[/color]
+Read digit by digit. NINER is used for nine so that it cannot be taken for five. Round sums of money are read as spoken — [i]"TWO HUNDRED CREDITS"[/i] — because no figure of that kind is misheard.
+
+[color=#66ccff]CALLS FROM A VESSEL[/color]
+The clearance control transmits on the vessel's behalf and is the only control that keys the set. What it says depends on where the vessel is in the pattern: a request for clearance at the hold, a request for departure on the pad, a readback once cleared, and the call that takes a vessel out of the pattern when the approach is abandoned.
+
+[color=#f2bf59]CAUTION — A readback is not a clearance.[/color] Reading back a standing instruction restates it and changes nothing. Where an instruction has been superseded, Control will have issued the replacement.
+
+[color=#66ccff]CALL TONE[/color]
+Every transmission from this harbour is preceded by a two-tone call and closed by the carrier dropping. A transmission not so bracketed did not originate here."""
+	},
+	{
 		"id": "clearance",
 		"group": "ARRIVAL",
 		"title": "Clearance & traffic",

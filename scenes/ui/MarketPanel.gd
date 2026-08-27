@@ -13,6 +13,9 @@ const SELL_COLOR := Color(0.5, 1.0, 0.7)
 @onready var _grid: GridContainer = %Grid
 @onready var _footer: Label = %Footer
 
+## Last seen state of hatch_open_locked(), watched in _process.
+var _hatch_ready := false
+
 
 func _ready() -> void:
 	_title.add_theme_font_size_override("font_size", 17)
@@ -33,6 +36,18 @@ func _ready() -> void:
 	GameState.cargo_hatch_changed.connect(func(_open: bool) -> void: _rebuild())
 	GameState.propellant_changed.connect(_rebuild)
 	_rebuild()
+
+
+## The SELL control turns on when the door reaches its stop, which is a couple of
+## seconds AFTER the lever moved — so the lever signal alone would leave the
+## button reading "OPEN HATCH TO SELL" over an open hold forever. Watch the
+## derived state and rebuild only when it actually flips; a rebuild per frame
+## would tear down the very button being pressed.
+func _process(_delta: float) -> void:
+	var ready := GameState.hatch_open_locked()
+	if ready != _hatch_ready:
+		_hatch_ready = ready
+		_rebuild()
 
 
 func _rebuild() -> void:
@@ -88,9 +103,10 @@ func _faction_actions(faction_index: int) -> Control:
 		var value := MarketSystem.hold_value(faction_index)
 		# The hold discharges through the hatch, so say so on the control rather
 		# than letting the pilot press a live-looking button and be refused.
+		var open := GameState.hatch_open_locked()
 		var sell := _make_button("SELL HOLD (%d CR)" % value
-				if GameState.cargo_hatch_open else "OPEN HATCH TO SELL", SELL_COLOR)
-		sell.disabled = value == 0 or not GameState.cargo_hatch_open
+				if open else "OPEN HATCH TO SELL", SELL_COLOR)
+		sell.disabled = value == 0 or not open
 		sell.pressed.connect(MarketSystem.sell_hold)
 		box.add_child(sell)
 		# Propellant is the other thing a berth sells. Each button quotes the cost

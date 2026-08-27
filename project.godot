@@ -31,6 +31,8 @@ DriftSystem="*res://systems/DriftSystem.gd"
 DockingSystem="*res://systems/DockingSystem.gd"
 CollisionSystem="*res://systems/CollisionSystem.gd"
 NavReference="*res://systems/NavReference.gd"
+AlertSystem="*res://systems/AlertSystem.gd"
+AudioSystem="*res://systems/audio/AudioSystem.gd"
 
 [display]
 
@@ -258,6 +260,10 @@ nav_ref_target={
 "events": []
 }
 tactical_band_toggle={
+"deadzone": 0.2,
+"events": []
+}
+audio_mute={
 "deadzone": 0.2,
 "events": []
 }

@@ -15,6 +15,7 @@ section that documents it:
 | Displays, windows, or simpit/multi-display behaviour | **The four displays** / **Simpit / multi-display setup** |
 | Gameplay loop, power channels, salvage/market rules | **Core gameplay loop** |
 | A new `tools/` scene | The **Handy tool scenes** table |
+| Sound, the audio buses, the voices, or the alert levels (`systems/audio/*`, `systems/AlertSystem.gd`, `data/speech/lines.json`) | The **Sound** section |
 | A chapter in either ship document | Nothing by hand — but `tools/build_manuals.ps1` reprints both to `build/manuals/` (gitignored), which is the quickest way to proof new prose on paper |
 
 ## Keep the ship's two documents in sync too
@@ -41,12 +42,31 @@ moves.
 | A propellant price (`MarketSystem.LH2_PRICE_PER_UNIT`, `LOX_PRICE_PER_UNIT`) | The **terminal procedures**, under the schedule of prices — never the handbook |
 | A `ThreatSystem` or `MarketSystem` rule (rival, patrol, prices, standing) | The **terminal procedures**, under LOCAL NOTICES |
 | An input action name | Nothing by hand — but run `PilotManualSmoke`, which fails on a placeholder naming an action that no longer exists |
+| An audio constant (`HATCH_TRAVEL_TIME`, an `AlertSystem` threshold, a bus filter figure) | The chapter that quotes it — **Aural annunciation** or **Cargo hatch & recovery** |
 | A new system, MFD page, or HUD marking | The relevant handbook chapter (and add one if none fits) |
 
 Controls are *not* on that list: both documents resolve them live through
 `scenes/ui/BindingLabel.gd`, so rebinding needs no edit.
 
 If you cannot point at the constant, do not write the number.
+
+## Comms lines are the speech script — rebuild the voice bank when you edit one
+
+`tools/build_speech.py` reads the comms **format strings straight out of the
+source** (`post_comms`, `DockingSystem._atc` / `_call`, the wave-off reasons) and
+renders each literal piece between the `%` specifiers as its own clip. There is
+no second copy of any line anywhere, which is the point — but it means an edited
+comms line leaves a pattern that no longer matches, and the only symptom in
+flight is a voice that quietly stops saying that one thing.
+
+So: **edit a comms line, re-run `python tools/build_speech.py`.** `AudioSmoke`
+drives real intents and asserts the lines they produce can still be spoken, so a
+forgotten rebuild fails the build rather than the playtest.
+
+`data/speech/lines.json` holds only what the source cannot say: which voice
+speaks for which comms source, the pronunciation fixes, and the pilot's own
+transmissions — the one script in the project, because until the ship had a voice
+no call site wrote those lines.
 
 **The division is authorship, not subject.** The builder can state what the legs
 will accept at touchdown, and how a loaded frame behaves when you cut it — a

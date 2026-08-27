@@ -82,7 +82,10 @@ signal align_changed(state: String)
 signal salvage_pieces_changed
 signal salvage_piece_spawned(id: int)
 signal salvage_piece_removed(id: int)
-## Cargo hatch position changed (GameState.set_cargo_hatch/toggle_cargo_hatch).
+## Cargo-hatch lever moved (GameState.set_cargo_hatch/toggle_cargo_hatch).
+## The door then TRAVELS over HATCH_TRAVEL_TIME — read hatch_position for how far
+## it actually is, hatch_open_locked() for "will pass cargo", and hatch_secured()
+## for "shut, and safe to cut or land on".
 signal cargo_hatch_changed(open: bool)
 ## Landing-gear lever moved (GameState.set_landing_gear/toggle_landing_gear).
 ## The gear then TRAVELS over GEAR_TRAVEL_TIME — read gear_position for how far
@@ -239,6 +242,13 @@ const GEAR_TRAVEL_TIME := 3.0
 ## the gear off the stops wears it — see DockingSystem, which does the damage.
 const GEAR_LIMIT_SPEED := 18.0
 
+## Seconds the cargo door takes to travel between secured and fully open. Shorter
+## than the gear's, because the door is one leadscrew driving one panel and the
+## gear is three legs taking the ship's weight — but long enough that opening the
+## hold is a thing you start before you need it, not a switch you flick as the
+## piece arrives.
+const HATCH_TRAVEL_TIME := 2.5
+
 ## Approach states (SalvageSystem): HOLDING (free drift), APPROACHING
 ## (closing/matching), MATCHED (inside cutting range, velocity matched).
 const APPROACH_STATES: Array[String] = ["HOLDING", "APPROACHING", "MATCHED"]
@@ -363,9 +373,19 @@ var align: Dictionary = {}
 ##   "scoop": float 0..1, "node": String (Wreck.tscn child name, for the visual) }.
 var salvage_pieces: Array[Dictionary] = []
 
-## Cargo hatch position, owned by GameState (DriftSystem gates collection on it;
-## SalvageSystem/MarketSystem interlock cutting and jump/dock while it's open).
+## Cargo-hatch LEVER position (what the pilot selected), and how far the door has
+## actually travelled toward it (0 = secured, 1 = open and locked). Same split as
+## the landing gear below, and for the same reason: the lever is the intent, the
+## position is the machine catching up over HATCH_TRAVEL_TIME.
+##
+## Which of the two an interlock should read depends on what it is protecting.
+## Anything guarding against an OPEN door — the cutter, a jump, a landing —
+## tests `not hatch_secured()`, because a door halfway shut is not shut. Anything
+## that needs the aperture — scooping a piece, discharging the hold — tests
+## hatch_open_locked(), because you cannot pass cargo through a door still
+## moving.
 var cargo_hatch_open: bool = false
+var hatch_position: float = 0.0
 
 ## Landing-gear LEVER position (what the pilot selected), and how far the gear
 ## has actually travelled toward it (0 = stowed, 1 = down and locked). The lever
@@ -685,16 +705,34 @@ func get_salvage_piece(id: int) -> Dictionary:
 ## Cargo-hatch intent (keybind / COWL switch): must be closed to fire the
 ## cutter or jump/dock (SalvageSystem.request_cut, MarketSystem) and open to
 ## scoop an adrift piece (DriftSystem).
+##
+## Only moves the LEVER — the door itself travels over HATCH_TRAVEL_TIME in
+## _advance_hatch, so committing to open the hold is a decision you make on the
+## run-in, not one you can make as the piece goes past.
 func set_cargo_hatch(open: bool) -> void:
 	if open == cargo_hatch_open:
 		return
 	cargo_hatch_open = open
 	cargo_hatch_changed.emit(open)
-	post_comms("OPS", "CARGO HATCH %s" % ("OPEN" if open else "SECURED"))
+	post_comms("OPS", "CARGO HATCH — %s" % ("OPEN SELECTED" if open else "SECURE SELECTED"))
 
 
 func toggle_cargo_hatch() -> void:
 	set_cargo_hatch(not cargo_hatch_open)
+
+
+## Door selected open AND fully travelled: the state that will pass cargo. A door
+## still moving is an aperture you cannot rely on, so scooping and discharge both
+## test this rather than the lever.
+func hatch_open_locked() -> bool:
+	return cargo_hatch_open and hatch_position >= 1.0
+
+
+## Door fully closed on its seal. Everything that interlocks AGAINST an open
+## hatch — the cutter, a jump, a landing clearance — tests this, so that a door
+## halfway shut counts as open. Mid-travel is neither.
+func hatch_secured() -> bool:
+	return not cargo_hatch_open and hatch_position <= 0.0
 
 
 ## Landing-gear intent (keybind / the switch panel's GEAR lever / the MFD DOCK
@@ -1282,6 +1320,7 @@ func _write_comms_log(entry: Dictionary) -> void:
 ## with the rest of the sim rather than on the frame.
 func _physics_process(delta: float) -> void:
 	_advance_gear(delta)
+	_advance_hatch(delta)
 	# Order matters: the starter needs a bus, and the bus balance depends on what
 	# the drive is doing, so settle the electrics first and crank against them.
 	_advance_electrical(delta)
@@ -1300,7 +1339,7 @@ func _process(delta: float) -> void:
 ## DockingSystem because the gear is ship equipment: it must keep travelling
 ## while docking is INACTIVE (you can cycle it at the claim, where it interlocks
 ## the cutter) and it has to reach the stops for gear_locked_down() to mean
-## anything. Announces only the two ends — the travel itself is silent.
+## anything. Announces only the two ends — nothing is posted in between.
 func _advance_gear(delta: float) -> void:
 	var target := 1.0 if gear_down else 0.0
 	# Exact compare, not is_equal_approx: move_toward lands exactly on `target`,
@@ -1313,3 +1352,17 @@ func _advance_gear(delta: float) -> void:
 		post_comms("OPS", "LANDING GEAR DOWN AND LOCKED")
 	elif gear_position <= 0.0:
 		post_comms("OPS", "LANDING GEAR UP AND STOWED")
+
+
+## Run the cargo door toward wherever its lever is. Same shape as the gear above,
+## exact compare and all — a door left permanently "in transit" would make
+## hatch_open_locked() permanently false and no piece would ever be collectable.
+func _advance_hatch(delta: float) -> void:
+	var target := 1.0 if cargo_hatch_open else 0.0
+	if hatch_position == target:
+		return
+	hatch_position = move_toward(hatch_position, target, delta / HATCH_TRAVEL_TIME)
+	if hatch_position >= 1.0:
+		post_comms("OPS", "CARGO HATCH OPEN AND LOCKED")
+	elif hatch_position <= 0.0:
+		post_comms("OPS", "CARGO HATCH SECURED")

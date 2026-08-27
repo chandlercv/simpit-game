@@ -63,8 +63,23 @@ static func _na(value: String) -> Dictionary:
 ## Shared rows. The hatch and the torch are tested by three of the four
 ## procedures, and by several interlocks each, so they are written once.
 static func _hatch_secured() -> Dictionary:
-	return _gate(not GameState.cargo_hatch_open,
-			"OPEN" if GameState.cargo_hatch_open else "SECURED")
+	return _gate(GameState.hatch_secured(), _hatch_value())
+
+
+## The complement, for the two procedures that need the aperture rather than the
+## seal: a door still travelling will not pass a piece or discharge a hold.
+static func _hatch_open() -> Dictionary:
+	return _gate(GameState.hatch_open_locked(), _hatch_value())
+
+
+## What the hatch reads as on a row. Mid-travel is its own answer — a door still
+## closing that reported "SECURED" would tick an item nobody had finished.
+static func _hatch_value() -> String:
+	if GameState.hatch_secured():
+		return "SECURED"
+	if GameState.hatch_open_locked():
+		return "OPEN"
+	return "IN TRANSIT %d%%" % roundi(GameState.hatch_position * 100.0)
 
 
 static func _torch_idle() -> Dictionary:
@@ -347,8 +362,7 @@ static func _arrival() -> Array[Dictionary]:
 					return _na("NOT ON A PAD")
 				# The hold discharges through the hatch, so this is the item that
 				# lets the berth take the cargo — not a formality.
-				return _gate(GameState.cargo_hatch_open,
-					"OPEN" if GameState.cargo_hatch_open else "SECURED"),
+				return _hatch_open(),
 		},
 		{
 			# The ship goes dark before the bus is opened, so the last thing done
@@ -543,8 +557,7 @@ static func _collecting() -> Array[Dictionary]:
 		{
 			"group": "RECOVERY", "label": "CARGO HATCH", "want": "OPEN",
 			"read": func() -> Dictionary:
-				return _gate(GameState.cargo_hatch_open,
-						"OPEN" if GameState.cargo_hatch_open else "SECURED"),
+				return _hatch_open(),
 		},
 		{
 			"group": "RECOVERY", "label": "PIECE", "want": "IDENTIFIED",

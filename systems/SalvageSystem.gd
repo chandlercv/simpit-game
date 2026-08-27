@@ -249,7 +249,7 @@ func toggle_throttle_cmd_mode() -> void:
 func request_cut() -> void:
 	if GameState.run_phase != "ON_SITE":
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		GameState.post_comms("OPS", "CUT ABORT — SECURE CARGO HATCH FIRST")
 		return
 	# An extended leg sits in the torch's arc, so the gear interlocks the cutter
@@ -633,7 +633,7 @@ func _update_align(delta: float) -> void:
 	if ShipMotion.authority() < MIN_ALIGN_AUTHORITY:
 		_abort_align("STABILISATION DEGRADED")
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		_abort_align("CARGO HATCH OPEN")
 		return
 	var align: Dictionary = GameState.align
@@ -690,7 +690,7 @@ func _update_cut(delta: float) -> void:
 	if GameState.power("CUTTER") < MIN_CUTTER_POWER:
 		_abort_cut("CUTTER POWER LOST")
 		return
-	if GameState.cargo_hatch_open:
+	if not GameState.hatch_secured():
 		_abort_cut("CARGO HATCH OPEN")
 		return
 	# Alignment quality throttles the cut: a clean lock cuts near full rate, a sloppy

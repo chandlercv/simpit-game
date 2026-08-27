@@ -48,7 +48,7 @@ func _run() -> void:
 	SalvageSystem.reset_site()
 	var detach_id := _cuttable_ids()[0]
 	_setup_matched(detach_id)
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 	GameState.wreck["cutting_id"] = detach_id
 	GameState.wreck["cut_progress"] = 0.0
 	GameState.wreck["align_quality"] = 1.0
@@ -146,12 +146,12 @@ func _run() -> void:
 	gate_member["vel"] = Vector3.ZERO
 	var gate_piece_id := DriftSystem.spawn_piece(gate_member, float(gate_member["qty"]))
 
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 	await _hold_on_piece(gate_piece_id, 1.0)
 	_check(float(GameState.get_salvage_piece(gate_piece_id).get("scoop", 0.0)) <= 0.05,
 			"hatch closed blocks the scoop even when otherwise aligned")
 
-	GameState.set_cargo_hatch(true)
+	await _set_hatch(true)
 	await _hold_off_axis(gate_piece_id, 1.0)
 	_check(float(GameState.get_salvage_piece(gate_piece_id).get("scoop", 0.0)) <= 0.05,
 			"a piece outside the forward hatch cone doesn't fill the scoop")
@@ -161,7 +161,7 @@ func _run() -> void:
 			"holding hatch+range+speed+cone stows the piece and removes it")
 	_check(not GameState.local_ship()["cargo"].is_empty(),
 			"the collected piece lands in cargo")
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 
 	# --- Instrument math: collection_status is the single evaluation the scoop,
 	# the MFD SCOOP page and the HUD cue all read, so its aiming numbers have to
@@ -205,7 +205,7 @@ func _run() -> void:
 	SalvageSystem.reset_site()
 	var lock_id := _cuttable_ids()[0]
 	_setup_matched(lock_id)
-	GameState.set_cargo_hatch(true)
+	await _set_hatch(true)
 	SalvageSystem.request_cut()
 	_check(GameState.align_state != "ALIGNING" and GameState.wreck["cutting_id"] == -1,
 			"an open cargo hatch blocks firing the cutter")
@@ -215,7 +215,7 @@ func _run() -> void:
 	_check(GameState.run_phase == "ON_SITE", "an open cargo hatch blocks departure/jump")
 	_check(_has_comms_since(comms_before, "HATCH"),
 			"the hatch interlock logs why departure was held")
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 
 	# --- Rival parity: severing a member via the rival path also detaches a
 	# real, collectible piece; collect_for_rival despawns it, and — since
@@ -234,11 +234,11 @@ func _run() -> void:
 	var result2 := SalvageSystem.rival_strip_member()
 	var piece2_id: int = result2.get("piece_id", -1)
 	_check(piece2_id != -1, "the rival severs a second member")
-	GameState.set_cargo_hatch(true)
+	await _set_hatch(true)
 	await _hold_on_piece(piece2_id, 6.0)
 	_check(GameState.get_salvage_piece(piece2_id).is_empty(),
 			"pieces are free-for-all — the player can scoop one the rival cut")
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 
 	# --- Off-site: leaving the claim with salvage still adrift pauses the drift
 	# sim but does NOT remove the pieces, so the instruments must stop treating
@@ -432,6 +432,23 @@ func _has_comms_since(from_index: int, substr: String) -> bool:
 		if GameState.comms[i]["text"].contains(substr):
 			return true
 	return false
+
+
+## Move the hatch LEVER and wait for the DOOR to get there.
+##
+## The lever is instant; the door travels over HATCH_TRAVEL_TIME, and every
+## interlock downstream reads the door rather than the lever. The wait is taken
+## from the constant that sets the travel and never transcribed — the same rule
+## the limit rows follow.
+func _set_hatch(open: bool) -> void:
+	GameState.set_cargo_hatch(open)
+	var elapsed := 0.0
+	while elapsed < GameState.HATCH_TRAVEL_TIME * 2.0:
+		var arrived := GameState.hatch_open_locked() if open else GameState.hatch_secured()
+		if arrived:
+			return
+		await get_tree().process_frame
+		elapsed += get_process_delta_time()
 
 
 func _check(condition: bool, label: String) -> void:
