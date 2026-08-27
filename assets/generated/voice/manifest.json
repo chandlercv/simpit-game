@@ -1,0 +1,2899 @@
+{
+ "clips": {
+  "cbc9c94724f09": {
+   "voice": "ship",
+   "text": "CARGO HATCH"
+  },
+  "c0608444781eb": {
+   "voice": "ship",
+   "text": "LANDING GEAR"
+  },
+  "c3aeb27991cfb": {
+   "voice": "ship",
+   "text": "BATTERY FLAT , BUS UNPOWERED, RESTORE THE ALTERNATOR"
+  },
+  "c17823b2e63b9": {
+   "voice": "ship",
+   "text": "BATTERY LOW"
+  },
+  "c05c6b0e28519": {
+   "voice": "ship",
+   "text": "% REMAINING"
+  },
+  "c78d55617ebf7": {
+   "voice": "ship",
+   "text": "DRIVE SHUT DOWN"
+  },
+  "c14f2c90c4cd1": {
+   "voice": "ship",
+   "text": "DRIVE RUNNING"
+  },
+  "cc2c8ba16b744": {
+   "voice": "ship",
+   "text": "START ABANDONED"
+  },
+  "cc5d7608dae61": {
+   "voice": "ship",
+   "text": "OF"
+  },
+  "c22522eec86bb": {
+   "voice": "ship",
+   "text": "SECONDS SERVED"
+  },
+  "ca4e0c2ec5b39": {
+   "voice": "ship",
+   "text": "START COMPLETE , SELECT A RUNNING POSITION"
+  },
+  "cd0263fe517d1": {
+   "voice": "ship",
+   "text": "L H two EXHAUSTED , THERMAL STAGE DEAD, SELECT R OR BOTH"
+  },
+  "c6ee9f31fb9f4": {
+   "voice": "ship",
+   "text": "locks EXHAUSTED , NO BOOST AVAILABLE"
+  },
+  "c724c95a16f61": {
+   "voice": "ship",
+   "text": "LANDING GEAR DOWN AND LOCKED"
+  },
+  "c70f319ba847f": {
+   "voice": "ship",
+   "text": "LANDING GEAR UP AND STOWED"
+  },
+  "c35c54ee023ef": {
+   "voice": "ship",
+   "text": "CARGO HATCH OPEN AND LOCKED"
+  },
+  "c24fc5d106c0f": {
+   "voice": "ship",
+   "text": "CARGO HATCH SECURED"
+  },
+  "c668dd8e350b3": {
+   "voice": "ship",
+   "text": "JETTISONED"
+  },
+  "c346f8d38e7e3": {
+   "voice": "ship",
+   "text": "COLLISION"
+  },
+  "cb44c7666f6d0": {
+   "voice": "ship",
+   "text": "IMPACT"
+  },
+  "cb4198b86a308": {
+   "voice": "ship",
+   "text": "HULL"
+  },
+  "c9b3c96fe16d0": {
+   "voice": "station",
+   "text": "CONTINUE TO MARKER ALPHA AND HOLD"
+  },
+  "c114b3e3f7d70": {
+   "voice": "station",
+   "text": "AUTO-BERTH ACCEPTED , HANDS OFF, BERTH"
+  },
+  "cae8954fc5f6a": {
+   "voice": "station",
+   "text": "credits HANDLING."
+  },
+  "c396ce4a93ba5": {
+   "voice": "station",
+   "text": "CANCELLING THE APPROACH , LEAVING THE PATTERN"
+  },
+  "ce1cdafcee2bc": {
+   "voice": "ship",
+   "text": "GEAR OVERSPEED"
+  },
+  "ce9f1fba01d10": {
+   "voice": "ship",
+   "text": "metres per second, LEGS TAKING LOAD"
+  },
+  "ced0e91cff184": {
+   "voice": "station",
+   "text": "CLEAR OF THE PATTERN , GOOD HUNTING."
+  },
+  "cf224fc7b6ad9": {
+   "voice": "station",
+   "text": "TOUCHDOWN"
+  },
+  "c21cf962b7c20": {
+   "voice": "station",
+   "text": "ARRIVAL"
+  },
+  "cc961976a5466": {
+   "voice": "station",
+   "text": "metres per second SINK"
+  },
+  "cefc1fdbc2296": {
+   "voice": "station",
+   "text": "% ON THE MARKS"
+  },
+  "c1abfbbf053ee": {
+   "voice": "station",
+   "text": "(READBACK)"
+  },
+  "cac8688d0331f": {
+   "voice": "station",
+   "text": "PROCEED TO MARKER ALPHA AND HOLD"
+  },
+  "ceb693f50a5a5": {
+   "voice": "station",
+   "text": ". SEQUENCING YOU INTO THE PATTERN FOR BERTH"
+  },
+  "ce0ea4b9587fe": {
+   "voice": "station",
+   "text": "HOLD ON THE PAD , REQUEST DEPARTURE WHEN READY"
+  },
+  "c867742d49941": {
+   "voice": "station",
+   "text": ". STOW YOUR GEAR AT YOUR DISCRETION; IT IS TO BE UP BEFORE RELEASE."
+  },
+  "c7478b66914cf": {
+   "voice": "station",
+   "text": "HOLD AT ALPHA , YOU ARE STILL MOVING"
+  },
+  "c6641b96362da": {
+   "voice": "station",
+   "text": "STOP AT THE MARKER (UNDER"
+  },
+  "c476af5b34b4d": {
+   "voice": "station",
+   "text": "metres per second) BEFORE REQUESTING."
+  },
+  "c28e6c6a46007": {
+   "voice": "station",
+   "text": "HOLD , TRAFFIC IN THE LANE"
+  },
+  "c905ad8280c38": {
+   "voice": "station",
+   "text": "IS CROSSING AHEAD OF YOU. STAND BY."
+  },
+  "cda017b0f753d": {
+   "voice": "station",
+   "text": "STAND BY , SEQUENCING"
+  },
+  "c260d14c1404a": {
+   "voice": "station",
+   "text": "HOLD AT ALPHA. WE WILL CALL YOUR CLEARANCE."
+  },
+  "c852d17078742": {
+   "voice": "station",
+   "text": "AUTO-BERTH REFUSED , YOU ARE ON FINAL"
+  },
+  "c1c7a820b3daa": {
+   "voice": "station",
+   "text": "TOO LATE TO HAND IT OVER. LAND IT OR GO AROUND."
+  },
+  "c6aa52e72ae9f": {
+   "voice": "station",
+   "text": "AUTO-BERTH REFUSED , INSUFFICIENT FUNDS"
+  },
+  "cdbe25f680cc8": {
+   "voice": "station",
+   "text": "HANDLING IS"
+  },
+  "c9f1b0ee8b7a1": {
+   "voice": "station",
+   "text": "credits AND YOU ARE SHORT. FLY IT IN."
+  },
+  "ca2450650a27e": {
+   "voice": "station",
+   "text": "HOLD POSITION , TRAFFIC CROSSING"
+  },
+  "c88084b4d07bd": {
+   "voice": "station",
+   "text": "IS IN THE LANE AHEAD. HOLD UNDER"
+  },
+  "c81f0d4508525": {
+   "voice": "station",
+   "text": "metres per second."
+  },
+  "c090ba4ab6c42": {
+   "voice": "station",
+   "text": "CONTINUE APPROACH"
+  },
+  "c488049f46d64": {
+   "voice": "station",
+   "text": "LANE IS CLEAR. RESUME"
+  },
+  "c8380f151e346": {
+   "voice": "station",
+   "text": "REDUCE SPEED"
+  },
+  "c7f716a9286e2": {
+   "voice": "station",
+   "text": "metres per second"
+  },
+  "c4524128b22d5": {
+   "voice": "station",
+   "text": "HOLD AT ALPHA , REQUEST CLEARANCE WHEN STOPPED"
+  },
+  "c80b06520cf01": {
+   "voice": "station",
+   "text": "MARKER ALPHA REACHED. STOP UNDER"
+  },
+  "ceddab67ac053": {
+   "voice": "station",
+   "text": "metres per second AND CALL FOR THE LANE."
+  },
+  "c80d5965d5e39": {
+   "voice": "station",
+   "text": "RETURN TO MARKER ALPHA"
+  },
+  "cc2639e0a10c1": {
+   "voice": "station",
+   "text": "YOU HAVE DRIFTED OUT OF THE HOLD."
+  },
+  "c0a7e9cae922d": {
+   "voice": "station",
+   "text": "PASSED , NEXT MARKER"
+  },
+  "c064f1eb84da3": {
+   "voice": "station",
+   "text": "CLEARED TO LAND , BERTH"
+  },
+  "c93473c6e857f": {
+   "voice": "station",
+   "text": "HOLD ON THE PAD , TRAFFIC IN THE LANE"
+  },
+  "ca90a132f9360": {
+   "voice": "station",
+   "text": "IS WORKING THE LANE ABOVE YOU. STAND BY."
+  },
+  "c9582686e3c9a": {
+   "voice": "station",
+   "text": "WE WILL CALL YOUR DEPARTURE."
+  },
+  "c8ac6dbe62a6b": {
+   "voice": "station",
+   "text": "CLEARED FOR DEPARTURE , MARKER"
+  },
+  "cb770693e01e7": {
+   "voice": "station",
+   "text": "FIRST"
+  },
+  "c8abe767d9fc7": {
+   "voice": "station",
+   "text": "STOW YOUR GEAR BEFORE THE JUMP"
+  },
+  "cd07a059f3a10": {
+   "voice": "station",
+   "text": "YOU ARE CLEAR OF THE PATTERN BUT STILL HANGING LEGS."
+  },
+  "ca36219b39d23": {
+   "voice": "station",
+   "text": "CLEARED TO BERTH"
+  },
+  "c4d61cdc91d22": {
+   "voice": "station",
+   "text": "VIA THE LANE"
+  },
+  "c32cc471707c3": {
+   "voice": "station",
+   "text": "CORRECT IT"
+  },
+  "cf71c7a2f098f": {
+   "voice": "station",
+   "text": "GO AROUND"
+  },
+  "cec635732672e": {
+   "voice": "station",
+   "text": "YOU ARE OUTSIDE THE LANE"
+  },
+  "c63442298d6d8": {
+   "voice": "station",
+   "text": "M OFF THE CENTRELINE , CORRECT NOW."
+  },
+  "c7833b6438df5": {
+   "voice": "station",
+   "text": "TRAFFIC"
+  },
+  "c80766392b4db": {
+   "voice": "station",
+   "text": "CONTACT"
+  },
+  "c990b2d0a0ce8": {
+   "voice": "station",
+   "text": "SECTION"
+  },
+  "cfd28ca648a5a": {
+   "voice": "station",
+   "text": "LOSS OF SEPARATION WITH"
+  },
+  "ce894f7563743": {
+   "voice": "station",
+   "text": "EXCESSIVE SPEED IN THE PATTERN"
+  },
+  "c667f1c8c40d2": {
+   "voice": "station",
+   "text": "MARKER"
+  },
+  "c55185d30b281": {
+   "voice": "station",
+   "text": "MISSED"
+  },
+  "cc180da533d5d": {
+   "voice": "station",
+   "text": "GEAR NOT DOWN AND LOCKED AT THE FINAL GATE"
+  },
+  "c53981d5bf506": {
+   "voice": "station",
+   "text": "CARGO HATCH OPEN ON FINAL"
+  },
+  "c0d364721e62f": {
+   "voice": "station",
+   "text": "GEAR RAISED ON FINAL"
+  },
+  "ca760aaeb2dba": {
+   "voice": "station",
+   "text": "CARGO HATCH OPENED ON FINAL"
+  },
+  "c19257eb9c216": {
+   "voice": "station",
+   "text": "MISSED ON DEPARTURE"
+  },
+  "c4bf98eeedf5b": {
+   "voice": "station",
+   "text": "DEPARTED THE LANE CORRIDOR"
+  },
+  "cdc9023db4cd5": {
+   "voice": "ship",
+   "text": "DEPARTURE HELD , CUTTER ACTIVE"
+  },
+  "ccf399597e4f8": {
+   "voice": "ship",
+   "text": "DEPARTURE HELD , SECURE CARGO HATCH FIRST"
+  },
+  "cffb131241759": {
+   "voice": "ship",
+   "text": "DEPARTURE BURN , BOUND FOR"
+  },
+  "ccad847d4b314": {
+   "voice": "ship",
+   "text": "STATION"
+  },
+  "ca7b61a09d2e0": {
+   "voice": "station",
+   "text": "DOCKED AT"
+  },
+  "cc3068b0bc3b7": {
+   "voice": "station",
+   "text": "STATION , MARKET FEED LIVE"
+  },
+  "c2842fca877e9": {
+   "voice": "ship",
+   "text": "APPROACH ABANDONED , BURNING FOR CLAIM seven seven four one charlie"
+  },
+  "c0a4d15016f5f": {
+   "voice": "ship",
+   "text": "BACK ON STATION AT CLAIM seven seven four one charlie"
+  },
+  "c03593f79aa4d": {
+   "voice": "ship",
+   "text": "CLEAR OF THE PATTERN , BURNING FOR CLAIM seven seven four one charlie"
+  },
+  "c43b8ef5aa0ba": {
+   "voice": "ship",
+   "text": "JUMP COMPLETE , ON STATION AT CLAIM seven seven four one charlie"
+  },
+  "cb7db6edd3800": {
+   "voice": "station",
+   "text": "TRAFFIC ADVISORY: SALVAGE CLAIM seven seven four one charlie ACTIVE IN THIS VOLUME"
+  },
+  "cc131c7a69ff6": {
+   "voice": "ship",
+   "text": "REPOSITION REQUIRED , RE-ARM APPROACH FOR"
+  },
+  "cca1395a63b50": {
+   "voice": "ship",
+   "text": "APPROACH INHIBITED , SELECT A CUT TARGET FIRST"
+  },
+  "c4f3d77556450": {
+   "voice": "ship",
+   "text": "APPROACH INHIBITED , THROTTLE PAST"
+  },
+  "c67b4449fae0e": {
+   "voice": "ship",
+   "text": "%, EASE BACK TO ARM"
+  },
+  "cc7b32b1017a9": {
+   "voice": "ship",
+   "text": "APPROACH INHIBITED , DRIVE NOT MAKING THRUST (CHECK THE SELECTOR)"
+  },
+  "c66bce83569a0": {
+   "voice": "ship",
+   "text": "APPROACH INHIBITED , THRUST CHANNEL BELOW"
+  },
+  "c2d2fcb6f64e4": {
+   "voice": "ship",
+   "text": "% (RAISE THE ALLOCATION)"
+  },
+  "c426382732ee2": {
+   "voice": "ship",
+   "text": "APPROACH BURN , MATCHING VELOCITY WITH"
+  },
+  "ce4c38af35ff3": {
+   "voice": "ship",
+   "text": "CUT ABORT , SECURE CARGO HATCH FIRST"
+  },
+  "c09d621e3b8fa": {
+   "voice": "ship",
+   "text": "CUT ABORT , STOW THE LANDING GEAR FIRST"
+  },
+  "c122b53c8516e": {
+   "voice": "ship",
+   "text": "CUT ABORT , NO VALID MEMBER SELECTED"
+  },
+  "c222ebc2324c4": {
+   "voice": "ship",
+   "text": "CUT ABORT , NOT IN CUTTING RANGE (MATCH VELOCITY FIRST)"
+  },
+  "c38f549aa9d3b": {
+   "voice": "ship",
+   "text": "CUT ABORT , CUTTER UNPOWERED (RAISE CUTTER ALLOCATION)"
+  },
+  "c8d16b6c8be13": {
+   "voice": "ship",
+   "text": "CUT ABORT , STABILISATION DEGRADED (CHECK FLIGHT ASSIST AND THRUST ALLOCATION)"
+  },
+  "c26d17f3a28a6": {
+   "voice": "ship",
+   "text": "STRUCTURAL SCAN COMPLETE"
+  },
+  "c425ea3be4dc1": {
+   "voice": "ship",
+   "text": "MEMBERS RESOLVED"
+  },
+  "c1253e6419a97": {
+   "voice": "ship",
+   "text": "CARRYING FRAME STRESS"
+  },
+  "c19ee910bd232": {
+   "voice": "ship",
+   "text": "VELOCITY MATCHED , STANDOFF ON"
+  },
+  "c02ca48ee5129": {
+   "voice": "ship",
+   "text": "NEW CONTACT , RIVAL CUTTER CLOSING ON THE WRECK"
+  },
+  "c7ec0e52d48fe": {
+   "voice": "ship",
+   "text": "RIVAL CUTTER BURNING OUT OF THE VOLUME"
+  },
+  "c50f3e589b524": {
+   "voice": "station",
+   "text": "PATROL WINDOW CLOSING , 2 MINUTES"
+  },
+  "c3d2c5453fa37": {
+   "voice": "station",
+   "text": "PATROL INBOUND , CLEAR THE CLAIM"
+  },
+  "c8083c0d59a05": {
+   "voice": "ship",
+   "text": "PATROL CONTACT ON INTERCEPT VECTOR"
+  },
+  "c54b2536ca516": {
+   "voice": "station",
+   "text": "CLAIM ENFORCEMENT"
+  },
+  "c1f29cb85c637": {
+   "voice": "station",
+   "text": "credits FINE LOGGED"
+  },
+  "cc3e568534074": {
+   "voice": "station",
+   "text": "STANDING REDUCED"
+  },
+  "c5737bd5ea60d": {
+   "voice": "ship",
+   "text": "DEBRIS IMPACT , HULL SECTIONS DAMAGED"
+  },
+  "c7aac333f4ebc": {
+   "voice": "pilot",
+   "text": "FREEHOLD"
+  },
+  "c6d9cf2f4301f": {
+   "voice": "pilot",
+   "text": "FREEHOLD CONTROL"
+  },
+  "c33b0e7cee8ad": {
+   "voice": "pilot",
+   "text": "LAGRANGE UNION"
+  },
+  "c80de9e21a549": {
+   "voice": "pilot",
+   "text": "LAGRANGE UNION CONTROL"
+  },
+  "c186a8181792d": {
+   "voice": "pilot",
+   "text": "MERIDIAN CO."
+  },
+  "cbd8f43e4f9b7": {
+   "voice": "pilot",
+   "text": "MERIDIAN CO. CONTROL"
+  },
+  "c3c7010df9c2b": {
+   "voice": "ship",
+   "text": "ACTIVE"
+  },
+  "c3fa8f2ec60c2": {
+   "voice": "ship",
+   "text": "ALPHA"
+  },
+  "cef389f6043fc": {
+   "voice": "ship",
+   "text": "ANTENNA MAST"
+  },
+  "c6fd6d7947aa0": {
+   "voice": "ship",
+   "text": "APPROACHING"
+  },
+  "c158191fbbbed": {
+   "voice": "ship",
+   "text": "BAYFLOOR"
+  },
+  "cfc119e406d0f": {
+   "voice": "ship",
+   "text": "BOTH"
+  },
+  "c0264ebf31aac": {
+   "voice": "ship",
+   "text": "BRAVO"
+  },
+  "c0dc75bf2dd6c": {
+   "voice": "ship",
+   "text": "CHARLIE"
+  },
+  "c1c317fe242d2": {
+   "voice": "ship",
+   "text": "DEEP"
+  },
+  "c92611bbc2181": {
+   "voice": "ship",
+   "text": "DELTA"
+  },
+  "c8f01109a19b0": {
+   "voice": "ship",
+   "text": "DRIVE"
+  },
+  "c2f03990a0fc0": {
+   "voice": "ship",
+   "text": "ENGINE BELL"
+  },
+  "c188e2d3f4b43": {
+   "voice": "ship",
+   "text": "FIRM"
+  },
+  "cf1a646b80b37": {
+   "voice": "ship",
+   "text": "FREEHOLD"
+  },
+  "c7e4ade58af6a": {
+   "voice": "ship",
+   "text": "FREEHOLD CONTROL"
+  },
+  "c2701628ac3ad": {
+   "voice": "ship",
+   "text": "GREASED"
+  },
+  "c2e300bb40c16": {
+   "voice": "ship",
+   "text": "HARD"
+  },
+  "c13781f9e5ad2": {
+   "voice": "ship",
+   "text": "HOLD"
+  },
+  "c83fb13300f0e": {
+   "voice": "ship",
+   "text": "HOLDING"
+  },
+  "c5d8dd4d2518e": {
+   "voice": "ship",
+   "text": "HULL AFT"
+  },
+  "c89b0a7b14eb7": {
+   "voice": "ship",
+   "text": "HULL FORE"
+  },
+  "ca9dcfa07cfb7": {
+   "voice": "ship",
+   "text": "L"
+  },
+  "c0dfc4e7192fe": {
+   "voice": "ship",
+   "text": "LAGRANGE UNION"
+  },
+  "c40b46fb70276": {
+   "voice": "ship",
+   "text": "LAGRANGE UNION CONTROL"
+  },
+  "caef3e076edf6": {
+   "voice": "ship",
+   "text": "LANE TUG BOLLARD"
+  },
+  "cf20f7ab07f13": {
+   "voice": "ship",
+   "text": "MATCHED"
+  },
+  "c88aabdf3c53a": {
+   "voice": "ship",
+   "text": "MERIDIAN CO."
+  },
+  "c5fbbfd322510": {
+   "voice": "ship",
+   "text": "MERIDIAN CO. CONTROL"
+  },
+  "cef5e2f6451f9": {
+   "voice": "ship",
+   "text": "NOSE"
+  },
+  "c946edb959fc0": {
+   "voice": "ship",
+   "text": "OFF"
+  },
+  "c9bcbe78cf191": {
+   "voice": "ship",
+   "text": "ORE BARGE THRENODY"
+  },
+  "c67ad22bfbf8d": {
+   "voice": "ship",
+   "text": "PANEL A"
+  },
+  "c63bece78b1d3": {
+   "voice": "ship",
+   "text": "PANEL B"
+  },
+  "c288d128abaef": {
+   "voice": "ship",
+   "text": "PASSIVE"
+  },
+  "c56e3d4bda816": {
+   "voice": "ship",
+   "text": "R"
+  },
+  "cba5b8c250afb": {
+   "voice": "ship",
+   "text": "SENSOR MAST"
+  },
+  "ccd84a3b87d7c": {
+   "voice": "ship",
+   "text": "SHUTTLE MERIDIAN 9"
+  },
+  "cce18b1da7150": {
+   "voice": "ship",
+   "text": "SPEED"
+  },
+  "c1489c3a8a2e4": {
+   "voice": "ship",
+   "text": "SPINE"
+  },
+  "cef45fce1e22b": {
+   "voice": "ship",
+   "text": "START"
+  },
+  "ccc45a8fc882c": {
+   "voice": "ship",
+   "text": "STRUCTURE"
+  },
+  "c9614dca78add": {
+   "voice": "ship",
+   "text": "THRUST"
+  },
+  "c3e6c599b83e6": {
+   "voice": "ship",
+   "text": "ZERO"
+  },
+  "ce4ed320b9bd3": {
+   "voice": "ship",
+   "text": "ONE"
+  },
+  "c4335faede6c5": {
+   "voice": "ship",
+   "text": "TWO"
+  },
+  "c027f228d63e3": {
+   "voice": "ship",
+   "text": "THREE"
+  },
+  "ce56762ad8b42": {
+   "voice": "ship",
+   "text": "FOUR"
+  },
+  "c2ef53a5c7ed6": {
+   "voice": "ship",
+   "text": "FIVE"
+  },
+  "c6ff4d1cd0f78": {
+   "voice": "ship",
+   "text": "SIX"
+  },
+  "c540e5de4e777": {
+   "voice": "ship",
+   "text": "SEVEN"
+  },
+  "c4db199db2ddf": {
+   "voice": "ship",
+   "text": "EIGHT"
+  },
+  "cbdf61ac9636e": {
+   "voice": "ship",
+   "text": "NINER"
+  },
+  "c628b47228f03": {
+   "voice": "ship",
+   "text": "POINT"
+  },
+  "c0b1e398c79ae": {
+   "voice": "ship",
+   "text": "MINUS"
+  },
+  "c135250ea4d76": {
+   "voice": "ship",
+   "text": "HUNDRED"
+  },
+  "cdf52b0dac4cb": {
+   "voice": "ship",
+   "text": "THOUSAND"
+  },
+  "c16ab0a6cd0f6": {
+   "voice": "ship",
+   "text": "ALFA"
+  },
+  "ce2c22fd48de2": {
+   "voice": "ship",
+   "text": "ECHO"
+  },
+  "c8e1936f8ed5e": {
+   "voice": "ship",
+   "text": "FOXTROT"
+  },
+  "c5b4b00ec83c8": {
+   "voice": "ship",
+   "text": "GOLF"
+  },
+  "ca35027922c7c": {
+   "voice": "ship",
+   "text": "HOTEL"
+  },
+  "ce5fdc06a41bb": {
+   "voice": "ship",
+   "text": "INDIA"
+  },
+  "cea0ab73918ff": {
+   "voice": "ship",
+   "text": "JULIETT"
+  },
+  "c9a5d9a4f3f36": {
+   "voice": "ship",
+   "text": "KILO"
+  },
+  "c6b5acfa38c48": {
+   "voice": "ship",
+   "text": "LIMA"
+  },
+  "c742d8ecee560": {
+   "voice": "ship",
+   "text": "MIKE"
+  },
+  "c688526fb536a": {
+   "voice": "ship",
+   "text": "NOVEMBER"
+  },
+  "c51a6df918172": {
+   "voice": "ship",
+   "text": "OSCAR"
+  },
+  "c183d11b3bcee": {
+   "voice": "ship",
+   "text": "PAPA"
+  },
+  "c956d166dac28": {
+   "voice": "ship",
+   "text": "QUEBEC"
+  },
+  "cde899a93ff84": {
+   "voice": "ship",
+   "text": "ROMEO"
+  },
+  "cb198d0da1bc7": {
+   "voice": "ship",
+   "text": "SIERRA"
+  },
+  "c4ed56191d5cb": {
+   "voice": "ship",
+   "text": "TANGO"
+  },
+  "cceee6ffd9c5b": {
+   "voice": "ship",
+   "text": "UNIFORM"
+  },
+  "cfd326af5016c": {
+   "voice": "ship",
+   "text": "VICTOR"
+  },
+  "c461861303021": {
+   "voice": "ship",
+   "text": "WHISKEY"
+  },
+  "c950e228f9696": {
+   "voice": "ship",
+   "text": "XRAY"
+  },
+  "c3482b12d6330": {
+   "voice": "ship",
+   "text": "YANKEE"
+  },
+  "cb6176a15043e": {
+   "voice": "ship",
+   "text": "ZULU"
+  },
+  "c5b2e6b3bed93": {
+   "voice": "station",
+   "text": "ACTIVE"
+  },
+  "c4fe322718003": {
+   "voice": "station",
+   "text": "ALPHA"
+  },
+  "cb0da27a49ac9": {
+   "voice": "station",
+   "text": "ANTENNA MAST"
+  },
+  "c2aa768704687": {
+   "voice": "station",
+   "text": "APPROACHING"
+  },
+  "ce220e3e1c331": {
+   "voice": "station",
+   "text": "BAYFLOOR"
+  },
+  "cfd585141fafc": {
+   "voice": "station",
+   "text": "BOTH"
+  },
+  "c073d2d55d771": {
+   "voice": "station",
+   "text": "BRAVO"
+  },
+  "cd8978f1788ac": {
+   "voice": "station",
+   "text": "CHARLIE"
+  },
+  "cce6d45db5f0f": {
+   "voice": "station",
+   "text": "DEEP"
+  },
+  "cecdc371baa57": {
+   "voice": "station",
+   "text": "DELTA"
+  },
+  "ccfa88da8f4f3": {
+   "voice": "station",
+   "text": "DRIVE"
+  },
+  "c3469a7f37de7": {
+   "voice": "station",
+   "text": "ENGINE BELL"
+  },
+  "cc986fd21819d": {
+   "voice": "station",
+   "text": "FIRM"
+  },
+  "c43ba18544729": {
+   "voice": "station",
+   "text": "FREEHOLD"
+  },
+  "c7a7e8c715fae": {
+   "voice": "station",
+   "text": "FREEHOLD CONTROL"
+  },
+  "c77b1d564eb7b": {
+   "voice": "station",
+   "text": "GREASED"
+  },
+  "caf2daca0e8de": {
+   "voice": "station",
+   "text": "HARD"
+  },
+  "c1be1d5539ff0": {
+   "voice": "station",
+   "text": "HOLD"
+  },
+  "c47fe9a010205": {
+   "voice": "station",
+   "text": "HOLDING"
+  },
+  "c13724eac6bee": {
+   "voice": "station",
+   "text": "HULL AFT"
+  },
+  "cad49dccf1c8d": {
+   "voice": "station",
+   "text": "HULL FORE"
+  },
+  "ce2c9095e45c1": {
+   "voice": "station",
+   "text": "L"
+  },
+  "ca064a0af4bb5": {
+   "voice": "station",
+   "text": "LAGRANGE UNION"
+  },
+  "c35f5c5dbce8d": {
+   "voice": "station",
+   "text": "LAGRANGE UNION CONTROL"
+  },
+  "c7095fb89daec": {
+   "voice": "station",
+   "text": "LANE TUG BOLLARD"
+  },
+  "c399f897cbb3a": {
+   "voice": "station",
+   "text": "MATCHED"
+  },
+  "c612f896e7bca": {
+   "voice": "station",
+   "text": "MERIDIAN CO."
+  },
+  "c23787522d15b": {
+   "voice": "station",
+   "text": "MERIDIAN CO. CONTROL"
+  },
+  "c26c3a2664901": {
+   "voice": "station",
+   "text": "NOSE"
+  },
+  "c3bf156473318": {
+   "voice": "station",
+   "text": "OFF"
+  },
+  "cffb0713e0537": {
+   "voice": "station",
+   "text": "ORE BARGE THRENODY"
+  },
+  "cf4c8c1e95ca2": {
+   "voice": "station",
+   "text": "PANEL A"
+  },
+  "c76014ab36409": {
+   "voice": "station",
+   "text": "PANEL B"
+  },
+  "cc16de559a58c": {
+   "voice": "station",
+   "text": "PASSIVE"
+  },
+  "cb29e5d3df9ab": {
+   "voice": "station",
+   "text": "R"
+  },
+  "c60aa79c43572": {
+   "voice": "station",
+   "text": "SENSOR MAST"
+  },
+  "c2f74317de217": {
+   "voice": "station",
+   "text": "SHUTTLE MERIDIAN 9"
+  },
+  "ce3d965b6b121": {
+   "voice": "station",
+   "text": "SPEED"
+  },
+  "cc595dd1b293e": {
+   "voice": "station",
+   "text": "SPINE"
+  },
+  "c69277205e5fc": {
+   "voice": "station",
+   "text": "START"
+  },
+  "c49065687c593": {
+   "voice": "station",
+   "text": "STATION"
+  },
+  "c7a70d5856964": {
+   "voice": "station",
+   "text": "STRUCTURE"
+  },
+  "c8e4d2e764fc8": {
+   "voice": "station",
+   "text": "THRUST"
+  },
+  "cc32763a2fe23": {
+   "voice": "station",
+   "text": "ZERO"
+  },
+  "c13cdc8b8ee1c": {
+   "voice": "station",
+   "text": "ONE"
+  },
+  "cc2680ad0a3f3": {
+   "voice": "station",
+   "text": "TWO"
+  },
+  "c135312cadd39": {
+   "voice": "station",
+   "text": "THREE"
+  },
+  "c266f571ee8fa": {
+   "voice": "station",
+   "text": "FOUR"
+  },
+  "cca83df6a6c02": {
+   "voice": "station",
+   "text": "FIVE"
+  },
+  "c906659b36e58": {
+   "voice": "station",
+   "text": "SIX"
+  },
+  "c53945ccac449": {
+   "voice": "station",
+   "text": "SEVEN"
+  },
+  "c90756d9aad26": {
+   "voice": "station",
+   "text": "EIGHT"
+  },
+  "c9e658562c922": {
+   "voice": "station",
+   "text": "NINER"
+  },
+  "c467326ae4067": {
+   "voice": "station",
+   "text": "POINT"
+  },
+  "c121dae09d4ed": {
+   "voice": "station",
+   "text": "MINUS"
+  },
+  "ccd410bfea950": {
+   "voice": "station",
+   "text": "HUNDRED"
+  },
+  "c7e5f79360380": {
+   "voice": "station",
+   "text": "THOUSAND"
+  },
+  "cb8965936d04c": {
+   "voice": "station",
+   "text": "ALFA"
+  },
+  "c5e96b5d001c3": {
+   "voice": "station",
+   "text": "ECHO"
+  },
+  "caa4404036cc2": {
+   "voice": "station",
+   "text": "FOXTROT"
+  },
+  "cde87598e0798": {
+   "voice": "station",
+   "text": "GOLF"
+  },
+  "c4697a35f6f83": {
+   "voice": "station",
+   "text": "HOTEL"
+  },
+  "c4559c638b354": {
+   "voice": "station",
+   "text": "INDIA"
+  },
+  "cdadc951b2c29": {
+   "voice": "station",
+   "text": "JULIETT"
+  },
+  "c0bc38f4f5295": {
+   "voice": "station",
+   "text": "KILO"
+  },
+  "c0e0fc30724d0": {
+   "voice": "station",
+   "text": "LIMA"
+  },
+  "c6bfac8ebbc6c": {
+   "voice": "station",
+   "text": "MIKE"
+  },
+  "ce22ed4122cda": {
+   "voice": "station",
+   "text": "NOVEMBER"
+  },
+  "cc45c7abe57c0": {
+   "voice": "station",
+   "text": "OSCAR"
+  },
+  "c6939ec719f03": {
+   "voice": "station",
+   "text": "PAPA"
+  },
+  "c054a2ce734eb": {
+   "voice": "station",
+   "text": "QUEBEC"
+  },
+  "ca870ebd9dff0": {
+   "voice": "station",
+   "text": "ROMEO"
+  },
+  "c124bb0a5b231": {
+   "voice": "station",
+   "text": "SIERRA"
+  },
+  "c705b451af2b9": {
+   "voice": "station",
+   "text": "TANGO"
+  },
+  "c56a6a7856ec3": {
+   "voice": "station",
+   "text": "UNIFORM"
+  },
+  "c44a4e9540a48": {
+   "voice": "station",
+   "text": "VICTOR"
+  },
+  "c67d52dd1db11": {
+   "voice": "station",
+   "text": "WHISKEY"
+  },
+  "c9718c1b8b143": {
+   "voice": "station",
+   "text": "XRAY"
+  },
+  "c40b4ce9dd7bc": {
+   "voice": "station",
+   "text": "YANKEE"
+  },
+  "c8177f8d84300": {
+   "voice": "station",
+   "text": "ZULU"
+  },
+  "ccc06c5482879": {
+   "voice": "pilot",
+   "text": "SIERRA VICTOR KESTREL LIMA UNIFORM FOUR FOUR SEVEN ONE KILO"
+  },
+  "c87a7102cb6cf": {
+   "voice": "pilot",
+   "text": "SEVEN ONE KILO"
+  },
+  "cd26650783d29": {
+   "voice": "ship",
+   "text": "SIERRA VICTOR KESTREL LIMA UNIFORM FOUR FOUR SEVEN ONE KILO"
+  },
+  "cde8d390ef7bf": {
+   "voice": "ship",
+   "text": "SEVEN ONE KILO"
+  },
+  "c0a5efabf1511": {
+   "voice": "station",
+   "text": "SIERRA VICTOR KESTREL LIMA UNIFORM FOUR FOUR SEVEN ONE KILO"
+  },
+  "cd62120b2c9b0": {
+   "voice": "station",
+   "text": "SEVEN ONE KILO"
+  },
+  "cc57652ecd228": {
+   "voice": "pilot",
+   "text": "holding at ALPHA, requesting clearance."
+  },
+  "c8ec574ee9085": {
+   "voice": "pilot",
+   "text": "ready for departure."
+  },
+  "ca2ee816d7ae8": {
+   "voice": "pilot",
+   "text": "roger."
+  },
+  "c6d2d50f46168": {
+   "voice": "pilot",
+   "text": "requesting handling."
+  },
+  "ccb9e8d6d1769": {
+   "voice": "pilot",
+   "text": "cancelling the approach."
+  }
+ },
+ "lines": [
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CUT\\ ABORT\\ \u2014\\ STABILISATION\\ DEGRADED\\ \\(CHECK\\ FLIGHT\\ ASSIST\\ AND\\ THRUST\\ ALLOCATION\\)$",
+   "parts": [
+    {
+     "clip": "c8d16b6c8be13"
+    }
+   ],
+   "weight": 78
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?),\\ (.*?)\\.\\ STOW\\ YOUR\\ GEAR\\ AT\\ YOUR\\ DISCRETION;\\ IT\\ IS\\ TO\\ BE\\ UP\\ BEFORE\\ RELEASE\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "c867742d49941"
+    }
+   ],
+   "weight": 69
+  },
+  {
+   "source": "SENSORS",
+   "voice": "ship",
+   "pattern": "^STRUCTURAL\\ SCAN\\ COMPLETE\\ \u2014\\ (.*?)\\ MEMBERS\\ RESOLVED,\\ (.*?)\\ CARRYING\\ FRAME\\ STRESS$",
+   "parts": [
+    {
+     "clip": "c26d17f3a28a6"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c425ea3be4dc1"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "c1253e6419a97"
+    }
+   ],
+   "weight": 68
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^APPROACH\\ INHIBITED\\ \u2014\\ THRUST\\ CHANNEL\\ BELOW\\ (.*?)%\\ \\(RAISE\\ THE\\ ALLOCATION\\)$",
+   "parts": [
+    {
+     "clip": "c66bce83569a0"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c2d2fcb6f64e4"
+    }
+   ],
+   "weight": 66
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^APPROACH\\ INHIBITED\\ \u2014\\ DRIVE\\ NOT\\ MAKING\\ THRUST\\ \\(CHECK\\ THE\\ SELECTOR\\)$",
+   "parts": [
+    {
+     "clip": "cc7b32b1017a9"
+    }
+   ],
+   "weight": 65
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^MARKER\\ ALPHA\\ REACHED\\.\\ STOP\\ UNDER\\ (.*?)\\ M/S\\ AND\\ CALL\\ FOR\\ THE\\ LANE\\.$",
+   "parts": [
+    {
+     "clip": "c80b06520cf01"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "ceddab67ac053"
+    }
+   ],
+   "weight": 60
+  },
+  {
+   "source": "HARBOR",
+   "voice": "station",
+   "pattern": "^TRAFFIC\\ ADVISORY:\\ SALVAGE\\ CLAIM\\ 7741\\-C\\ ACTIVE\\ IN\\ THIS\\ VOLUME$",
+   "parts": [
+    {
+     "clip": "cb7db6edd3800"
+    }
+   ],
+   "weight": 60
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CUT\\ ABORT\\ \u2014\\ NOT\\ IN\\ CUTTING\\ RANGE\\ \\(MATCH\\ VELOCITY\\ FIRST\\)$",
+   "parts": [
+    {
+     "clip": "c222ebc2324c4"
+    }
+   ],
+   "weight": 55
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^AUTO\\-BERTH\\ ACCEPTED\\ \u2014\\ HANDS\\ OFF,\\ BERTH\\ (.*?)\\.\\ (.*?)\\ CR\\ HANDLING\\.$",
+   "parts": [
+    {
+     "clip": "c114b3e3f7d70"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "cae8954fc5f6a"
+    }
+   ],
+   "weight": 54
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^APPROACH\\ INHIBITED\\ \u2014\\ THROTTLE\\ PAST\\ (.*?)%,\\ EASE\\ BACK\\ TO\\ ARM$",
+   "parts": [
+    {
+     "clip": "c4f3d77556450"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c67b4449fae0e"
+    }
+   ],
+   "weight": 54
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CUT\\ ABORT\\ \u2014\\ CUTTER\\ UNPOWERED\\ \\(RAISE\\ CUTTER\\ ALLOCATION\\)$",
+   "parts": [
+    {
+     "clip": "c38f549aa9d3b"
+    }
+   ],
+   "weight": 54
+  },
+  {
+   "source": "HARBOR",
+   "voice": "station",
+   "pattern": "^CLAIM\\ ENFORCEMENT\\ \u2014\\ (.*?)\\ CR\\ FINE\\ LOGGED,\\ (.*?)\\ STANDING\\ REDUCED$",
+   "parts": [
+    {
+     "clip": "c54b2536ca516"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c1f29cb85c637"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "cc3e568534074"
+    }
+   ],
+   "weight": 54
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^BATTERY\\ FLAT\\ \u2014\\ BUS\\ UNPOWERED,\\ RESTORE\\ THE\\ ALTERNATOR$",
+   "parts": [
+    {
+     "clip": "c3aeb27991cfb"
+    }
+   ],
+   "weight": 52
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^LH2\\ EXHAUSTED\\ \u2014\\ THERMAL\\ STAGE\\ DEAD,\\ SELECT\\ R\\ OR\\ BOTH$",
+   "parts": [
+    {
+     "clip": "cd0263fe517d1"
+    }
+   ],
+   "weight": 52
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^YOU\\ ARE\\ CLEAR\\ OF\\ THE\\ PATTERN\\ BUT\\ STILL\\ HANGING\\ LEGS\\.$",
+   "parts": [
+    {
+     "clip": "cd07a059f3a10"
+    }
+   ],
+   "weight": 52
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^STOP\\ AT\\ THE\\ MARKER\\ \\(UNDER\\ (.*?)\\ M/S\\)\\ BEFORE\\ REQUESTING\\.$",
+   "parts": [
+    {
+     "clip": "c6641b96362da"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c476af5b34b4d"
+    }
+   ],
+   "weight": 50
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^TOUCHDOWN\\ \u2014\\ (.*?)\\ ARRIVAL,\\ (.*?)\\ M/S\\ SINK,\\ (.*?)%\\ ON\\ THE\\ MARKS$",
+   "parts": [
+    {
+     "clip": "cf224fc7b6ad9"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c21cf962b7c20"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "cc961976a5466"
+    },
+    {
+     "slot": 2
+    },
+    {
+     "clip": "cefc1fdbc2296"
+    }
+   ],
+   "weight": 47
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?),\\ (.*?)\\.\\ SEQUENCING\\ YOU\\ INTO\\ THE\\ PATTERN\\ FOR\\ BERTH\\ (.*?)\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "ceb693f50a5a5"
+    },
+    {
+     "slot": 2
+    }
+   ],
+   "weight": 47
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^TOO\\ LATE\\ TO\\ HAND\\ IT\\ OVER\\.\\ LAND\\ IT\\ OR\\ GO\\ AROUND\\.$",
+   "parts": [
+    {
+     "clip": "c1c7a820b3daa"
+    }
+   ],
+   "weight": 47
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CLEAR\\ OF\\ THE\\ PATTERN\\ \u2014\\ BURNING\\ FOR\\ CLAIM\\ 7741\\-C$",
+   "parts": [
+    {
+     "clip": "c03593f79aa4d"
+    }
+   ],
+   "weight": 47
+  },
+  {
+   "source": "SENSORS",
+   "voice": "ship",
+   "pattern": "^NEW\\ CONTACT\\ \u2014\\ RIVAL\\ CUTTER\\ CLOSING\\ ON\\ THE\\ WRECK$",
+   "parts": [
+    {
+     "clip": "c02ca48ee5129"
+    }
+   ],
+   "weight": 47
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ CANCELLING\\ THE\\ APPROACH\\ \u2014\\ LEAVING\\ THE\\ PATTERN$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c396ce4a93ba5"
+    }
+   ],
+   "weight": 46
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ ON\\ THE\\ PAD\\ \u2014\\ REQUEST\\ DEPARTURE\\ WHEN\\ READY$",
+   "parts": [
+    {
+     "clip": "ce0ea4b9587fe"
+    }
+   ],
+   "weight": 46
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ AT\\ ALPHA\\ \u2014\\ REQUEST\\ CLEARANCE\\ WHEN\\ STOPPED$",
+   "parts": [
+    {
+     "clip": "c4524128b22d5"
+    }
+   ],
+   "weight": 46
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^APPROACH\\ INHIBITED\\ \u2014\\ SELECT\\ A\\ CUT\\ TARGET\\ FIRST$",
+   "parts": [
+    {
+     "clip": "cca1395a63b50"
+    }
+   ],
+   "weight": 46
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HANDLING\\ IS\\ (.*?)\\ CR\\ AND\\ YOU\\ ARE\\ SHORT\\.\\ FLY\\ IT\\ IN\\.$",
+   "parts": [
+    {
+     "clip": "cdbe25f680cc8"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c9f1b0ee8b7a1"
+    }
+   ],
+   "weight": 45
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^APPROACH\\ ABANDONED\\ \u2014\\ BURNING\\ FOR\\ CLAIM\\ 7741\\-C$",
+   "parts": [
+    {
+     "clip": "c2842fca877e9"
+    }
+   ],
+   "weight": 45
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ AT\\ ALPHA\\.\\ WE\\ WILL\\ CALL\\ YOUR\\ CLEARANCE\\.$",
+   "parts": [
+    {
+     "clip": "c260d14c1404a"
+    }
+   ],
+   "weight": 43
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^START\\ COMPLETE\\ \u2014\\ SELECT\\ A\\ RUNNING\\ POSITION$",
+   "parts": [
+    {
+     "clip": "ca4e0c2ec5b39"
+    }
+   ],
+   "weight": 42
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^GEAR\\ OVERSPEED\\ \u2014\\ (.*?)\\ /\\ (.*?)\\ M/S,\\ LEGS\\ TAKING\\ LOAD$",
+   "parts": [
+    {
+     "clip": "ce1cdafcee2bc"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "ce9f1fba01d10"
+    }
+   ],
+   "weight": 42
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^GEAR\\ NOT\\ DOWN\\ AND\\ LOCKED\\ AT\\ THE\\ FINAL\\ GATE$",
+   "parts": [
+    {
+     "clip": "cc180da533d5d"
+    }
+   ],
+   "weight": 42
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^JUMP\\ COMPLETE\\ \u2014\\ ON\\ STATION\\ AT\\ CLAIM\\ 7741\\-C$",
+   "parts": [
+    {
+     "clip": "c43b8ef5aa0ba"
+    }
+   ],
+   "weight": 42
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^REPOSITION\\ REQUIRED\\ \u2014\\ RE\\-ARM\\ APPROACH\\ FOR\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "cc131c7a69ff6"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 42
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ IS\\ WORKING\\ THE\\ LANE\\ ABOVE\\ YOU\\.\\ STAND\\ BY\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "ca90a132f9360"
+    }
+   ],
+   "weight": 41
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^DEPARTURE\\ HELD\\ \u2014\\ SECURE\\ CARGO\\ HATCH\\ FIRST$",
+   "parts": [
+    {
+     "clip": "ccf399597e4f8"
+    }
+   ],
+   "weight": 41
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^AUTO\\-BERTH\\ REFUSED\\ \u2014\\ INSUFFICIENT\\ FUNDS$",
+   "parts": [
+    {
+     "clip": "c6aa52e72ae9f"
+    }
+   ],
+   "weight": 39
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ IS\\ IN\\ THE\\ LANE\\ AHEAD\\.\\ HOLD\\ UNDER\\ (.*?)\\ M/S\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c88084b4d07bd"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "c81f0d4508525"
+    }
+   ],
+   "weight": 39
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^APPROACH\\ BURN\\ \u2014\\ MATCHING\\ VELOCITY\\ WITH\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c426382732ee2"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 39
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CUT\\ ABORT\\ \u2014\\ STOW\\ THE\\ LANDING\\ GEAR\\ FIRST$",
+   "parts": [
+    {
+     "clip": "c09d621e3b8fa"
+    }
+   ],
+   "weight": 39
+  },
+  {
+   "source": "SENSORS",
+   "voice": "ship",
+   "pattern": "^RIVAL\\ CUTTER\\ BURNING\\ OUT\\ OF\\ THE\\ VOLUME$",
+   "parts": [
+    {
+     "clip": "c7ec0e52d48fe"
+    }
+   ],
+   "weight": 38
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^START\\ ABANDONED\\ \u2014\\ (.*?)\\ OF\\ (.*?)\\ SECONDS\\ SERVED$",
+   "parts": [
+    {
+     "clip": "cc2c8ba16b744"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "cc5d7608dae61"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "c22522eec86bb"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ CLEAR\\ OF\\ THE\\ PATTERN\\ \u2014\\ GOOD\\ HUNTING\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "ced0e91cff184"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^AUTO\\-BERTH\\ REFUSED\\ \u2014\\ YOU\\ ARE\\ ON\\ FINAL$",
+   "parts": [
+    {
+     "clip": "c852d17078742"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ ON\\ THE\\ PAD\\ \u2014\\ TRAFFIC\\ IN\\ THE\\ LANE$",
+   "parts": [
+    {
+     "clip": "c93473c6e857f"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CLEARED\\ FOR\\ DEPARTURE\\ \u2014\\ MARKER\\ (.*?)\\ FIRST$",
+   "parts": [
+    {
+     "clip": "c8ac6dbe62a6b"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "cb770693e01e7"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "HARBOR",
+   "voice": "station",
+   "pattern": "^DOCKED\\ AT\\ (.*?)\\ STATION\\ \u2014\\ MARKET\\ FEED\\ LIVE$",
+   "parts": [
+    {
+     "clip": "ca7b61a09d2e0"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "cc3068b0bc3b7"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "SYSTEM",
+   "voice": "ship",
+   "pattern": "^DEBRIS\\ IMPACT\\ \u2014\\ HULL\\ SECTIONS\\ DAMAGED$",
+   "parts": [
+    {
+     "clip": "c5737bd5ea60d"
+    }
+   ],
+   "weight": 37
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ \u2014\\ CONTINUE\\ TO\\ MARKER\\ ALPHA\\ AND\\ HOLD$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c9b3c96fe16d0"
+    }
+   ],
+   "weight": 36
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ AT\\ ALPHA\\ \u2014\\ YOU\\ ARE\\ STILL\\ MOVING$",
+   "parts": [
+    {
+     "clip": "c7478b66914cf"
+    }
+   ],
+   "weight": 36
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ IS\\ CROSSING\\ AHEAD\\ OF\\ YOU\\.\\ STAND\\ BY\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c905ad8280c38"
+    }
+   ],
+   "weight": 36
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ M\\ OFF\\ THE\\ CENTRELINE\\ \u2014\\ CORRECT\\ NOW\\.$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c63442298d6d8"
+    }
+   ],
+   "weight": 36
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CUT\\ ABORT\\ \u2014\\ SECURE\\ CARGO\\ HATCH\\ FIRST$",
+   "parts": [
+    {
+     "clip": "ce4c38af35ff3"
+    }
+   ],
+   "weight": 36
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CUT\\ ABORT\\ \u2014\\ NO\\ VALID\\ MEMBER\\ SELECTED$",
+   "parts": [
+    {
+     "clip": "c122b53c8516e"
+    }
+   ],
+   "weight": 36
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^DEPARTURE\\ BURN\\ \u2014\\ BOUND\\ FOR\\ (.*?)\\ STATION$",
+   "parts": [
+    {
+     "clip": "cffb131241759"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "ccad847d4b314"
+    }
+   ],
+   "weight": 35
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^LOX\\ EXHAUSTED\\ \u2014\\ NO\\ BOOST\\ AVAILABLE$",
+   "parts": [
+    {
+     "clip": "c6ee9f31fb9f4"
+    }
+   ],
+   "weight": 34
+  },
+  {
+   "source": "HARBOR",
+   "voice": "station",
+   "pattern": "^(.*?)\\ PATROL\\ WINDOW\\ CLOSING\\ \u2014\\ 2\\ MINUTES$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c50f3e589b524"
+    }
+   ],
+   "weight": 34
+  },
+  {
+   "source": "SENSORS",
+   "voice": "ship",
+   "pattern": "^PATROL\\ CONTACT\\ ON\\ INTERCEPT\\ VECTOR$",
+   "parts": [
+    {
+     "clip": "c8083c0d59a05"
+    }
+   ],
+   "weight": 34
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^YOU\\ HAVE\\ DRIFTED\\ OUT\\ OF\\ THE\\ HOLD\\.$",
+   "parts": [
+    {
+     "clip": "cc2639e0a10c1"
+    }
+   ],
+   "weight": 33
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^PROCEED\\ TO\\ MARKER\\ ALPHA\\ AND\\ HOLD$",
+   "parts": [
+    {
+     "clip": "cac8688d0331f"
+    }
+   ],
+   "weight": 32
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ POSITION\\ \u2014\\ TRAFFIC\\ CROSSING$",
+   "parts": [
+    {
+     "clip": "ca2450650a27e"
+    }
+   ],
+   "weight": 32
+  },
+  {
+   "source": "HARBOR",
+   "voice": "station",
+   "pattern": "^PATROL\\ INBOUND\\ \u2014\\ CLEAR\\ THE\\ CLAIM$",
+   "parts": [
+    {
+     "clip": "c3d2c5453fa37"
+    }
+   ],
+   "weight": 32
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^BACK\\ ON\\ STATION\\ AT\\ CLAIM\\ 7741\\-C$",
+   "parts": [
+    {
+     "clip": "c0a4d15016f5f"
+    }
+   ],
+   "weight": 31
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^VELOCITY\\ MATCHED\\ \u2014\\ STANDOFF\\ ON\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c19ee910bd232"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 31
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^STOW\\ YOUR\\ GEAR\\ BEFORE\\ THE\\ JUMP$",
+   "parts": [
+    {
+     "clip": "c8abe767d9fc7"
+    }
+   ],
+   "weight": 30
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CLEARED\\ TO\\ BERTH\\ (.*?)\\ VIA\\ THE\\ LANE$",
+   "parts": [
+    {
+     "clip": "ca36219b39d23"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c4d61cdc91d22"
+    }
+   ],
+   "weight": 30
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^EXCESSIVE\\ SPEED\\ IN\\ THE\\ PATTERN$",
+   "parts": [
+    {
+     "clip": "ce894f7563743"
+    }
+   ],
+   "weight": 30
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^DEPARTURE\\ HELD\\ \u2014\\ CUTTER\\ ACTIVE$",
+   "parts": [
+    {
+     "clip": "cdc9023db4cd5"
+    }
+   ],
+   "weight": 30
+  },
+  {
+   "source": "SYSTEM",
+   "voice": "ship",
+   "pattern": "^COLLISION\\ \u2014\\ (.*?)\\ IMPACT,\\ (.*?)\\ HULL\\ \\-(.*?)%$",
+   "parts": [
+    {
+     "clip": "c346f8d38e7e3"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "cb44c7666f6d0"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "clip": "cb4198b86a308"
+    },
+    {
+     "slot": 2
+    }
+   ],
+   "weight": 29
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^LANDING\\ GEAR\\ DOWN\\ AND\\ LOCKED$",
+   "parts": [
+    {
+     "clip": "c724c95a16f61"
+    }
+   ],
+   "weight": 28
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^WE\\ WILL\\ CALL\\ YOUR\\ DEPARTURE\\.$",
+   "parts": [
+    {
+     "clip": "c9582686e3c9a"
+    }
+   ],
+   "weight": 28
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CARGO\\ HATCH\\ OPEN\\ AND\\ LOCKED$",
+   "parts": [
+    {
+     "clip": "c35c54ee023ef"
+    }
+   ],
+   "weight": 27
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^LANE\\ IS\\ CLEAR\\.\\ RESUME\\ (.*?)\\ M/S\\.$",
+   "parts": [
+    {
+     "clip": "c488049f46d64"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c81f0d4508525"
+    }
+   ],
+   "weight": 27
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CARGO\\ HATCH\\ OPENED\\ ON\\ FINAL$",
+   "parts": [
+    {
+     "clip": "ca760aaeb2dba"
+    }
+   ],
+   "weight": 27
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^MARKER\\ (.*?)\\ MISSED\\ ON\\ DEPARTURE$",
+   "parts": [
+    {
+     "clip": "c667f1c8c40d2"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c19257eb9c216"
+    }
+   ],
+   "weight": 27
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^LANDING\\ GEAR\\ UP\\ AND\\ STOWED$",
+   "parts": [
+    {
+     "clip": "c70f319ba847f"
+    }
+   ],
+   "weight": 26
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^HOLD\\ \u2014\\ TRAFFIC\\ IN\\ THE\\ LANE$",
+   "parts": [
+    {
+     "clip": "c28e6c6a46007"
+    }
+   ],
+   "weight": 26
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^DEPARTED\\ THE\\ LANE\\ CORRIDOR$",
+   "parts": [
+    {
+     "clip": "c4bf98eeedf5b"
+    }
+   ],
+   "weight": 26
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^BATTERY\\ LOW\\ \u2014\\ (.*?)%\\ REMAINING$",
+   "parts": [
+    {
+     "clip": "c17823b2e63b9"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c05c6b0e28519"
+    }
+   ],
+   "weight": 25
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CARGO\\ HATCH\\ OPEN\\ ON\\ FINAL$",
+   "parts": [
+    {
+     "clip": "c53981d5bf506"
+    }
+   ],
+   "weight": 25
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CLEARED\\ TO\\ LAND\\ \u2014\\ BERTH\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c064f1eb84da3"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 24
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^YOU\\ ARE\\ OUTSIDE\\ THE\\ LANE$",
+   "parts": [
+    {
+     "clip": "cec635732672e"
+    }
+   ],
+   "weight": 24
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^LOSS\\ OF\\ SEPARATION\\ WITH\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "cfd28ca648a5a"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 24
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^RETURN\\ TO\\ MARKER\\ ALPHA$",
+   "parts": [
+    {
+     "clip": "c80d5965d5e39"
+    }
+   ],
+   "weight": 22
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ PASSED\\ \u2014\\ NEXT\\ MARKER\\ (.*?)$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c0a7e9cae922d"
+    },
+    {
+     "slot": 1
+    }
+   ],
+   "weight": 22
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^STAND\\ BY\\ \u2014\\ SEQUENCING$",
+   "parts": [
+    {
+     "clip": "cda017b0f753d"
+    }
+   ],
+   "weight": 21
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^GEAR\\ RAISED\\ ON\\ FINAL$",
+   "parts": [
+    {
+     "clip": "c0d364721e62f"
+    }
+   ],
+   "weight": 20
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CARGO\\ HATCH\\ SECURED$",
+   "parts": [
+    {
+     "clip": "c24fc5d106c0f"
+    }
+   ],
+   "weight": 19
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^REDUCE\\ SPEED\\ \u2014\\ (.*?)\\ M/S$",
+   "parts": [
+    {
+     "clip": "c8380f151e346"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c7f716a9286e2"
+    }
+   ],
+   "weight": 19
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CONTACT\\ \u2014\\ (.*?)\\ SECTION\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c80766392b4db"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c990b2d0a0ce8"
+    },
+    {
+     "slot": 1
+    }
+   ],
+   "weight": 19
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^CONTINUE\\ APPROACH$",
+   "parts": [
+    {
+     "clip": "c090ba4ab6c42"
+    }
+   ],
+   "weight": 17
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^DRIVE\\ RUNNING\\ \u2014\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c14f2c90c4cd1"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 16
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^LANDING\\ GEAR\\ \u2014\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c0608444781eb"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 15
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^DRIVE\\ SHUT\\ DOWN$",
+   "parts": [
+    {
+     "clip": "c78d55617ebf7"
+    }
+   ],
+   "weight": 15
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^CARGO\\ HATCH\\ \u2014\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "cbc9c94724f09"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 14
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^MARKER\\ (.*?)\\ MISSED$",
+   "parts": [
+    {
+     "clip": "c667f1c8c40d2"
+    },
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c55185d30b281"
+    }
+   ],
+   "weight": 14
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ \u2014\\ CORRECT\\ IT$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c32cc471707c3"
+    }
+   ],
+   "weight": 13
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^GO\\ AROUND\\ \u2014\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "cf71c7a2f098f"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 12
+  },
+  {
+   "source": "OPS",
+   "voice": "ship",
+   "pattern": "^JETTISONED\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c668dd8e350b3"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 11
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)\\ \\(READBACK\\)$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c1abfbbf053ee"
+    }
+   ],
+   "weight": 11
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^(.*?)CONTACT\\ \u2014\\ (.*?)\\ (.*?)$",
+   "parts": [
+    {
+     "slot": 0
+    },
+    {
+     "clip": "c80766392b4db"
+    },
+    {
+     "slot": 1
+    },
+    {
+     "slot": 2
+    }
+   ],
+   "weight": 11
+  },
+  {
+   "source": "ATC",
+   "voice": "station",
+   "pattern": "^TRAFFIC\\ \u2014\\ (.*?)$",
+   "parts": [
+    {
+     "clip": "c7833b6438df5"
+    },
+    {
+     "slot": 0
+    }
+   ],
+   "weight": 10
+  }
+ ],
+ "words": {
+  "pilot": {
+   "FREEHOLD": "c7aac333f4ebc",
+   "FREEHOLD CONTROL": "c6d9cf2f4301f",
+   "LAGRANGE UNION": "c33b0e7cee8ad",
+   "LAGRANGE UNION CONTROL": "c80de9e21a549",
+   "MERIDIAN CO.": "c186a8181792d",
+   "MERIDIAN CO. CONTROL": "cbd8f43e4f9b7"
+  },
+  "ship": {
+   "ACTIVE": "c3c7010df9c2b",
+   "ALPHA": "c3fa8f2ec60c2",
+   "ANTENNA MAST": "cef389f6043fc",
+   "APPROACHING": "c6fd6d7947aa0",
+   "BAYFLOOR": "c158191fbbbed",
+   "BOTH": "cfc119e406d0f",
+   "BRAVO": "c0264ebf31aac",
+   "CHARLIE": "c0dc75bf2dd6c",
+   "DEEP": "c1c317fe242d2",
+   "DELTA": "c92611bbc2181",
+   "DRIVE": "c8f01109a19b0",
+   "ENGINE BELL": "c2f03990a0fc0",
+   "FIRM": "c188e2d3f4b43",
+   "FREEHOLD": "cf1a646b80b37",
+   "FREEHOLD CONTROL": "c7e4ade58af6a",
+   "GREASED": "c2701628ac3ad",
+   "HARD": "c2e300bb40c16",
+   "HOLD": "c13781f9e5ad2",
+   "HOLDING": "c83fb13300f0e",
+   "HULL AFT": "c5d8dd4d2518e",
+   "HULL FORE": "c89b0a7b14eb7",
+   "L": "ca9dcfa07cfb7",
+   "LAGRANGE UNION": "c0dfc4e7192fe",
+   "LAGRANGE UNION CONTROL": "c40b46fb70276",
+   "LANE TUG BOLLARD": "caef3e076edf6",
+   "MATCHED": "cf20f7ab07f13",
+   "MERIDIAN CO.": "c88aabdf3c53a",
+   "MERIDIAN CO. CONTROL": "c5fbbfd322510",
+   "NOSE": "cef5e2f6451f9",
+   "OFF": "c946edb959fc0",
+   "ORE BARGE THRENODY": "c9bcbe78cf191",
+   "PANEL A": "c67ad22bfbf8d",
+   "PANEL B": "c63bece78b1d3",
+   "PASSIVE": "c288d128abaef",
+   "R": "c56e3d4bda816",
+   "SENSOR MAST": "cba5b8c250afb",
+   "SHUTTLE MERIDIAN 9": "ccd84a3b87d7c",
+   "SPEED": "cce18b1da7150",
+   "SPINE": "c1489c3a8a2e4",
+   "START": "cef45fce1e22b",
+   "STATION": "ccad847d4b314",
+   "STRUCTURE": "ccc45a8fc882c",
+   "THRUST": "c9614dca78add",
+   "POINT": "c628b47228f03",
+   "MINUS": "c0b1e398c79ae",
+   "HUNDRED": "c135250ea4d76",
+   "THOUSAND": "cdf52b0dac4cb"
+  },
+  "station": {
+   "ACTIVE": "c5b2e6b3bed93",
+   "ALPHA": "c4fe322718003",
+   "ANTENNA MAST": "cb0da27a49ac9",
+   "APPROACHING": "c2aa768704687",
+   "BAYFLOOR": "ce220e3e1c331",
+   "BOTH": "cfd585141fafc",
+   "BRAVO": "c073d2d55d771",
+   "CHARLIE": "cd8978f1788ac",
+   "DEEP": "cce6d45db5f0f",
+   "DELTA": "cecdc371baa57",
+   "DRIVE": "ccfa88da8f4f3",
+   "ENGINE BELL": "c3469a7f37de7",
+   "FIRM": "cc986fd21819d",
+   "FREEHOLD": "c43ba18544729",
+   "FREEHOLD CONTROL": "c7a7e8c715fae",
+   "GREASED": "c77b1d564eb7b",
+   "HARD": "caf2daca0e8de",
+   "HOLD": "c1be1d5539ff0",
+   "HOLDING": "c47fe9a010205",
+   "HULL AFT": "c13724eac6bee",
+   "HULL FORE": "cad49dccf1c8d",
+   "L": "ce2c9095e45c1",
+   "LAGRANGE UNION": "ca064a0af4bb5",
+   "LAGRANGE UNION CONTROL": "c35f5c5dbce8d",
+   "LANE TUG BOLLARD": "c7095fb89daec",
+   "MATCHED": "c399f897cbb3a",
+   "MERIDIAN CO.": "c612f896e7bca",
+   "MERIDIAN CO. CONTROL": "c23787522d15b",
+   "NOSE": "c26c3a2664901",
+   "OFF": "c3bf156473318",
+   "ORE BARGE THRENODY": "cffb0713e0537",
+   "PANEL A": "cf4c8c1e95ca2",
+   "PANEL B": "c76014ab36409",
+   "PASSIVE": "cc16de559a58c",
+   "R": "cb29e5d3df9ab",
+   "SENSOR MAST": "c60aa79c43572",
+   "SHUTTLE MERIDIAN 9": "c2f74317de217",
+   "SPEED": "ce3d965b6b121",
+   "SPINE": "cc595dd1b293e",
+   "START": "c69277205e5fc",
+   "STATION": "c49065687c593",
+   "STRUCTURE": "c7a70d5856964",
+   "THRUST": "c8e4d2e764fc8",
+   "POINT": "c467326ae4067",
+   "MINUS": "c121dae09d4ed",
+   "HUNDRED": "ccd410bfea950",
+   "THOUSAND": "c7e5f79360380"
+  }
+ },
+ "digits": {
+  "pilot": [],
+  "ship": [
+   "c3e6c599b83e6",
+   "ce4ed320b9bd3",
+   "c4335faede6c5",
+   "c027f228d63e3",
+   "ce56762ad8b42",
+   "c2ef53a5c7ed6",
+   "c6ff4d1cd0f78",
+   "c540e5de4e777",
+   "c4db199db2ddf",
+   "cbdf61ac9636e"
+  ],
+  "station": [
+   "cc32763a2fe23",
+   "c13cdc8b8ee1c",
+   "cc2680ad0a3f3",
+   "c135312cadd39",
+   "c266f571ee8fa",
+   "cca83df6a6c02",
+   "c906659b36e58",
+   "c53945ccac449",
+   "c90756d9aad26",
+   "c9e658562c922"
+  ]
+ },
+ "phonetic": {
+  "pilot": {},
+  "ship": {
+   "A": "c16ab0a6cd0f6",
+   "B": "c0264ebf31aac",
+   "C": "c0dc75bf2dd6c",
+   "D": "c92611bbc2181",
+   "E": "ce2c22fd48de2",
+   "F": "c8e1936f8ed5e",
+   "G": "c5b4b00ec83c8",
+   "H": "ca35027922c7c",
+   "I": "ce5fdc06a41bb",
+   "J": "cea0ab73918ff",
+   "K": "c9a5d9a4f3f36",
+   "L": "c6b5acfa38c48",
+   "M": "c742d8ecee560",
+   "N": "c688526fb536a",
+   "O": "c51a6df918172",
+   "P": "c183d11b3bcee",
+   "Q": "c956d166dac28",
+   "R": "cde899a93ff84",
+   "S": "cb198d0da1bc7",
+   "T": "c4ed56191d5cb",
+   "U": "cceee6ffd9c5b",
+   "V": "cfd326af5016c",
+   "W": "c461861303021",
+   "X": "c950e228f9696",
+   "Y": "c3482b12d6330",
+   "Z": "cb6176a15043e"
+  },
+  "station": {
+   "A": "cb8965936d04c",
+   "B": "c073d2d55d771",
+   "C": "cd8978f1788ac",
+   "D": "cecdc371baa57",
+   "E": "c5e96b5d001c3",
+   "F": "caa4404036cc2",
+   "G": "cde87598e0798",
+   "H": "c4697a35f6f83",
+   "I": "c4559c638b354",
+   "J": "cdadc951b2c29",
+   "K": "c0bc38f4f5295",
+   "L": "c0e0fc30724d0",
+   "M": "c6bfac8ebbc6c",
+   "N": "ce22ed4122cda",
+   "O": "cc45c7abe57c0",
+   "P": "c6939ec719f03",
+   "Q": "c054a2ce734eb",
+   "R": "ca870ebd9dff0",
+   "S": "c124bb0a5b231",
+   "T": "c705b451af2b9",
+   "U": "c56a6a7856ec3",
+   "V": "c44a4e9540a48",
+   "W": "c67d52dd1db11",
+   "X": "c9718c1b8b143",
+   "Y": "c40b4ce9dd7bc",
+   "Z": "c8177f8d84300"
+  }
+ },
+ "callsigns": {
+  "SV KESTREL": {
+   "pilot": {
+    "full": "ccc06c5482879",
+    "short": "c87a7102cb6cf"
+   },
+   "ship": {
+    "full": "cd26650783d29",
+    "short": "cde8d390ef7bf"
+   },
+   "station": {
+    "full": "c0a5efabf1511",
+    "short": "cd62120b2c9b0"
+   }
+  }
+ },
+ "pilot": {
+  "request_clearance": [
+   {
+    "named": "station"
+   },
+   {
+    "named": "callsign"
+   },
+   {
+    "clip": "cc57652ecd228"
+   }
+  ],
+  "request_departure": [
+   {
+    "named": "station"
+   },
+   {
+    "named": "callsign"
+   },
+   {
+    "clip": "c8ec574ee9085"
+   }
+  ],
+  "readback": [
+   {
+    "named": "callsign"
+   },
+   {
+    "clip": "ca2ee816d7ae8"
+   }
+  ],
+  "auto_berth": [
+   {
+    "named": "station"
+   },
+   {
+    "named": "callsign"
+   },
+   {
+    "clip": "c6d2d50f46168"
+   }
+  ],
+  "abort": [
+   {
+    "named": "station"
+   },
+   {
+    "named": "callsign"
+   },
+   {
+    "clip": "ccb9e8d6d1769"
+   }
+  ]
+ },
+ "voices": {
+  "station": {
+   "bus": "RADIO",
+   "squelch": true
+  },
+  "ship": {
+   "bus": "CABIN",
+   "squelch": false
+  },
+  "pilot": {
+   "bus": "SIDETONE",
+   "squelch": false
+  }
+ },
+ "sources": {
+  "ATC": "station",
+  "HARBOR": "station",
+  "OPS": "ship",
+  "SYSTEM": "ship",
+  "SENSORS": "ship",
+  "SALVAGE": "silent",
+  "MARKET": "silent",
+  "PANEL": "silent"
+ },
+ "hush_while_cutting": [
+  "ship"
+ ]
+}

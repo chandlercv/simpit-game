@@ -83,6 +83,8 @@ func _process(_delta: float) -> void:
 
 
 func _refresh() -> void:
+	# The lever, not the door: this is the control that MOVES the lever, so it has
+	# to name the thing pressing it will do, not the state the door has reached.
 	_hatch.text = "SECURE HATCH" if GameState.cargo_hatch_open else "OPEN HATCH"
 	queue_redraw()
 

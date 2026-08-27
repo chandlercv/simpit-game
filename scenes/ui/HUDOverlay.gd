@@ -276,10 +276,15 @@ func _draw_gear_indicator() -> void:
 ## right now (SalvageSystem.request_cut, MarketSystem) — pulses so an open
 ## hatch left open by accident still catches the eye.
 func _draw_hatch_indicator() -> void:
-	if not GameState.cargo_hatch_open:
+	if GameState.hatch_secured():
 		return
+	# Mid-travel is its own state, and worth naming: the door is neither shut
+	# enough to cut over nor open enough to take a piece.
+	var text := "CARGO HATCH OPEN"
+	if not GameState.hatch_open_locked():
+		text = "CARGO HATCH IN TRANSIT %d%%" % roundi(GameState.hatch_position * 100.0)
 	var a := 0.55 + 0.45 * sin(_time * TAU * 1.2)
-	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 28), "CARGO HATCH OPEN",
+	draw_string(ThemeDB.fallback_font, Vector2(size.x - 190, 28), text,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(SALVAGE_COLOR, a))
 
 
@@ -462,7 +467,7 @@ func _draw_salvage_pieces() -> void:
 		# Once the hatch is open, name the gate that's actually blocking the
 		# scoop rather than just printing a number — the SCOOP page has the full
 		# instrument, this is the glance version.
-		if GameState.cargo_hatch_open:
+		if GameState.hatch_open_locked():
 			draw_string(font, screen + Vector2(14, 21), _scoop_cue(st),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, color)
 		if scoop > 0.0:

@@ -13,6 +13,7 @@ extends Control
 
 const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
 const Instrument := preload("res://scenes/ui/Instrument.gd")
+const TouchSliderScript := preload("res://scenes/ui/TouchSlider.gd")
 
 @export var accent: Color = Color(0.3, 0.9, 0.78)
 
@@ -22,6 +23,8 @@ const FOOTER_H := 92.0
 var _ref_buttons: Dictionary = {}
 var _band_buttons: Dictionary = {}
 var _rate_buttons: Dictionary = {}
+var _volume_sliders: Dictionary = {}
+var _mute_button: Button = null
 
 
 func _ready() -> void:
@@ -30,6 +33,7 @@ func _ready() -> void:
 	GameState.nav_reference_changed.connect(func(_id: String) -> void: _sync())
 	GameState.tactical_band_changed.connect(func(_on: bool) -> void: _sync())
 	GameState.rate_scale_changed.connect(func(_s: String) -> void: _sync())
+	AudioSystem.mixer_changed.connect(_sync)
 	# The resolved datum moves on its own — an approach starting, a target
 	# selected — without the SELECTION changing, so the footer has to follow the
 	# shared tick rather than only the intents above.
@@ -50,6 +54,7 @@ func _build() -> void:
 			func(choice: String) -> void: GameState.set_tactical_band(choice == "SHOW"))
 	_rate_buttons = _add_row(outer, "RATE SCALE", GameState.RATE_SCALES,
 			GameState.set_rate_scale)
+	_add_volume_row(outer)
 
 
 ## One labelled row of mutually exclusive touch buttons.
@@ -78,6 +83,66 @@ func _add_row(parent: Control, label: String, choices: Array,
 	return out
 
 
+## Volume, one slider per bus, and a master mute beside them.
+##
+## Sliders rather than the button rows above, because a level is a continuous
+## setting and a mute is not. MUTE is here for the same reason the whole page is:
+## the Tactical display takes no clicks and a simpit may have no keyboard within
+## reach, so the one control someone will want at two in the morning has to be
+## touchable.
+##
+## The bus names are the mixer's own, not a second list — AudioSystem.MIXER_BUSES
+## decides both what exists and what order it is shown in.
+func _add_volume_row(parent: Control) -> void:
+	var caption := Label.new()
+	caption.text = "VOLUME"
+	caption.add_theme_font_size_override("font_size", Instrument.ANNOT)
+	caption.add_theme_color_override("font_color", Color(accent, 0.7))
+	parent.add_child(caption)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", ButtonTheme.TOUCH_SEP)
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(row)
+
+	for bus: String in AudioSystem.MIXER_BUSES:
+		var slider: Control = TouchSliderScript.new()
+		slider.accent = accent
+		slider.label = _bus_label(bus)
+		slider.value = AudioSystem.level(bus)
+		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slider.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		slider.user_changed_value.connect(
+				func(v: float) -> void: AudioSystem.set_level(bus, v))
+		row.add_child(slider)
+		_volume_sliders[bus] = slider
+
+	_mute_button = ButtonTheme.make_touch_button(accent)
+	_mute_button.text = "MUTE"
+	_mute_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mute_button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_mute_button.pressed.connect(AudioSystem.toggle_mute)
+	row.add_child(_mute_button)
+
+
+## What each bus is, said as the pilot would hear it rather than as the mixer
+## names it. STRUCTURE is everything that reaches you through the frame; CABIN is
+## the air you are sitting in.
+func _bus_label(bus: String) -> String:
+	match bus:
+		"Master":
+			return "ALL"
+		"CABIN":
+			return "CABIN"
+		"STRUCTURE":
+			return "HULL"
+		"RADIO":
+			return "RADIO"
+		"ALERTS":
+			return "ALARMS"
+	return bus
+
+
 ## The datum's own label is written for the band's legend and is too long for a
 ## button; AUTO and INERTIAL read fine as they are.
 func _short_label(choice: String) -> String:
@@ -98,6 +163,11 @@ func _sync() -> void:
 	_mark(_band_buttons["HIDE"], not GameState.tactical_band)
 	for scale: String in _rate_buttons:
 		_mark(_rate_buttons[scale], scale == GameState.rate_scale)
+	for bus: String in _volume_sliders:
+		# Setting .value does not re-emit user_changed_value, so no feedback loop.
+		_volume_sliders[bus].value = AudioSystem.level(bus)
+	if _mute_button != null:
+		_mark(_mute_button, AudioSystem.muted())
 	queue_redraw()
 
 

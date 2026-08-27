@@ -157,6 +157,7 @@ const BUILTIN_PROFILES := [
 			{"key": KEY_H, "action": "mfd_b_menu"},
 			{"key": KEY_BRACKETLEFT, "action": "view_belly"},
 			{"key": KEY_BRACKETRIGHT, "action": "view_cycle"},
+			{"key": KEY_BACKSLASH, "action": "audio_mute"},
 		],
 	},
 ]
@@ -631,6 +632,8 @@ func _process_panel_commands() -> void:
 		GameState.set_nav_reference("TARGET")
 	if Input.is_action_just_pressed("tactical_band_toggle"):
 		GameState.toggle_tactical_band()
+	if Input.is_action_just_pressed("audio_mute"):
+		AudioSystem.toggle_mute()
 
 	# Market. Dock has no unambiguous target from a single button, so it docks at
 	# the first faction; SELL / DEPART are unambiguous.

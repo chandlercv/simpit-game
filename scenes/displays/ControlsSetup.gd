@@ -63,6 +63,7 @@ const BUTTON_TARGETS := [
 	{"label": "Nav Ref → Platform", "action": "nav_ref_pad", "group": "NAV"},
 	{"label": "Nav Ref → Target", "action": "nav_ref_target", "group": "NAV"},
 	{"label": "Tactical Band Show/Hide", "action": "tactical_band_toggle", "group": "NAV"},
+	{"label": "Mute Audio", "action": "audio_mute", "group": "NAV"},
 	{"label": "Prev Cut Target", "action": "salvage_prev", "group": "SALVAGE"},
 	{"label": "Next Cut Target", "action": "salvage_next", "group": "SALVAGE"},
 	{"label": "Cycle Sensor Mode", "action": "sensor_mode_cycle", "group": "SALVAGE"},

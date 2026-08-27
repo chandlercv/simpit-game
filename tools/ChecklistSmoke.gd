@@ -192,17 +192,17 @@ func _test_ticks() -> void:
 	# The hatch, both ways. It is the single most interlocked thing on the ship —
 	# it gates the torch, docking and departure — and it appears on all four
 	# procedures, so it is the row most worth proving moves.
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 	_check(_status("cutting", "CARGO HATCH") == ChecklistContent.Status.PASS,
 			"a secured hatch passes the cutting procedure")
 	_check(_status("collecting", "CARGO HATCH") == ChecklistContent.Status.FAIL,
 			"...and fails the collecting procedure, which needs it open")
-	GameState.set_cargo_hatch(true)
+	await _set_hatch(true)
 	_check(_status("cutting", "CARGO HATCH") == ChecklistContent.Status.FAIL,
 			"opening the hatch fails the cutting procedure")
 	_check(_status("collecting", "CARGO HATCH") == ChecklistContent.Status.PASS,
 			"...and passes the collecting procedure")
-	GameState.set_cargo_hatch(false)
+	await _set_hatch(false)
 
 	# The gear, through its travel. Three seconds each way is exactly why the row
 	# has to report IN TRANSIT rather than just down or up.
@@ -431,6 +431,23 @@ func _stub_member() -> Dictionary:
 		"id": 0, "name": "TEST MEMBER", "good": "ALLOY", "node": "HullFore",
 		"center": Vector3.ZERO, "seam": Vector3.UP, "radius": 1.0,
 	}
+
+
+## Move the hatch LEVER and wait for the DOOR to get there.
+##
+## The lever is instant; the door travels over HATCH_TRAVEL_TIME, and every
+## interlock downstream reads the door rather than the lever. The wait is taken
+## from the constant that sets the travel and never transcribed — the same rule
+## the limit rows follow.
+func _set_hatch(open: bool) -> void:
+	GameState.set_cargo_hatch(open)
+	var elapsed := 0.0
+	while elapsed < GameState.HATCH_TRAVEL_TIME * 2.0:
+		var arrived := GameState.hatch_open_locked() if open else GameState.hatch_secured()
+		if arrived:
+			return
+		await get_tree().process_frame
+		elapsed += get_process_delta_time()
 
 
 func _check(condition: bool, label: String) -> void:
