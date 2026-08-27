@@ -323,10 +323,10 @@ func _enqueue(voice: String, clips: Array[String], text: String) -> void:
 	# Only one of its lines may be pending: a newer one supersedes whatever had
 	# not been said yet, so a burst of changes is answered by the last of them
 	# rather than read out as a list a pilot has already flown past.
-	if voice != "station":
+	if voice == "ship":
 		var kept: Array[Dictionary] = []
 		for pending: Dictionary in _queue:
-			if String(pending["voice"]) == "station":
+			if String(pending["voice"]) != "ship":
 				kept.append(pending)
 		_queue = kept
 	_queue.append({"voice": voice, "clips": clips, "text": text, "posted": now})
