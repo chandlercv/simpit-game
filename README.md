@@ -1079,8 +1079,12 @@ Send this file with any report of a window, focus or multi-monitor problem.
 The previous session is kept alongside it as `window_log.prev.txt`, because these
 faults are usually reported by someone who has already restarted the game to see
 whether they stick — truncating on launch and keeping nothing would destroy the
-evidence in the act of confirming it. Each file stops at 20,000 lines, so the
-pair can't cost more than about 4 MB however long a session runs.
+evidence in the act of confirming it. Each session stops at 20,000 lines (~2 MB),
+so the pair costs about 4 MB at worst, however long a session runs. If the older
+file *can't* be moved aside — read-only, or held open by something else — the new
+session is **appended** rather than written over it, and says so at the top;
+appending stops if the file ever passes 8 MB, at which point the game logs to the
+console only and names the file to clear.
 
 ### Handy tool scenes (`tools/`)
 

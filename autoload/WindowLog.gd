@@ -52,6 +52,11 @@ const PREV_LOG_PATH := "user://window_log.prev.txt"
 ## overnight session must not be able to fill a disk with it.
 const LINE_BUDGET := 20000
 
+## The size at which a log that cannot be rotated stops being appended to (see
+## _open_log). Well clear of the 2 MB a single session can reach, so only a file
+## that has been accumulating sessions ever meets it.
+const APPEND_CEILING_BYTES := 8 << 20
+
 ## How often the log says it is still running (see _heartbeat). Two lines a
 ## minute is legible at a glance and spends the budget slowly enough that a
 ## long session still records the end of itself.
@@ -135,13 +140,13 @@ func _ready() -> void:
 	# the windows this log is about are placed while the card is still up.
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_refresh_screen_rects()
-	_roll_previous()
-	_file = FileAccess.open(LOG_PATH, FileAccess.WRITE)
-	if _file == null:
-		push_warning("WindowLog: could not open %s for writing" % LOG_PATH)
-	else:
-		print("window log: ", ProjectSettings.globalize_path(LOG_PATH))
+	var rolled := _roll_previous()
+	_open_log(rolled == OK)
 	note("boot", "Salvager window log — %s" % Time.get_datetime_string_from_system())
+	if rolled != OK:
+		note("boot", ("could NOT move the previous session to %s (error %d), so this run was "
+				+ "APPENDED rather than written over it — everything above this line is an "
+				+ "older session") % [PREV_LOG_PATH, rolled])
 	_log_environment()
 	watch(get_window(), "main")
 	snapshot("boot")
@@ -149,16 +154,54 @@ func _ready() -> void:
 
 # --- Writing ---------------------------------------------------------------
 
-## Move last session's log aside before this one truncates it. Renamed rather
-## than copied so a large file costs nothing, and the older generation is
-## dropped first because rename won't overwrite.
-func _roll_previous() -> void:
+## Move last session's log aside before this one is written. Renamed rather than
+## copied so a large file costs nothing, and the older generation is dropped
+## first because rename won't overwrite on every platform.
+##
+## Returns the rename's error, OK also meaning "there was nothing to move". The
+## caller must respect a failure: opening the log for writing anyway would
+## truncate the very evidence the roll exists to keep, and the read-only file or
+## the lock that stopped the rename says nothing about the file we would then
+## destroy.
+func _roll_previous() -> Error:
 	if not FileAccess.file_exists(LOG_PATH):
-		return
+		return OK
+	# A failure here is not itself fatal — on Windows rename removes the target
+	# anyway — so it is the rename's verdict that decides.
 	if FileAccess.file_exists(PREV_LOG_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(PREV_LOG_PATH))
-	DirAccess.rename_absolute(ProjectSettings.globalize_path(LOG_PATH),
+	return DirAccess.rename_absolute(ProjectSettings.globalize_path(LOG_PATH),
 			ProjectSettings.globalize_path(PREV_LOG_PATH))
+
+
+## Open this session's log: truncating when the previous one was safely moved
+## aside, appending when it could not be. Preservation beats tidiness — a log
+## with two sessions in it is readable, and a log that overwrote the run being
+## reported is not.
+##
+## Appending cannot be allowed to grow without limit, though: a permanently
+## unrollable file (read-only, or held open by something else) would otherwise
+## gain a session every launch forever. Past APPEND_CEILING_BYTES this session
+## keeps its stdout output and writes no file, which loses the cheaper half —
+## and says so, naming the file to clear.
+func _open_log(fresh: bool) -> void:
+	if fresh:
+		_file = FileAccess.open(LOG_PATH, FileAccess.WRITE)
+	else:
+		_file = FileAccess.open(LOG_PATH, FileAccess.READ_WRITE)
+		if _file and _file.get_length() >= APPEND_CEILING_BYTES:
+			_file = null
+			push_warning(("WindowLog: %s is over %d MB and cannot be rotated — logging to "
+					+ "stdout only. Delete or move that file.")
+					% [ProjectSettings.globalize_path(LOG_PATH), APPEND_CEILING_BYTES >> 20])
+			return
+		if _file:
+			_file.seek_end()
+	if _file == null:
+		push_warning("WindowLog: could not open %s for writing (error %d) — logging to stdout only"
+				% [LOG_PATH, FileAccess.get_open_error()])
+		return
+	print("window log: ", ProjectSettings.globalize_path(LOG_PATH))
 
 ## One timestamped line, to the log file and to stdout. `category` is a short
 ## tag so the file can be grepped by concern (focus, pointer, layout, input).
