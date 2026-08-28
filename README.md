@@ -834,6 +834,7 @@ remapper at all:
 | --- | --- |
 | **F7** | Open the remapper (Configure Controls) |
 | **F5 / F6** | Re-detect monitors / open Display Setup |
+| **F8** | Stamp a window/focus dump into the **window log** (see *Running*) |
 | **Esc** | Quit (or cancel an in-progress bind while the remapper is open) |
 
 ### Mouse / touch (secondary displays)
@@ -1010,6 +1011,21 @@ real OS window, with its own input stream and its own content scale.
   inside its **usable** rect, so the taskbar doesn't clip the bottom row. spacedesk index order isn't stable across reconnects, but the saved
   layout is keyed by geometry and `F5` re-detects — reassign with the chooser
   (or the `tools/ScreenLabeler.tscn` dev tool) if a reconnect shuffles things.
+- **The flight view keeps the keyboard.** Each window spawned takes OS focus
+  from the one before it, so without help the *last* panel placed ends up owning
+  the mouse and keyboard — on a rig where the Main view has a screen to itself,
+  that leaves the flight view rendering and flying (HOTAS is polled
+  process-globally and needs no focus) while answering no click and no keystroke.
+  The Main window therefore takes focus back for the first few seconds after a
+  layout is built. It stops the instant you press, click or tap anything — so
+  reaching straight for an MFD still works — and it never pulls focus out of
+  another application you have switched to.
+- **When a window misbehaves**, the **window log** (`user://window_log.txt`, and
+  `F8` for a dump on demand — see *Running*) is the thing to read and the thing
+  to send: it records where each window was placed, what the OS made of that,
+  which window holds OS focus, and which windows are actually receiving input.
+  A display that shows the right picture but answers nothing is a focus fault,
+  not a binding fault, and only that file can tell the two apart.
 - **Adding a fifth display** is a role entry in `DisplayConfig` + a scene in
   `WindowManager.SECONDARY_SCENES` and its canvas in `WindowManager.ROLE_CANVAS`
   — no changes to `GameState` or existing windows.
@@ -1042,6 +1058,29 @@ and offset from the pad, so a knock in the berth says exactly where it happened.
 The first line of the docking system's boot message also carries a **build**
 fingerprint of `DockingSystem.gd`, which is the quickest way to tell whether a
 running game predates a change.
+
+**Window log.** Where the OS put each window, and where input went afterwards, is
+recorded to `user://window_log.txt` — path printed at boot (`window log: …`),
+truncated at each launch like the comms log, and written to alongside it. It is
+for the faults that live *outside* the game, where everything in-game looks
+right: a window that lands on the correct screen but never takes OS focus (the
+ship keeps flying, because HOTAS is polled process-globally and needs no focus at
+all), or a pointer that can no longer be dragged onto the other monitor. It
+records the screen topology and the role map; what mode, screen and rect each
+window was **asked** for against what the DisplayServer **read back**; every
+focus change, per window, alongside which Control Godot thinks is focused inside
+it; how many key / button / motion events each window has actually received; and
+which screens the pointer has managed to reach since the last focus change. Lines
+are written only when something changes, plus one status line every 30 seconds so
+a quiet log still proves it is running. **F8** stamps a full dump into it — press
+it the moment something looks wrong, so the log records where that moment was.
+Send this file with any report of a window, focus or multi-monitor problem.
+
+The previous session is kept alongside it as `window_log.prev.txt`, because these
+faults are usually reported by someone who has already restarted the game to see
+whether they stick — truncating on launch and keeping nothing would destroy the
+evidence in the act of confirming it. Each file stops at 20,000 lines, so the
+pair can't cost more than about 4 MB however long a session runs.
 
 ### Handy tool scenes (`tools/`)
 
