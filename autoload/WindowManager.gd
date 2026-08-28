@@ -23,6 +23,12 @@ extends Node
 ## Every tile is the display's own scene Window, so it keeps its content scale
 ## and RoleWindow's Esc/close handling. Adding a new display role is an entry in
 ## SECONDARY_SCENES + ROLE_CANVAS plus a DisplayConfig role — no other changes.
+##
+## Every placement here is narrated to WindowLog, and every window spawned is
+## handed to it to follow: what the OS made of a request, which window ends up
+## with focus, and which windows then receive input are all things this manager
+## cannot see, and a display that lands correctly and still answers nothing is a
+## fault only that log can tell apart from a binding problem.
 
 const SECONDARY_SCENES: Dictionary = {
 	"tactical": "res://scenes/displays/TacticalWindow.tscn",
@@ -54,6 +60,12 @@ const CONFIRM_BACK := "BACK TO TITLE"
 const CONFIRM_LAUNCH := "LAUNCH"
 const CONFIRM_APPLY := "APPLY"
 
+## How long after a layout is built the Main window insists on OS focus (see
+## _hold_main_focus). Long enough to outlast the OS showing the last tile —
+## measured at about 1.7s on a loaded 4-window launch — with room to spare, and
+## it ends the moment anyone presses or taps anything regardless.
+const FOCUS_SETTLE_SECONDS := 3.0
+
 var _windows: Array[Window] = []
 var _hosts: Array = []
 var _overlay_layer: CanvasLayer = null
@@ -65,6 +77,12 @@ var _main_shares_screen := false
 ## so _teardown() — which rebuilds the display layout — can't free it mid-launch.
 var _title_ui: Control = null
 var _title_layer: CanvasLayer = null
+## Deadline (ms, 0 = idle) until which the Main window takes OS focus back if a
+## tile has it — see _hold_main_focus.
+var _focus_deadline_msec := 0
+var _focus_grabs := 0
+## Deliberate input seen when that hold began; any more of it ends the hold.
+var _focus_input_baseline := 0
 
 
 func _ready() -> void:
@@ -109,10 +127,13 @@ func _setup() -> void:
 	if current and current.scene_file_path.begins_with("res://tools/"):
 		return
 	if not GameState.scenario_started:
+		WindowLog.note("flow", "boot → title card")
 		_show_title()
 	elif DisplayConfig.needs_setup_prompt():
+		WindowLog.note("flow", "boot → display chooser (this setup is unassigned)")
 		_show_setup()
 	else:
+		WindowLog.note("flow", "boot → placing windows")
 		_place_all()
 
 
@@ -138,6 +159,7 @@ func _show_title() -> void:
 
 
 func _on_title_launched() -> void:
+	WindowLog.note("flow", "LAUNCH pressed on the title card")
 	_close_title()
 	# An unconfigured monitor setup still gets the chooser, exactly as it did
 	# before the card existed — the card's DISPLAYS row warns that it will. This
@@ -163,6 +185,7 @@ func _close_title() -> void:
 ## launching one. The title card's own DISPLAYS step arrives here through the
 ## zero-arg signal, and is caught by the check below rather than by the caller.
 func _show_setup(confirm_label := CONFIRM_APPLY) -> void:
+	WindowLog.note("flow", "opening the display chooser")
 	_teardown()
 	_restore_main_window()
 	# Opened from the card (its DISPLAYS row, or F6 before launch): the card waits
@@ -198,8 +221,95 @@ func _place_all() -> void:
 	get_tree().paused = false
 	var main_screen: int = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
 	var plans := screen_plans()
+	WindowLog.note("layout", "placing %d screen plan(s), MAIN on screen %d"
+			% [plans.size(), main_screen])
+	WindowLog.log_screens()
+	WindowLog.log_roles()
 	for screen: int in plans:
+		WindowLog.note("layout", "  screen %d: %s"
+				% [screen, _describe_plan(plans[screen], screen == main_screen)])
 		_apply_plan(plans[screen], screen, screen == main_screen)
+	_focus_deadline_msec = Time.get_ticks_msec() + int(FOCUS_SETTLE_SECONDS * 1000.0)
+	_focus_grabs = 0
+	_focus_input_baseline = WindowLog.deliberate_input_count()
+	_settle_and_log()
+
+
+## What a plan asked for, in one line, so the log can be read against what the
+## windows actually became a few lines later.
+func _describe_plan(plan: Dictionary, has_main: bool) -> String:
+	var parts: PackedStringArray = []
+	if has_main:
+		parts.append("main=fullscreen" if plan["main_fullscreen"]
+				else "main=%s" % str(plan["main"]))
+	if plan["tabbed"]:
+		parts.append("tabbed(%s)=%s" % [
+				"overlay" if plan["tab_overlay"] else str(plan["tab_region"]),
+				str(plan["tab_roles"])])
+	else:
+		var tiles: Dictionary = plan["tiles"]
+		for role: String in tiles:
+			parts.append("%s=%s" % [role, str(tiles[role])])
+	return "  ".join(parts)
+
+
+## The OS gets the last word on a window's mode, rect and focus, and it does not
+## always take it in the frame we asked. Dump once the windows have settled, so
+## the log records what they BECAME rather than what we requested.
+func _settle_and_log() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	WindowLog.snapshot("layout settled")
+
+
+## Take OS focus back for the Main window for a moment after a layout is built.
+##
+## Every window spawned after the Main one takes focus from it, and the last tile
+## created keeps it. On a rig where the Main view has a screen to itself that is
+## invisible until you try to use it: the flight view renders, the ship flies —
+## HOTAS is polled process-globally and needs no window focus at all — and yet
+## the window answers no click and no keystroke, because the OS is handing them
+## to a panel on another monitor.
+##
+## Insisted on across FOCUS_SETTLE_SECONDS rather than grabbed once, because a
+## tile does not take focus in the frame it is created: the OS shows it a beat
+## later, and a single grab straight after placement is quietly undone.
+##
+## Two things end it early, and both mean "someone else has a better claim than
+## the layout code":
+##  - any key, click or tap on any window — a player reaching for an MFD in the
+##    first seconds of a run must keep the focus their tap just took;
+##  - no window of ours being focused at all, which is the player having
+##    alt-tabbed away during the load. Pulling focus out of another application
+##    would be a worse fault than the one this fixes.
+func _hold_main_focus() -> void:
+	if _focus_deadline_msec == 0:
+		return
+	var win := get_window()
+	if WindowLog.deliberate_input_count() != _focus_input_baseline:
+		_focus_deadline_msec = 0
+		WindowLog.note("focus", "focus hold released early — a window took real input")
+		return
+	if Time.get_ticks_msec() > _focus_deadline_msec:
+		_focus_deadline_msec = 0
+		WindowLog.note("focus", "focus hold over: main has_focus=%s after %d grab(s)"
+				% [win.has_focus(), _focus_grabs])
+		return
+	if win.has_focus() or not _app_has_focus():
+		return
+	_focus_grabs += 1
+	if _focus_grabs == 1:
+		WindowLog.note("focus", "a display window took OS focus from the main window — taking it back")
+	win.grab_focus()
+
+
+## True while any window of this process holds OS focus — get_window_list() is
+## our own windows only, so this is "is the game the foreground application".
+func _app_has_focus() -> bool:
+	for id in DisplayServer.get_window_list():
+		if DisplayServer.window_is_focused(id):
+			return true
+	return false
 
 
 ## Every screen's layout decision, keyed by screen index — the same planning
@@ -265,10 +375,13 @@ func _apply_plan(plan: Dictionary, screen: int, has_main: bool) -> void:
 
 func _position_main_window(rect: Rect2i, fullscreen: bool, screen: int) -> void:
 	var win := get_window()
+	WindowLog.note("layout", "main window: asking for %s on screen %d — currently %s"
+			% ["fullscreen" if fullscreen else str(rect), screen, WindowLog.describe(win)])
 	if fullscreen:
 		_main_shares_screen = false
 		win.current_screen = screen
 		win.mode = Window.MODE_FULLSCREEN
+		WindowLog.note("layout", "main window: now %s" % WindowLog.describe(win))
 		return
 	# Sharing the screen with the panel strip. Leave fullscreen first — geometry
 	# written to a fullscreen window is ignored — and set borderless before the
@@ -279,6 +392,7 @@ func _position_main_window(rect: Rect2i, fullscreen: bool, screen: int) -> void:
 	win.borderless = true
 	win.size = rect.size
 	win.position = rect.position
+	WindowLog.note("layout", "main window: now %s" % WindowLog.describe(win))
 
 
 ## Give the whole Main screen back before the chooser is drawn over it:
@@ -295,6 +409,8 @@ func _restore_main_window() -> void:
 	var win := get_window()
 	win.current_screen = DisplayConfig.get_screen_for_role(DisplayConfig.ROLE_MAIN)
 	win.mode = Window.MODE_FULLSCREEN
+	WindowLog.note("layout", "main window given its whole screen back — %s"
+			% WindowLog.describe(win))
 
 
 func _spawn_window(role: String, rect: Rect2i) -> void:
@@ -315,6 +431,7 @@ func _spawn_window(role: String, rect: Rect2i) -> void:
 	win.size = rect.size
 	add_child(win)
 	_windows.append(win)
+	WindowLog.watch(win, role)
 
 
 func _spawn_packed_window(roles: Array, rect: Rect2i) -> void:
@@ -346,6 +463,7 @@ func _spawn_packed_window(roles: Array, rect: Rect2i) -> void:
 	win.add_child(host)
 	add_child(win)
 	_windows.append(win)
+	WindowLog.watch(win, "tabs: " + _roles_title(roles))
 
 
 func _make_overlay_host(roles: Array) -> void:
@@ -410,6 +528,9 @@ func _ensure_overlay_layer() -> CanvasLayer:
 
 
 func _teardown() -> void:
+	if not _windows.is_empty() or not _hosts.is_empty():
+		WindowLog.note("layout", "tearing down %d window(s) and %d tab host(s)"
+				% [_windows.size(), _hosts.size()])
 	for w in _windows:
 		if is_instance_valid(w):
 			w.queue_free()
@@ -424,6 +545,7 @@ func _teardown() -> void:
 	if _overlay_layer and is_instance_valid(_overlay_layer):
 		_overlay_layer.queue_free()
 	_overlay_layer = null
+	WindowLog.forget_closed()
 
 
 # --- Hot-plug / re-open ----------------------------------------------------
@@ -435,6 +557,7 @@ func _teardown() -> void:
 func _process(_delta: float) -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	_hold_main_focus()
 	if Input.is_action_just_pressed("redetect_displays"):
 		_redetect()
 	elif Input.is_action_just_pressed("open_display_setup"):
@@ -444,5 +567,6 @@ func _process(_delta: float) -> void:
 ## Re-read the monitor topology and rebuild. A setup seen before applies its
 ## saved layout; an unknown one re-opens the chooser.
 func _redetect() -> void:
+	WindowLog.note("flow", "F5 — re-detecting monitors")
 	DisplayConfig.reload()
 	_setup()
