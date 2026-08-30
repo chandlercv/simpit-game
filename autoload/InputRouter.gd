@@ -571,7 +571,7 @@ func _input(event: InputEvent) -> void:
 ##                     does the asymmetric forward/reverse scaling, not this curve.
 ##   {idle_deadzone}   legacy X52 lever (full=-1; the raw threshold is the idle edge)
 ##   {idle, full}      general lever — any rest/travel range and direction, with
-##                     an optional normalized `deadzone` (default 0.02) near idle.
+##                     an optional normalized `deadzone` (default 0.05) near idle.
 ##
 ## Every form RESCALES the travel past its idle band rather than clipping to it.
 ## Clipping leaves the smallest commandable throttle equal to the band itself —
