@@ -38,6 +38,15 @@ extends Node
 ## actions — the shipped default keyboard mapping lives there, overridable like
 ## any profile. `reserved_buttons` are selector-position banks where one button
 ## is always held — never bind actions to them.
+## Fraction of a lever's travel that counts as idle when its profile names no
+## `deadzone` of its own — the general {idle, full} form's default, and the same
+## 5% the shipped X52 profile's raw threshold works out to. It was 0.02, which on
+## a ±1 lever puts the idle edge at raw 0.96: TIGHTER than the legacy X52 form it
+## was meant to generalize, so a throttle re-bound in the remapper came back with
+## less idle margin than the shipped default it replaced. A lever's mechanical
+## rest wanders by more than 2% between units and over a stick's life.
+const IDLE_DEADZONE := 0.05
+
 const BUILTIN_PROFILES := [
 	{
 		"name": "Saitek X52 Flight Control System",
@@ -56,7 +65,14 @@ const BUILTIN_PROFILES := [
 			{"button": 19, "action": "thrust_up"},
 			{"button": 21, "action": "thrust_down"},
 		],
-		"throttle": {"axis": 2, "idle_deadzone": 0.95},
+		# Idle band widened from 0.95 to 0.90 (5% of the lever's raw travel).
+		# Measured with InputEcho, the X52 this was written on rests at +0.9524 —
+		# 0.0024 clear of the old threshold, close enough that where the lever
+		# happened to settle decided whether it commanded anything at all. 0.90
+		# leaves 0.05 of margin, room for the spread between units and for wear,
+		# and costs only the bottom 5% of travel. See _throttle_curve for what
+		# the band edge means and why crossing it is now continuous.
+		"throttle": {"axis": 2, "idle_deadzone": 0.90},
 		"reserved_buttons": [23, 24, 25],
 	},
 	{
@@ -200,6 +216,15 @@ var _throttle_axis := 0
 ## Full throttle spec of the active profile ({idle_deadzone} or {idle, full});
 ## throttle() reads it directly so arbitrary throttle ranges rescale correctly.
 var _throttle_spec: Dictionary = {}
+## True once the engine has actually REPORTED a value for the bound throttle axis.
+## Input.get_joy_axis() answers 0.0 for an axis it has never sampled — the value is
+## a cached last-known reading, not a live query — and 0.0 on a lever is MID-TRAVEL,
+## which every lever form in _throttle_curve maps to HALF OPEN. So a throttle whose
+## first sample hasn't landed yet (enumeration racing the first unpaused frame; a
+## replug, which clears the cached value) would fly the ship off the wreck with the
+## lever shut. Until the sample lands the lever reads idle. _bind_hotas clears it,
+## so a rebind re-arms the gate rather than trusting a cache the replug emptied.
+var _throttle_seen := false
 ## action name -> events we injected, so rebinding on replug is clean.
 var _bound: Dictionary = {}
 ## `hid_axes` specs of the active profiles, composited in _process() because raw
@@ -391,6 +416,20 @@ func _close_controls_setup() -> void:
 	_controls_layer = null
 
 
+## Throttle lines already written, so a rebind that resolves to the same binding
+## stays silent. Windows fires joy_connection_changed once PER DEVICE, and every
+## one of them re-runs _bind_hotas — four sticks on this rig meant the same line
+## five times before the log had a single frame of flight in it.
+var _throttle_noted: Array[String] = []
+
+
+func _note_throttle(line: String) -> void:
+	if _throttle_noted.has(line):
+		return
+	_throttle_noted.append(line)
+	WindowLog.note("input", line)
+
+
 ## Re-resolve GUID -> device index and rebuild the injected Input Map events.
 func _bind_hotas() -> void:
 	for action: String in _bound:
@@ -400,6 +439,7 @@ func _bind_hotas() -> void:
 	_bound = {}
 	_throttle_device = -1
 	_throttle_spec = {}
+	_throttle_seen = false
 	_hid_axis_bindings = []
 	var profiles := _effective_profiles()
 	for device in Input.get_connected_joypads():
@@ -408,9 +448,18 @@ func _bind_hotas() -> void:
 			if profile["guid"] != guid:
 				continue
 			if profile.has("throttle"):
-				_throttle_device = device
-				_throttle_spec = profile["throttle"]
-				_throttle_axis = int(_throttle_spec["axis"])
+				# FIRST match wins, not last: enumeration order is the OS's
+				# business, and a second stick whose profile happens to carry a
+				# throttle must not silently take the lever off the one you fly.
+				if _throttle_device == -1:
+					_throttle_device = device
+					_throttle_spec = profile["throttle"]
+					_throttle_axis = int(_throttle_spec["axis"])
+					_note_throttle("throttle bound: %s axis %d (device %d)"
+							% [profile.get("name", "?"), _throttle_axis, device])
+				else:
+					_note_throttle("throttle already bound — ignoring %s"
+							% profile.get("name", "?"))
 			for spec: Dictionary in profile.get("axes", []):
 				_inject(spec["neg"], _motion(device, int(spec["axis"]), -1.0))
 				_inject(spec["pos"], _motion(device, int(spec["axis"]), 1.0))
@@ -480,41 +529,86 @@ func _inject(action: String, event: InputEvent) -> void:
 	_bound[action].append(event)
 
 
-## -1..1 forward/back command from the throttle profile's axis, 0 when absent
-## or at rest. Three spec forms:
-##   {mode:"gamepad"}  bipolar, center-rest (a self-centering stick/trigger axis
-##                     rather than a lever): raw value is the command directly,
-##                     0 at center, ±1 at the stops; `invert` flips sign. The
-##                     ship-wide reverse cap (SalvageSystem, secondary_thrust_
-##                     fraction) does the asymmetric forward/reverse scaling,
-##                     not this curve.
-##   {idle_deadzone}   legacy X52 lever (idle=+1, full=-1; zero when raw >= deadzone)
-##   {idle, full}      general lever — any rest/travel range and direction, with
-##                     an optional normalized `deadzone` (default 0.02) near idle.
+## -1..1 forward/back command from the throttle profile's axis, 0 when absent,
+## at rest, or not yet sampled (see _throttle_seen — an unsampled lever reads
+## idle, NOT the half-open its raw 0.0 would otherwise curve to).
 func throttle() -> float:
 	if _throttle_device == -1:
 		return 0.0
 	var value := Input.get_joy_axis(_throttle_device, _throttle_axis as JoyAxis)
-	if String(_throttle_spec.get("mode", "")) == "gamepad":
+	if not _throttle_seen:
+		# Belt and braces behind the _input latch below: a non-zero reading is
+		# proof of a real sample too. A gate that ONLY an event could open would
+		# make a dead throttle out of any case where those don't reach us; this
+		# one can't. The cost is a lever parked at EXACTLY raw 0.0 (mid-travel)
+		# reading idle until it next moves — the safe direction, and it self-heals
+		# on the first nudge.
+		if is_zero_approx(value):
+			return 0.0
+		_throttle_seen = true
+	return _throttle_curve(value, _throttle_spec)
+
+
+## The throttle's first real sample. Godot emits a motion event the first time it
+## reads an axis (its cache holds no prior value to compare against), so this
+## fires even for a lever that has sat untouched since boot — which polling for a
+## non-zero reading cannot tell from a lever parked at mid-travel.
+func _input(event: InputEvent) -> void:
+	if _throttle_seen or _throttle_device == -1:
+		return
+	var motion := event as InputEventJoypadMotion
+	if motion and motion.device == _throttle_device and int(motion.axis) == _throttle_axis:
+		_throttle_seen = true
+
+
+## Pure raw-axis -> command mapping for one throttle spec. Split out of throttle()
+## so ThrottleIdleSmoke can drive every form headless, where no stick is attached.
+## Three spec forms:
+##   {mode:"gamepad"}  bipolar, center-rest (a self-centering stick/trigger axis
+##                     rather than a lever): 0 inside `deadzone` (default 0.05),
+##                     ±1 at the stops; `invert` flips sign. The ship-wide
+##                     reverse cap (SalvageSystem, secondary_thrust_fraction)
+##                     does the asymmetric forward/reverse scaling, not this curve.
+##   {idle_deadzone}   legacy X52 lever (full=-1; the raw threshold is the idle edge)
+##   {idle, full}      general lever — any rest/travel range and direction, with
+##                     an optional normalized `deadzone` (default 0.02) near idle.
+##
+## Every form RESCALES the travel past its idle band rather than clipping to it.
+## Clipping leaves the smallest commandable throttle equal to the band itself —
+## a floor, not a null — with nothing available between that and zero. On the
+## legacy form that floor was (1 - 0.95) / 2 = 2.5%, about 0.9 m/s of permanent
+## creep: invisible at cruise, and the difference between holding a marker and
+## sliding through it in a 3 m/s docking hold. It sat just under ShipMotion's
+## CMD_DEADBAND (0.032), so the fly-by-wire went on nulling the axis it was
+## pushing — the two fought to a slow crawl instead of an obvious runaway, which
+## is why this read as "the throttle won't zero" rather than as a stuck lever.
+## Measured with InputEcho, this rig's X52 rests at +0.9524 against its 0.95
+## threshold: a margin of 0.0024 on a 2.0 range, so which side of the step it
+## settled on was very nearly a coin toss.
+##
+## NOTE mid-travel still curves to roughly HALF OPEN, which is why throttle()
+## gates on a real sample before calling this at all — an axis the engine has
+## never reported reads a cached raw 0.0.
+static func _throttle_curve(value: float, spec: Dictionary) -> float:
+	if String(spec.get("mode", "")) == "gamepad":
 		var v := clampf(value, -1.0, 1.0)
-		if _throttle_spec.get("invert", false):
+		if spec.get("invert", false):
 			v = -v
-		if absf(v) <= float(_throttle_spec.get("deadzone", 0.05)):
-			return 0.0
-		return v
-	if _throttle_spec.has("idle_deadzone"):
-		if value >= float(_throttle_spec["idle_deadzone"]):
-			return 0.0
-		return clampf((1.0 - value) / 2.0, 0.0, 1.0)
-	var idle := float(_throttle_spec.get("idle", 1.0))
-	var full := float(_throttle_spec.get("full", -1.0))
+		var pad_dead := float(spec.get("deadzone", 0.05))
+		return signf(v) * clampf((absf(v) - pad_dead) / maxf(1.0 - pad_dead, 0.0001), 0.0, 1.0)
+	if spec.has("idle_deadzone"):
+		# The idle threshold IS the zero point; the travel below it becomes the
+		# whole 0..1 command. (Legacy form: full is -1 by definition.)
+		var stop := float(spec["idle_deadzone"])
+		return clampf((stop - value) / maxf(stop + 1.0, 0.0001), 0.0, 1.0)
+	var idle := float(spec.get("idle", 1.0))
+	var full := float(spec.get("full", -1.0))
 	var span := idle - full
 	if is_zero_approx(span):
 		return 0.0
+	var dead := float(spec.get("deadzone", IDLE_DEADZONE))
 	var norm := (idle - value) / span
-	if norm <= float(_throttle_spec.get("deadzone", 0.02)):
-		return 0.0
-	return clampf(norm, 0.0, 1.0)
+	return clampf((norm - dead) / maxf(1.0 - dead, 0.0001), 0.0, 1.0)
 
 
 func _process(_delta: float) -> void:
@@ -526,6 +620,15 @@ func _process(_delta: float) -> void:
 	# the remapper hotkey above still works (that's half of what the card offers),
 	# but no flight or ops intent may reach a world that isn't running yet.
 	if get_tree().paused:
+		# Hands off — and clear anything latched BEFORE the card came up. This
+		# ran once on the boot frame, ahead of WindowManager's deferred _setup()
+		# pausing the tree, so a command read there would otherwise sit in
+		# ShipMotion across the whole card and be spent by the first physics tick
+		# after LAUNCH (physics runs ahead of idle within a frame). Zeroing is the
+		# opposite of the intent leak guarded against above, and it goes straight
+		# to ShipMotion rather than through SalvageSystem.set_manual_flight, so it
+		# cannot trip the autopilot's manual-override disengage.
+		ShipMotion.set_command(Vector3.ZERO, Vector3.ZERO)
 		return
 	var thrust := Vector3(
 		Input.get_axis("strafe_left", "strafe_right") + _hid_axis_amount("strafe_left", "strafe_right"),
