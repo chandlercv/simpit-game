@@ -19,8 +19,14 @@ hidapi = "2.4.1"
 godot = { git = "https://github.com/godot-rust/gdext", rev = "4ce4714b8871bf75e95d03401e44e3f1ccbdd7df" }
 
 [patch."https://github.com/godot-rust/godot4-prebuilt".godot4-prebuilt]
+# LOCAL MODIFICATION (see VENDORED.md) — upstream v0.1.0 reads:
+#   branch = "4.1"
+# That branch is mutable and has moved four times since the DLL was built; its
+# head was this rev on the build date. The double slash in the URL below is
+# upstream's, and is left alone: it is what makes this a distinct source from
+# the patch key above, so "correcting" it would change how Cargo resolves.
 git = "https://github.com//godot-rust/godot4-prebuilt"
-branch = "4.1"
+rev = "23477b8096a90c3798ab3558b776e9743e59ea2a"
 
 [profile.dev]
 split-debuginfo = "packed"

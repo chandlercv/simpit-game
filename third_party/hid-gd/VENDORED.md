@@ -74,7 +74,13 @@ distributed builds.
 
 ## Local modifications
 
-One, in [`Cargo.toml`](Cargo.toml). Upstream `v0.1.0` reads:
+Two, both in [`Cargo.toml`](Cargo.toml), both pinning a floating reference to the
+revision the shipped binary was actually built from. Nothing in `src/` is
+modified — see the note at the end of this section.
+
+### 1. The gdext dependency
+
+Upstream `v0.1.0` reads:
 
 ```toml
 godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
@@ -96,6 +102,45 @@ revision existed nowhere but inside a binary with no source.**
 
 The other dependency versions the binary records are `hidapi` 2.4.1 (matching the
 manifest), `rustc-demangle` 0.1.23 and `hashbrown` 0.14.0.
+
+### 2. The `godot4-prebuilt` patch
+
+Upstream `v0.1.0` points the patched source at a branch:
+
+```toml
+[patch."https://github.com/godot-rust/godot4-prebuilt".godot4-prebuilt]
+git = "https://github.com//godot-rust/godot4-prebuilt"
+branch = "4.1"
+```
+
+Branch `4.1` is not frozen. It has moved four times since the build — artifact
+syncs on 2024-06-23, 2024-08-15, 2024-11-13 and 2025-03-03 — so resolving it today
+yields `7470e3e`, not what the binary was built against. Its head on the build
+date was `23477b8` (2023-07-06, "Godot 4.1-stable artifact sync"), and `branch`
+has been replaced with:
+
+```toml
+rev = "23477b8096a90c3798ab3558b776e9743e59ea2a"
+```
+
+**The double slash in the URL (`github.com//godot-rust`) is upstream's, and is
+deliberately left as-is.** Cargo compares source URLs textually, so the double
+slash is what makes the patch value a distinct source from the single-slash patch
+key; "correcting" the typo would change how the patch resolves.
+
+### Nothing in `src/` is modified
+
+The vendored source is byte-identical to upstream `v0.1.0` — verified by
+comparing git blob hashes against the GitHub API for `src/hid.rs`, `src/lib.rs`
+and `README.md`.
+
+This includes the known upstream bug in `get_feature_report` (issue #3), which
+sizes its buffer at two bytes and so cannot return a larger report. **Do not
+"fix" it here.** This tree's purpose is to record what the shipped DLL was built
+from; nothing in this project compiles it, so patching the source would not change
+the binary's behaviour — it would only break the correspondence between the two.
+Salvager does not call that method. If it is ever needed, the route is the port
+described under **Rebuilding**, not an edit here.
 
 ## What is deliberately not here
 
