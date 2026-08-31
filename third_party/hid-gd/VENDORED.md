@@ -131,6 +131,54 @@ Moving to a modern gdext is therefore a real port, not a version bump, and it is
 not required by anything at present. The working binary is the artifact of
 record; this tree is what makes it recoverable if that changes.
 
+## When to revisit
+
+Checked 2026-08-30. **There is nothing newer upstream worth taking.** `v0.1.0`
+is still the newest tag, and `main` is two commits ahead of it touching only
+`.github/workflows/deploy.yml`, `LICENSE.txt` and `README.md` — `src/` is
+unchanged, so upstream's newest code is byte-identical to what is vendored here.
+
+Upstream carries one open bug, issue #3 (2026-06-20): `get_feature_report`
+allocates a two-byte buffer rather than the report size the device expects. It
+is unfixed and cannot affect Salvager, which calls only `list_devices`, `open`,
+`open_path` and `read_timeout`.
+
+Two forks have moved past upstream and publish prebuilt Linux, macOS and Windows
+binaries:
+
+| Fork | Ahead of upstream | Last push | gdext dependency |
+| --- | --- | --- | --- |
+| `nopalpite/hid-gd` | 26 commits | 2026-02-10 | `godot = "0.4"` from crates.io |
+| `DigitalTableTops/hid-gd` | 11 commits | 2026-06-22 | still `branch = "master"`; a commented-out patch aims at Godot 4.7 |
+
+`nopalpite` is the more useful of the two: it moved off the floating git branch
+to a published gdext release, split `hidapi` per-platform with static hidraw on
+Linux, and carries a Windows `String`→`GString` conversion fix. Both are
+single-person forks with no issue-tracker activity and commit histories that read
+as CI iteration rather than library maintenance.
+
+**Neither is worth adopting while nothing is broken.** The extension loads under
+Godot 4.7, `tools/Phase5Smoke.gd` asserts the class registers, and the path is
+verified against the real hardware — which is the part no fork's CI can do for
+us. Swapping the binary trades a known-good artifact for an unverified one and
+replaces upstream provenance with a fork's.
+
+Revisit when one of these fires:
+
+- **Godot moves past what the 4.1-era bindings tolerate** and the extension stops
+  loading. The likeliest trigger, and not under this project's control.
+- **The simpit wants Linux or macOS.** The strongest positive reason: the shipped
+  binary is Windows x86_64 only.
+- **Something starts calling `get_feature_report`**, where the open bug bites.
+- **The API is short something needed** — a real `close`, or different
+  non-blocking read semantics.
+
+If one fires, prefer rebuilding from this pinned tree with the gdext dependency
+updated over adopting a fork wholesale. `nopalpite/hid-gd` is worth reading as a
+reference for that port — it demonstrates that `godot = "0.4"` works and shows
+what the Windows conversion fix is — without this project inheriting its
+provenance.
+
 ## API surface
 
 `Hid` extends `RefCounted` and registers fifteen methods. From
