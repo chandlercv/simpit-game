@@ -1,0 +1,26 @@
+[package]
+name = "hid"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "hid_ext"
+crate-type = ["cdylib"]
+
+[dependencies]
+hidapi = "2.4.1"
+# LOCAL MODIFICATION (see VENDORED.md) — upstream v0.1.0 reads:
+#   godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
+# A floating branch cannot reproduce the committed DLL: `master` today is years
+# of breaking changes past the 2023 build. This rev is the one recorded inside
+# the shipped binary itself, and is the only surviving record of it.
+godot = { git = "https://github.com/godot-rust/gdext", rev = "4ce4714b8871bf75e95d03401e44e3f1ccbdd7df" }
+
+[patch."https://github.com/godot-rust/godot4-prebuilt".godot4-prebuilt]
+git = "https://github.com//godot-rust/godot4-prebuilt"
+branch = "4.1"
+
+[profile.dev]
+split-debuginfo = "packed"
