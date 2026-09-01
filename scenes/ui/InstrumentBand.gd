@@ -264,6 +264,8 @@ func _draw_legend(font: Font) -> void:
 
 func _paint_speed(ci: Control) -> void:
 	var font := ThemeDB.fallback_font
+	# World (inertial) speed — see GameState.ships on the frame. The tape reads
+	# speed through space; the datum-relative readings are ALT/VS/RNG beside it.
 	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
 	var cy := ci.size.y / 2.0
 	var y_for := func(v: float) -> float: return cy - tape_offset(v, speed, SPD_PX_PER_MS)

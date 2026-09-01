@@ -354,6 +354,20 @@ func _in_berth_bay() -> bool:
 			and int(GameState.docking.get("gate", 0)) >= GATES.size() - 1
 
 
+## The ship's speed AS THE HARBOUR MEASURES IT — relative to the station, which
+## is what every clearance, limit and gate in this file is written against.
+## Identical to her world speed while the station is static, which it is today
+## (see GameState.ships on the world frame); if a berth ever moves, the station's
+## own velocity is subtracted HERE and every gate below follows.
+##
+## It is a function of its own, and deliberately NOT NavReference's datum,
+## because the harbour's limits are not the pilot's instrument setting: the datum
+## is selectable and may be pinned to a derelict, and a lane speed limit must not
+## change meaning because the pilot changed what the ADI is showing.
+func _station_relative_speed() -> float:
+	return (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
+
+
 ## Speed ATC is holding you to right now. A hold instruction overrides the
 ## per-state limit — "hold position" means stop, wherever you happen to be.
 func speed_limit() -> float:
@@ -578,7 +592,7 @@ func request_clearance() -> void:
 				% GameState.ship_def.display_name)
 		return
 	AudioSystem.transmit("request_clearance")
-	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
+	var speed := _station_relative_speed()
 	if speed > HOLD_SPEED:
 		_atc("HOLD AT ALPHA — YOU ARE STILL MOVING",
 				"STOP AT THE MARKER (UNDER %.0f M/S) BEFORE REQUESTING." % HOLD_SPEED, true)
@@ -692,7 +706,7 @@ func _physics_process(delta: float) -> void:
 func _update_gear_stress(delta: float) -> void:
 	if GameState.gear_stowed():
 		return
-	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
+	var speed := _station_relative_speed()
 	if speed <= GameState.GEAR_LIMIT_SPEED:
 		return
 	_damage_hull("DRIVE", GEAR_STRESS_PER_S * delta)
@@ -758,7 +772,7 @@ func _update_atc_hold() -> void:
 ## The speed you were given is an instruction like any other: a warning while
 ## you're over it, a go-around if you stay over it.
 func _update_speed(delta: float) -> void:
-	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
+	var speed := _station_relative_speed()
 	var limit := speed_limit()
 	if speed <= limit:
 		_over_speed = 0.0
@@ -802,7 +816,7 @@ func _update_hold(delta: float) -> void:
 		_set_state("INBOUND")
 		_atc("RETURN TO MARKER ALPHA", "YOU HAVE DRIFTED OUT OF THE HOLD.", true)
 		return
-	if (ship.get("velocity", Vector3.ZERO) as Vector3).length() > HOLD_SPEED:
+	if _station_relative_speed() > HOLD_SPEED:
 		_hold_time = 0.0
 		return
 	_hold_time += delta
@@ -1017,6 +1031,11 @@ func _check_deck() -> void:
 ## sink rate, where on the deck you put it, how level, and how much sideways you
 ## carried into it. Anything the legs can't take bounces the ship back into the
 ## pattern; anything they can becomes a berth, scored.
+##
+## Sink rate and drift are the ship's WORLD velocity resolved in the pad's frame,
+## which is the same thing as her velocity RELATIVE to the pad only because the
+## deck is static. A moving berth would want the pad's own velocity subtracted
+## first — here, and in _bounce and _settle_on_deck, which resolve the same way.
 func _touchdown(ship: Dictionary, xform: Transform3D, offset: Vector3, up: Vector3) -> void:
 	var velocity: Vector3 = ship.get("velocity", Vector3.ZERO)
 	var rate: float = -velocity.dot(up)

@@ -140,6 +140,8 @@ func _add(id: String, level: String, raise: Callable, clear: Callable) -> void:
 	_active[id] = false
 
 
+## World (inertial) speed — see GameState.ships on the frame. Nothing is
+## subtracted, so this is speed through space, not closing speed on anything.
 func _speed() -> float:
 	return (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
 

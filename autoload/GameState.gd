@@ -285,6 +285,19 @@ var ship_def: ShipDefinition = load("res://data/ships/kestrel.tres")
 ## peer_id -> ship state. Replication-friendly types only (Dictionary, Array,
 ## Vector3, float, int, String) so a future MultiplayerSynchronizer can point
 ## at fields directly.
+##
+## FRAME. "transform" and "velocity" are WORLD frame — the one global Cartesian
+## frame every system shares, with no reference body subtracted. "velocity" is
+## therefore INERTIAL: it is not a velocity relative to anything the ship is
+## near.
+##
+## That distinction is invisible today because everything the ship measures
+## itself against — the station, the pad, the wreck's centre — is static in world
+## space, so relative speed and world speed are the same number. They stop being
+## the same number the moment a reference moves: an orbiting station, a rotating
+## body, a derelict under way. Code that means "how fast am I closing on THAT"
+## must subtract the reference's own velocity rather than taking this field's
+## length.
 var ships: Dictionary = {}
 
 ## Sensor contacts. Replication-friendly Dictionaries:

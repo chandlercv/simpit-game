@@ -264,6 +264,8 @@ func _draw_gear_indicator() -> void:
 	var text := "GEAR DOWN" if locked else "GEAR IN TRANSIT %d%%" % roundi(
 			GameState.gear_position * 100.0)
 	var color := SALVAGE_LOCKED_COLOR if locked else SALVAGE_COLOR
+	# World (inertial) speed — see GameState.ships on the frame. The legs are
+	# rated against speed through space, so nothing is subtracted here.
 	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
 	if speed > GameState.GEAR_LIMIT_SPEED:
 		text = "GEAR OVERSPEED %d / %d" % [roundi(speed), roundi(GameState.GEAR_LIMIT_SPEED)]

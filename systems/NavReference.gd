@@ -186,6 +186,12 @@ func altitude() -> float:
 
 ## Rate of climb against the datum's plane, m/s, POSITIVE UP. DockingSystem's
 ## "descent" is this negated — it counts sink, this counts altitude.
+##
+## This is the ship's WORLD velocity resolved on the datum's up (see
+## GameState.ships on the frame), which equals her rate of climb RELATIVE to the
+## datum only because every datum origin is static today. A datum on a moving
+## body — a derelict under way, an orbiting berth — would want that body's own
+## velocity subtracted first.
 func vertical_speed() -> float:
 	var velocity: Vector3 = GameState.local_ship().get("velocity", Vector3.ZERO)
 	return velocity.dot(datum()["up"])
