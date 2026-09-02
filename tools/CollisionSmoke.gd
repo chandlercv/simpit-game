@@ -130,6 +130,45 @@ func _run() -> void:
 			"...and the ship is stopped in front of it, not tunnelled through (z %.1f, plate z %.1f)"
 					% [ship["transform"].origin.z, wall_z])
 	GameState.remove_obstacle(thin_id)
+
+	# The same case in the orientation that actually bounds it. Flown NOSE-ON the
+	# capsule's own 2.6 m length is swept through the body and the window is
+	# generous; flown BROADSIDE only its 0.7 m diameter is, and that is the figure
+	# the sub-step gate has to be calibrated against. Gating on the generous
+	# orientation is how a ship tunnels while flying sideways, and it is what this
+	# pins the speed the gate holds WITH ITS SAFETY MARGIN INTACT — 1.3 km/s past
+	# the smallest body in the game — checked across every alignment between the
+	# sampling grid and the body. Above it the margin erodes and misses become
+	# gradually more likely; see ShipMotion.MAX_SUBSTEPS.
+	# The orientation IS the variable here, so nothing may be allowed to change it
+	# mid-run. This suite leaves InputRouter live (the ram test above drives a real
+	# action through it), and under DIRECT law a live stick on a dev box commands
+	# raw torque — which quietly rolls the ship off broadside and back into the
+	# generous orientation this check exists to avoid testing.
+	InputRouter.set_process(false)
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	var side := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO)
+	var tunnelled := 0
+	for i in 8:
+		# On the capsule's own axis — _set_capsule above centres it on y = 0, so a
+		# body at any other height is a tangent graze rather than the dead-centre
+		# hit this is meant to be measuring.
+		var at := Vector3(0, 0, -600.0 - float(i) * 0.35)
+		var pebble := GameState.register_obstacle(
+				"PEBBLE", at, 0.35, PackedVector3Array(), true)
+		ShipMotion.seize(side, Vector3(0, 0, -1300.0))
+		comms_before = GameState.comms.size()
+		var struck := await _wait_until(
+				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 3.0)
+		if not struck:
+			tunnelled += 1
+		GameState.remove_obstacle(pebble)
+	_check(tunnelled == 0,
+			"a 0.35 m body is still struck BROADSIDE at 1.3 km/s, at any alignment (%d/8 missed)"
+					% tunnelled)
+
+	InputRouter.set_process(true)
+	_reset_ship()
 	GameState.set_fbw_law("NORMAL")
 
 	# --- The bounce splits by mass, so WHAT you hit matters ---------------------

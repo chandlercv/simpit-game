@@ -205,15 +205,27 @@ func ship_omega() -> Vector3:
 ## --- The pipeline -----------------------------------------------------------
 
 
-## Sub-steps a tick may be divided into before the motion is simply accepted as
-## coarse. Eight at 60 Hz against the tightest body in the scene covers roughly
-## 170 m/s, which is well past anything the governor allows and into the speeds
-## DIRECT law makes reachable.
-const MAX_SUBSTEPS := 8
+## Sub-steps a tick may be divided into. This is a frame-time guard, and it is
+## also the point past which sub-stepping stops being a guarantee.
+##
+## Against the smallest body in the game (0.35 m, a gate ring's tube) passed
+## BROADSIDE, thirty-two sub-steps at 60 Hz hold the full safety margin below
+## 1.34 km/s. Between there and about 2.7 km/s the margin is gone but the
+## samples still usually land on the body; past 2.7 km/s the ship can cross it
+## between two tested positions and misses become common. The failure is gradual
+## rather than a cliff, and 1.34 km/s is seventeen minutes of unbroken
+## full-throttle burn away under DIRECT law with nothing in front of you.
+##
+## It can be raised — each sub-step is one collision pass, and the gate below is
+## path-aware, so the cap is only ever approached while actually alongside
+## something. Thirty-two passes is roughly 6 ms in the worst tick, which is the
+## budget this number is really spending; sixty-four would double both the
+## ceiling and that cost.
+const MAX_SUBSTEPS := 32
 
-## Fraction of the tightest collision feature the ship may cross in one sub-step.
-## A half means the swept path always overlaps the body it is passing, which is
-## what the discrete overlap test needs in order to see it at all.
+## Fraction of the detection window the ship may cross in one sub-step. A half
+## means two samples always land inside the window, so a body cannot fall between
+## consecutive tested positions.
 const SUBSTEP_SAFETY := 0.5
 
 
@@ -227,23 +239,31 @@ const SUBSTEP_SAFETY := 0.5
 ##
 ## So the integration and the collision pass sub-step together — sub-stepping the
 ## motion alone would buy nothing, because the test would still run once at the
-## end. The division is GATED on the ship's own speed against the tightest body
-## in the scene, so station-keeping beside a wreck costs one comparison and pays
-## for nothing it does not need.
+## end. The division is GATED on what the tick's path actually passes near
+## (CollisionSystem.path_window), so open space costs one sweep of the registries
+## however fast the ship is going, and the sub-steps are spent where the bodies
+## are rather than everywhere.
 ##
 ## The ship only. ThreatSystem's contacts and DriftSystem's pieces move slowly
 ## enough that their own once-a-tick pass is sound, and CollisionSystem still
 ## runs its authoritative pass at the end of the tick with their final positions.
 func step(delta: float) -> void:
-	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
-	var feature := minf(CollisionSystem.min_body_radius(), CollisionSystem.ship_reach())
-	var steps := clampi(
-			ceili(speed * delta / maxf(SUBSTEP_SAFETY * feature, 0.01)), 1, MAX_SUBSTEPS)
+	var ship: Dictionary = GameState.local_ship()
+	var origin: Vector3 = (ship["transform"] as Transform3D).origin
+	var travel: Vector3 = (ship["velocity"] as Vector3) * delta
+	# What the ship can pass THROUGH on this tick's path, and over how much travel
+	# it would be detectable while doing so. INF when the path passes nothing, and
+	# then one sub-step is right however fast the ship is going.
+	var window := CollisionSystem.path_window(origin, origin + travel)
+	var steps := 1
+	if is_finite(window):
+		steps = clampi(ceili(travel.length() / maxf(SUBSTEP_SAFETY * window, 0.01)),
+				1, MAX_SUBSTEPS)
 	# The datum is resolved ONCE for the tick and carried into every sub-step. It
 	# cannot change under the loop — what the ship is referenced to is not a
 	# function of where the ship is — and resolving it per sub-step measured
-	# 5.7 us a time, which at eight of them is 0.28% of the tick for an answer
-	# that would be identical all eight times.
+	# 5.7 us a time, which across a saturated tick is real money for an answer
+	# that would be identical every time.
 	var reference := NavReference.datum_velocity()
 	var sub := delta / float(steps)
 	for _i in steps:

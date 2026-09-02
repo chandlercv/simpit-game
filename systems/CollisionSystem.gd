@@ -16,9 +16,9 @@ extends Node
 ## hypothetical: at 60 m/s the ship crosses a metre per 60 Hz tick against a hull
 ## 0.7 m across, and DIRECT law removes the speed governor entirely. So
 ## resolve_ship() is exposed for ShipMotion to drive per SUB-STEP whenever the
-## ship is moving fast enough to cross a body inside one tick — min_body_radius()
-## is what it gates on — while _physics_process still runs the authoritative pass
-## at the end of the tick against everything's final position.
+## ship is moving fast enough to cross a body inside one tick — path_window() is
+## what it gates on — while _physics_process still runs the authoritative pass at
+## the end of the tick against everything's final position.
 ##
 ## Every mass here is in KILOGRAMS, on the same scale as the ship's own
 ## (GameState.ship_mass): bodies are massed from their radius at BODY_DENSITY,
@@ -115,8 +115,6 @@ const BODY_DENSITY := 500.0
 var _cooldowns: Dictionary = {}
 ## This step's length, for the rate-limited separation below.
 var _delta := 0.0
-## Cached min_body_radius() for the tick, or -1 when it needs recomputing.
-var _min_radius := -1.0
 
 
 ## Mass in kilograms of a movable body of this bounding radius. The one place
@@ -131,7 +129,6 @@ func _physics_process(delta: float) -> void:
 	# whole reason the lane is tight.
 	if not GameState.flight_active():
 		_cooldowns.clear()
-		_min_radius = -1.0
 		return
 	# Cooldown decay is per TICK, not per sub-step. ShipMotion may call
 	# resolve_ship several times inside one tick at speed (see MAX_SUBSTEPS), and
@@ -141,7 +138,6 @@ func _physics_process(delta: float) -> void:
 		_cooldowns[key] -= delta
 		if _cooldowns[key] <= 0.0:
 			_cooldowns.erase(key)
-	_min_radius = -1.0
 	resolve_ship(delta)
 	_resolve_movable_bodies(_collidables())
 
@@ -219,39 +215,61 @@ func _ship_share(body: Dictionary) -> float:
 	return mass / (GameState.ship_mass() + mass)
 
 
-## Radius of the tightest solid body in the scene, metres — what ShipMotion gates
-## its sub-stepping on, because the tightest body is the one the ship can cross
-## inside a tick without ever being tested against it.
+## The tightest DETECTION WINDOW along a swept path, metres, or INF when the path
+## passes nothing at all. This is what ShipMotion gates its sub-stepping on.
 ##
-## Reads the two registries directly rather than going through _collidables().
-## That function allocates a dict per body for the narrowphase to work on, which
-## measured 53 us against 30 bodies — 0.3% of a 60 Hz tick, paid on every tick
-## including the overwhelming majority that sub-step once. All this needs is the
-## radii, so it walks them and allocates nothing.
+## The window is the distance the ship can travel while still overlapping a given
+## body — 2 * (ship radius + body radius) — and it is the figure that matters,
+## because a sub-step longer than it can straddle the body and register nothing.
+## It uses the ship's RADIUS and not its reach: the capsule is 2.6 m long and
+## 0.7 m across, so a body passed broadside is only detectable over 0.7 m of
+## travel even though the same body nose-on is detectable over 2.6 m. Gating on
+## the generous orientation is how a ship tunnels while flying sideways.
 ##
-## Computed at most once per tick and cached anyway; the registry cannot change
-## under a sub-step loop, and this is called from inside one.
-func min_body_radius() -> float:
-	if _min_radius >= 0.0:
-		return _min_radius
-	_min_radius = DEFAULT_SHIP_RADIUS
+## PATH-AWARE, which is what keeps this affordable. Only bodies the swept path
+## actually comes near can be tunnelled, so open space returns INF and costs one
+## sub-step however fast the ship is going — and a ship IS in open space at the
+## speeds that need the most sub-steps. Near a wreck, where the bodies are, the
+## ship is slow and the windows are wide.
+##
+## Reads the two registries directly rather than through _collidables(), which
+## allocates a dict per body and measured 53 us against 30 — 0.3% of a 60 Hz tick
+## paid on every tick, for radii it already has.
+func path_window(from: Vector3, to: Vector3) -> float:
+	var reach := ship_reach()
+	var radius := _ship_radius()
+	var window := INF
 	for obstacle: Dictionary in GameState.obstacles:
-		_min_radius = minf(_min_radius, float(obstacle["radius"]))
+		window = minf(window, _window_for(from, to, obstacle["position"],
+				float(obstacle["radius"]), reach, radius))
 	for contact: Dictionary in GameState.contacts:
 		# Contacts with no radius are sensor blips, not bodies — they are not in
-		# _collidables() either and must not drag the gate down to zero.
+		# _collidables() either and cannot be collided with, let alone tunnelled.
 		var r: float = contact.get("radius", 0.0)
 		if r > 0.0:
-			_min_radius = minf(_min_radius, r)
-	return _min_radius
+			window = minf(window, _window_for(from, to, contact["position"], r, reach, radius))
+	return window
 
 
-## Union of solid bodies this frame. Everything solid — the wreck's per-member
-## hulls, the cosmetic debris chunks, and any moving ship — lives in
-## GameState.obstacles / .contacts; the wreck's members are just obstacles tagged
-## `wreck` (registered by Wreck.gd, tight hulls). The wreck/debris sensor blips
-## carry no radius, so they aren't double-counted here. Each body is a segment +
-## radius (spheres set a == b), or a `hull` point cloud tested tight by GJK.
+## One body's contribution to the window above: INF when the swept path does not
+## come within reach of it, and its detection window when it does.
+##
+## Rejects on the path's own bounding sphere first. The exact segment test
+## allocates (it returns both witness points) and almost every body in the scene
+## is nowhere near the path, so paying for it per body per tick is most of what
+## this function would otherwise cost.
+func _window_for(from: Vector3, to: Vector3, at: Vector3, body_radius: float,
+		reach: float, radius: float) -> float:
+	var span := to - from
+	var envelope := span.length() * 0.5 + body_radius + reach
+	if (from + span * 0.5).distance_squared_to(at) > envelope * envelope:
+		return INF
+	var near: Array = _closest_points_between_segments(from, to, at, at)
+	if (near[0] as Vector3).distance_to(at) > body_radius + reach:
+		return INF
+	return 2.0 * (radius + body_radius)
+
+
 func _collidables() -> Array[Dictionary]:
 	var bodies: Array[Dictionary] = []
 	for obstacle: Dictionary in GameState.obstacles:
