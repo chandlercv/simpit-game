@@ -4,7 +4,7 @@ extends Node
 ## Every contributor to the ship's motion feeds this pipeline; production code
 ## must not write GameState's ship transform/velocity/omega anywhere else while
 ## the ship is being flown. step() divides the tick into as many sub-steps as the
-## ship's speed needs (see MAX_SUBSTEPS) and runs _integrate() for each; that is
+## bodies near the path demand (see step) and runs _integrate() for each; that is
 ## where the four named phases live, in order:
 ##
 ##   1. command      — the pilot's stick and throttle become a commanded
@@ -205,18 +205,6 @@ func ship_omega() -> Vector3:
 ## --- The pipeline -----------------------------------------------------------
 
 
-## Total fine sub-steps a tick's hazards may spend between them.
-##
-## This is a frame-time guard and nothing else — it is not what makes sub-stepping
-## correct, and it does not buy a speed ceiling. Each hazard stretch on the path
-## costs a handful of steps set by its body's size and shape (the interval and the
-## window come from the same projection, so their ratio is bounded — see
-## CollisionSystem._hazard_of), independent of speed. The budget covers several
-## distinct bodies per tick and is spent in order of approach, so when a path
-## threads more hazards than it can pay for, the ones the ship reaches FIRST get
-## their full sampling — and a ship that hits one never needed the rest.
-const MAX_SUBSTEPS := 32
-
 ## Fraction of the detection window the ship may cross in one sub-step. A half
 ## means two samples always land inside the window, so a body cannot fall between
 ## consecutive tested positions.
@@ -246,6 +234,19 @@ const SUBSTEP_SAFETY := 0.5
 ## was. Between the stretches the path is empty by construction and costs one
 ## coarse step however long it is.
 ##
+## There is deliberately NO cap on the sub-steps a tick may spend. A shared
+## budget was a correctness hole by construction: near-misses spend from the
+## same purse as hits — a stretch means the path passes NEAR a body, not that
+## it touches it — so enough bodies merely close to the path starved the one
+## actually on it down to a single unresolved step, and the ship flew through
+## a wall because of things it never hit. The cost is bounded by geometry
+## instead: an isolated body's stretch is a handful of steps whatever its size
+## or the ship's speed (the interval and the window come from the same
+## projection — CollisionSystem._hazard_of), stretches exist only where bodies
+## are, and a long merged stretch is the genuine price of flying alongside
+## continuous structure. What a tick pays is set by how much STUFF the path
+## passes, never by speed alone.
+##
 ## The ship only. ThreatSystem's contacts and DriftSystem's pieces move slowly
 ## enough that their own once-a-tick pass is sound, and CollisionSystem still
 ## runs its authoritative pass at the end of the tick with their final positions.
@@ -267,7 +268,6 @@ func step(delta: float) -> void:
 		return
 
 	var length := travel.length()
-	var budget := MAX_SUBSTEPS
 	var cursor := 0.0
 	for hazard: Dictionary in hazards:
 		var window: float = hazard["window"]
@@ -277,10 +277,8 @@ func step(delta: float) -> void:
 		# touch anything by construction, whatever its length.
 		if lo > cursor:
 			_integrate(delta * (lo - cursor), reference)
-		var steps := clampi(
-				ceili((hi - lo) * length / maxf(SUBSTEP_SAFETY * window, 0.01)),
-				1, maxi(budget, 1))
-		budget -= steps
+		var steps := maxi(
+				ceili((hi - lo) * length / maxf(SUBSTEP_SAFETY * window, 0.01)), 1)
 		var fine := delta * (hi - lo) / float(steps)
 		for _i in steps:
 			_integrate(fine, reference)

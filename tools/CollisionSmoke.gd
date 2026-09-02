@@ -174,12 +174,14 @@ func _run() -> void:
 	_check(tunnelled == 0,
 			"a 0.35 m body is struck BROADSIDE at 20 km/s, at any alignment (%d/8 missed)"
 					% tunnelled)
-	# ...and it is not brute force doing it. If this ever climbs to the cap, the
-	# sampler has gone back to dividing the whole tick and the speed ceiling is
-	# back with it, whatever the check above happens to say.
-	_check(worst_steps > 0 and worst_steps < ShipMotion.MAX_SUBSTEPS / 2,
-			"...on %d sub-steps, not the %d-step cap — the cost is set by the body, not the speed"
-					% [worst_steps, ShipMotion.MAX_SUBSTEPS])
+	# ...and it is not brute force doing it. A stretch's interval and window come
+	# from the same geometry, so an isolated body's demand is a bounded handful
+	# whatever the speed. If this ever climbs past that, the sampler has gone
+	# back to dividing distance instead of hazard and the speed ceiling is back
+	# with it, whatever the check above happens to say.
+	_check(worst_steps > 0 and worst_steps <= 8,
+			"...on %d sub-steps — the cost is set by the body, not the speed"
+					% worst_steps)
 
 	# --- A BROAD, THIN hull is sized by its thickness, not its bounding sphere ---
 	#
@@ -257,7 +259,35 @@ func _run() -> void:
 	_check(tunnelled == 0,
 			"one of two separated walls registers on every 12 km/s pass (%d/8 crossed clean)"
 					% tunnelled)
-	_set_capsule(Vector3(0, 0, -3), Vector3(0, 0, 3), 1.5)
+
+	# --- Near-misses must not starve the hit -----------------------------------
+	#
+	# Seven pebbles sit 1.2 m off the flight path: close enough that their
+	# broadphase envelopes intersect it — each earns its own sampling stretch —
+	# and too far to ever touch the ship. Beyond them, ON the path, a wall.
+	# Under a shared sub-step budget the seven bystanders spent five steps each
+	# before the ship ever reached the wall, the wall's own stretch was clamped
+	# to a single unresolved step, and the ship crossed 1.6 m of structure at
+	# 12 km/s without a mark on it. What a stretch costs must be set by ITS
+	# body — never by how many other bodies the path merely passed on the way.
+	var bystanders: Array[int] = []
+	for k in 7:
+		bystanders.append(GameState.register_obstacle(
+				"BYSTANDER", Vector3(1.2, 0, -420.0 - 15.0 * float(k)), 0.35,
+				PackedVector3Array(), true))
+	var far_wall := GameState.register_obstacle("FAR WALL", Vector3(0, 0, -560.0),
+			wall_he.length(), _box_hull(Vector3(0, 0, -560.0), wall_he), true)
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3(0, 0, -12000.0))
+	comms_before = GameState.comms.size()
+	var wall_struck := await _wait_until(
+			func() -> bool: return _has_comms_since(comms_before, "FAR WALL"), 2.0)
+	_check(wall_struck,
+			"a wall past seven near-miss bodies is still struck — bystanders starve nothing")
+	for id: int in bystanders:
+		GameState.remove_obstacle(id)
+	GameState.remove_obstacle(far_wall)
+	_reset_ship()
+	_set_capsule(Vector3(0, 0, -0.95), Vector3(0, 0, 0.95), 0.35)
 
 	InputRouter.set_process(true)
 	_reset_ship()

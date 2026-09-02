@@ -132,7 +132,7 @@ func _physics_process(delta: float) -> void:
 		_cooldowns.clear()
 		return
 	# Cooldown decay is per TICK, not per sub-step. ShipMotion may call
-	# resolve_ship several times inside one tick at speed (see MAX_SUBSTEPS), and
+	# resolve_ship several times inside one tick at speed (ShipMotion.step), and
 	# ageing the cooldowns once per sub-step would let a single grind register as
 	# several separate impacts.
 	for key: String in _cooldowns.keys():
@@ -238,11 +238,11 @@ func _ship_share(body: Dictionary) -> float:
 ## everything into a single [min lo, max hi] span sampled at the global minimum
 ## window reintroduces the speed ceiling by the back door: two thin walls 150 m
 ## apart on a fast path became one 170 m interval divided at one wall's 2.3 m
-## window — a demand of 150-odd steps against a budget of 32, with the shortfall
-## spent finely sampling the EMPTY GAP between them while both walls went
-## under-sampled. Measured before the split: 4 of 8 alignments crossed both
-## walls clean at 12 km/s. As disjoint stretches each wall costs its own
-## handful of steps and the gap between them costs one.
+## window — a demand of 150-odd steps against the 32-step cap the sampler then
+## had, with the shortfall spent finely sampling the EMPTY GAP between them
+## while both walls went under-sampled. Measured before the split: 1 of 8
+## alignments crossed both walls clean at 12 km/s. As disjoint stretches each
+## wall costs its own handful of steps and the gap between them costs one.
 ##
 ## The window is measured ALONG THE PATH, not from the body's bounding sphere.
 ## For anything carrying a baked hull the two are wildly different: a station bay
