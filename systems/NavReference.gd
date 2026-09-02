@@ -49,6 +49,9 @@ func label_for(id: String) -> String:
 ##   id / label   — what it resolved TO (never "AUTO")
 ##   auto         — true when AUTO picked it rather than the pilot
 ##   origin       — world point; range is to here, the altitude plane passes here
+##   velocity     — how fast the origin itself is going, world frame. Subtract it
+##                  from the ship's to get a reading RELATIVE to the datum, which
+##                  is what every reading here is supposed to be
 ##   up           — plane normal (unit)
 ##   north        — zero bearing in the plane (unit, perpendicular to up)
 ##   east         — north x up, the handedness heading is measured with
@@ -89,6 +92,12 @@ func _resolve(id: String) -> Dictionary:
 	var up := station.basis.y.normalized()
 	var north := (-station.basis.z).normalized()
 	var origin := Vector3.ZERO
+	# What the datum itself is doing. The station, its pad and a derelict on site
+	# are all static in world space today, so this is zero for them — but it is
+	# resolved here rather than assumed, because TARGET is NOT: it can be pinned
+	# to a rival under way or a traffic ship on its route, and then every reading
+	# taken against this datum has to have this subtracted from it.
+	var velocity := Vector3.ZERO
 	var valid := true
 	var reason := ""
 	match id:
@@ -110,6 +119,7 @@ func _resolve(id: String) -> Dictionary:
 				reason = "NO TARGET SELECTED"
 			else:
 				origin = target_at
+				velocity = _target_velocity()
 		_:
 			id = "INERTIAL"
 			up = Vector3.UP
@@ -128,6 +138,7 @@ func _resolve(id: String) -> Dictionary:
 		"label": label_for(id),
 		"auto": false,
 		"origin": origin,
+		"velocity": velocity,
 		"up": up,
 		"north": north,
 		"east": north.cross(up),
@@ -167,6 +178,19 @@ func _target_origin() -> Variant:
 	return null
 
 
+## How fast the TARGET datum's origin is going. A cut member rides the derelict,
+## which holds station on site — it tumbles, but its centre does not travel — so
+## the only target that moves is a designated CONTACT, and it carries its own
+## velocity (see GameState.contacts, written by whoever owns its motion).
+func _target_velocity() -> Vector3:
+	if not GameState.get_member(GameState.selected_member_id).is_empty():
+		return Vector3.ZERO
+	var contact := GameState.get_contact(GameState.tracked_contact_id)
+	if contact.is_empty():
+		return Vector3.ZERO
+	return contact.get("velocity", Vector3.ZERO)
+
+
 ## --- Derived readings -------------------------------------------------------
 
 ## Height above the datum's plane, metres, signed.
@@ -184,17 +208,31 @@ func altitude() -> float:
 	return alt
 
 
+## How fast the ship is going RELATIVE TO THE DATUM — her world velocity with the
+## datum's own motion taken out (see GameState.ships on the frame).
+##
+## This is the velocity every reading on the band is supposed to be taken
+## against, and the one the speed governor holds the ship to. Against a static
+## datum it is simply her world velocity, which is every datum but a designated
+## contact today; against a rival under way it is genuinely different, and that
+## difference is the point.
+func relative_velocity() -> Vector3:
+	var velocity: Vector3 = GameState.local_ship().get("velocity", Vector3.ZERO)
+	return velocity - (datum()["velocity"] as Vector3)
+
+
+## The datum's own world velocity, for callers that need to take a reading out of
+## the world frame and put it back — ShipMotion's governor clamp does exactly
+## that. Separate from relative_velocity() only so the clamp can add it back
+## afterwards without resolving the datum twice.
+func datum_velocity() -> Vector3:
+	return datum()["velocity"]
+
+
 ## Rate of climb against the datum's plane, m/s, POSITIVE UP. DockingSystem's
 ## "descent" is this negated — it counts sink, this counts altitude.
-##
-## This is the ship's WORLD velocity resolved on the datum's up (see
-## GameState.ships on the frame), which equals her rate of climb RELATIVE to the
-## datum only because every datum origin is static today. A datum on a moving
-## body — a derelict under way, an orbiting berth — would want that body's own
-## velocity subtracted first.
 func vertical_speed() -> float:
-	var velocity: Vector3 = GameState.local_ship().get("velocity", Vector3.ZERO)
-	return velocity.dot(datum()["up"])
+	return relative_velocity().dot(datum()["up"])
 
 
 ## Distance from the ship to the datum's origin, metres.

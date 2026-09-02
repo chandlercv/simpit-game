@@ -103,7 +103,7 @@ func spawn_piece(member: Dictionary, qty: float) -> int:
 	# can push and be pushed by it.
 	piece["obstacle_id"] = GameState.register_obstacle(
 			"SALVAGE: %s" % member["name"], center, radius, PackedVector3Array(),
-			false, radius * radius * radius)
+			false, CollisionSystem.body_mass(radius))
 	var obstacle := GameState.get_obstacle(piece["obstacle_id"])
 	if not obstacle.is_empty():
 		obstacle["vel"] = velocity

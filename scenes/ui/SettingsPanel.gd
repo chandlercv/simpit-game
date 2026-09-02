@@ -7,9 +7,14 @@ extends Control
 ## calls, so the panel and the button can never disagree.
 ##
 ## The NAV REFERENCE row is the one that matters. It picks the datum that
-## altitude, heading, range and attitude are ALL measured against — see
-## NavReference — and it reports what AUTO has resolved to, because "AUTO" on
-## its own does not tell a pilot what their altimeter is counting from.
+## altitude, heading, range, attitude AND the speed governor are all measured
+## against — see NavReference — and it reports what AUTO has resolved to, because
+## "AUTO" on its own does not tell a pilot what their altimeter is counting from.
+##
+## The GOVERNOR row above it is the ship's speed limit, and it sits here rather
+## than on a switch because it is a number rather than a state. It is measured
+## against that same datum, which is why the two rows are adjacent: changing what
+## the ship is referenced to changes what the governor is holding her to.
 
 const ButtonTheme := preload("res://scenes/ui/ButtonTheme.gd")
 const Instrument := preload("res://scenes/ui/Instrument.gd")
@@ -20,6 +25,7 @@ const TouchSliderScript := preload("res://scenes/ui/TouchSlider.gd")
 ## Room under the rows for the resolved-datum explanation.
 const FOOTER_H := 92.0
 
+var _gov_buttons: Dictionary = {}
 var _ref_buttons: Dictionary = {}
 var _band_buttons: Dictionary = {}
 var _rate_buttons: Dictionary = {}
@@ -30,6 +36,8 @@ var _mute_button: Button = null
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build()
+	GameState.governor_speed_changed.connect(func(_s: float) -> void: _sync())
+	GameState.fbw_law_changed.connect(func(_l: String) -> void: queue_redraw())
 	GameState.nav_reference_changed.connect(func(_id: String) -> void: _sync())
 	GameState.tactical_band_changed.connect(func(_on: bool) -> void: _sync())
 	GameState.rate_scale_changed.connect(func(_s: String) -> void: _sync())
@@ -48,6 +56,8 @@ func _build() -> void:
 	outer.add_theme_constant_override("separation", ButtonTheme.TOUCH_SEP)
 	add_child(outer)
 
+	_gov_buttons = _add_row(outer, "SPEED GOVERNOR (M/S)", _governor_choices(),
+			func(choice: String) -> void: GameState.set_governor_speed(float(choice)))
 	_ref_buttons = _add_row(outer, "NAV REFERENCE", GameState.NAV_REFERENCES,
 			GameState.set_nav_reference)
 	_band_buttons = _add_row(outer, "TACTICAL BAND", ["SHOW", "HIDE"],
@@ -55,6 +65,17 @@ func _build() -> void:
 	_rate_buttons = _add_row(outer, "RATE SCALE", GameState.RATE_SCALES,
 			GameState.set_rate_scale)
 	_add_volume_row(outer)
+
+
+## The governor's presets as button labels. Buttons rather than a slider because
+## TouchSlider reads out in per cent and this is metres per second, and because
+## what has to be reachable at arm's length is a round number rather than an
+## arbitrary one — the pilot wants "sixty", not "fifty-eight".
+func _governor_choices() -> Array:
+	var out: Array = []
+	for speed: float in GameState.GOVERNOR_STEPS:
+		out.append("%d" % roundi(speed))
+	return out
 
 
 ## One labelled row of mutually exclusive touch buttons.
@@ -157,6 +178,8 @@ func _short_label(choice: String) -> String:
 
 
 func _sync() -> void:
+	for label: String in _gov_buttons:
+		_mark(_gov_buttons[label], is_equal_approx(float(label), GameState.governor_speed))
 	for id: String in _ref_buttons:
 		_mark(_ref_buttons[id], id == GameState.nav_reference)
 	_mark(_band_buttons["SHOW"], GameState.tactical_band)
@@ -206,6 +229,13 @@ func _draw() -> void:
 		roundi(NavReference.range_to())]
 	if d["fallback"]:
 		detail = "%s. %s" % [d["reason"], detail]
+	# The governor row is a setting the DIRECT law ignores, and a setting that is
+	# selected but not in force has to say so — otherwise the page shows 60 M/S
+	# lit while the ship has no speed limit at all.
+	var detail_color := Color(accent, 0.65)
+	if not GameState.fbw_engaged():
+		detail = "DIRECT LAW — GOVERNOR NOT IN FORCE. %s" % detail
+		detail_color = Instrument.WARN
 	draw_string(font, Vector2(Instrument.INSET, y + Instrument.HEADING + 8.0), detail,
 			HORIZONTAL_ALIGNMENT_LEFT, size.x - Instrument.INSET * 2.0,
-			Instrument.DETAIL, Color(accent, 0.65))
+			Instrument.DETAIL, detail_color)

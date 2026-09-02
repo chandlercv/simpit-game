@@ -373,6 +373,17 @@ func throttle_binding() -> Dictionary:
 	}
 
 
+## True when the fitted throttle is a SELF-CENTRING axis (a gamepad stick or
+## trigger) rather than an absolute lever that stays where it is put.
+##
+## The two shapes want opposite throttle command laws and ShipMotion picks its
+## default from this — see ShipMotion.ThrottleCmdMode for why they cannot share
+## one. Nothing bound reads idle as centring: an absent throttle is a lever's
+## problem, not a stick's, and the lever law is the safer default.
+func throttle_is_centering() -> bool:
+	return String(_throttle_spec.get("mode", "")) == "gamepad"
+
+
 ## The active raw-HID axis bindings (the X52 nub), which are composited in
 ## _process rather than injected into the Input Map — so, like the throttle,
 ## they're invisible to anything reading bindings back from it.
@@ -488,6 +499,11 @@ func _bind_hotas() -> void:
 	# a profile actually binds it.
 	if _mouse_bridge:
 		_mouse_bridge.set_active(not _hid_axis_bindings.is_empty())
+	# A profile load is the only moment the FITTED THROTTLE can change shape, and
+	# the throttle's shape decides which command law suits it. Tell the motion
+	# pipeline now rather than having it poll — it honours a pilot who has already
+	# chosen (ShipMotion.sync_throttle_law).
+	ShipMotion.sync_throttle_law()
 
 
 ## Live value (-1..1) of a raw-HID virtual axis by source name; 0 if unknown.

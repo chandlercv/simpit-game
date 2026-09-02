@@ -80,40 +80,48 @@ Corporatists are emerging, but there's still room for independents to make a goo
 
 Travel between planetary systems requires far more energy than an individual ship can provide — it's very expensive and happens on roughly a once-a-century timescale.
 
-## Ship Performance: Why There's a Speed Ceiling
+## Ship Performance: Why Ships Fly to a Limit
 
-- **Higgs drag, not waste heat.** The Higgs field is the one frame everything is
-  ultimately referred to. At ordinary speeds a hull's coupling to it is just the
-  familiar mass term. Push harder and the coupling grows with velocity and
-  behaves like a drag. A ship's ceiling is simply the speed at which its thrust
-  and that drag balance.
-- **The compact fusion reactor is why anyone ever notices.** This is the causal
-  claim, and everything else follows from it: *without the reactor at the heart
-  of the ship, the Higgs interaction would never be limiting at these speeds.*
-  Running a compact fusion containment makes the coupling enormously more
-  observable — the ship drags against the field because of what it is carrying,
-  not because of how it is shaped. Every ship with one of these reactors has a
-  ceiling, and the ceiling is a property of **the reactor**, not of the airframe.
-  (It is also why a ceiling exists at all in a vacuum, which a plain "drag" story
-  never explains.)
-- **Salvage hulls still run below a purpose-built ceiling.** A salvager flies a
-  reactor pulled out of somebody else's ship, and she sits wherever that reactor
-  sits. That is the in-fiction reason a player ship feels sluggish next to the
-  military-surplus wrecks she is cutting apart, and it makes the upgrade path a
-  better-matched reactor rather than a bigger engine.
-- **Carrying propellant is how you beat the ceiling.** The drag-limited maximum
-  is what a *field* drive can do: it is pushing against the coupling and losing.
-  A drive that throws real reaction mass out of the back is adding momentum
-  instead of fighting the coupling, so it can sit above the field drive's
-  terminal velocity for exactly as long as the mass lasts. That is why propellant
-  is spent rather than allocated.
-- **Heat is still real — it just governs efficiency, not speed.** Waste heat is
-  why hulls carry radiator fins, and it stays a live constraint on **battery
-  efficiency, alternator efficiency, life support, sensor operation, cutter
-  operation** and on whatever systems come later. It is simply not what caps a
-  ship's speed. (Nothing in the simulation models heat yet; it is written down
-  here so the hooks exist when they are wanted, and it deliberately carries no
-  figures until something enforces them.)
+- **There is no universal speed limit, and there never was one.** An earlier
+  draft of this setting had one — a "Higgs drag" that grew with velocity, so a
+  hull's ceiling was where its thrust and that drag balanced. It has been
+  removed. It made speed an *absolute* quantity in a universe where velocity is
+  relative, which falls apart the moment the setting acquires anything with real
+  orbital mechanics around it: a body the size of Earth has things moving at
+  kilometres per second, relative to it, quite normally.
+- **What limits a ship is her flight computer.** Every hull carries a
+  **governor** — a fly-by-wire limit the pilot sets, holding the ship to a chosen
+  speed. It is a piece of equipment, not a law of nature, and it can be switched
+  off. That is the whole of it.
+- **A governor names its reference, which is why it survives contact with a
+  planet.** It holds a speed *relative to whatever the navigation system is
+  referenced to* — the berth you are approaching, the derelict you are cutting,
+  the body you are in orbit around. Near a planet it governs your closing speed
+  on the thing you are flying at, which is the number that actually matters and
+  the only one that means anything. Change what the instruments are referenced
+  to and you change what the governor is holding you to.
+- **Switching it off is a real decision with real consequences.** Under direct
+  law nothing limits the ship at all, and nothing will stop her but the pilot and
+  the propellant. Reverse thrust is a fraction of forward, so arresting a high
+  speed means turning the ship around and burning — which takes room, time and
+  mass you may not have budgeted.
+- **What a drive buys is thrust, not speed.** The stages differ in how hard they
+  push, what they cost the bus, and what they consume. None of them sets a
+  maximum speed, because nothing does. A better drive gets you to a speed sooner
+  and stops you from it sooner; it does not raise a ceiling, because there is no
+  ceiling.
+- **Mass is the other half of performance, and it is live.** Acceleration is
+  thrust over all-up weight, so a full hold and full tanks are felt on every axis
+  — slower to accelerate, slower onto a commanded rotation rate, slower to stop
+  at one, and carrying more momentum into anything you hit. A salvager's ship
+  handles worst exactly when she is carrying the most, which is the trade the
+  whole job is built on.
+- **Heat is real and governs efficiency, not speed.** Waste heat is why hulls
+  carry radiator fins, and it stays a live constraint on **battery efficiency,
+  alternator efficiency, life support, sensor operation, cutter operation** and
+  on whatever systems come later. (Nothing in the simulation models heat yet; it
+  is written down here so the hooks exist when they are wanted, and it
+  deliberately carries no figures until something enforces them.)
 - **Reverse is deliberately weak.** No yard designs a drive to push backward as
   hard as forward — reverse thrust is a braking/manoeuvring tap off the main
   drive, not a mirrored engine. A ship's reverse performance is a small fraction
@@ -121,8 +129,14 @@ Travel between planetary systems requires far more energy than an individual shi
 
 ## Power and Propulsion
 
-- **A fusion reactor is the ship's one energy source.** An **alternator** turns
-  its output into electricity for the bus; a **battery** buffers the difference
+- **A fusion reactor is the ship's one energy source, and it sells two different
+  products.** An **alternator** converts part of its output into electricity for
+  the bus; the remainder leaves as **heat**, and the heat is what the
+  nuclear-thermal stage expands hydrogen with. That division is the causal reason
+  the thermal stage costs the bus almost nothing while the field stage is
+  expensive — they are drawing on different products of the same reactor, and a
+  ship's electrical capacity and its thermal-drive capacity are set by how the
+  one reactor is divided between them. A **battery** buffers the difference
   between what the alternator makes and what the ship is drawing. Alternator off
   and you are running on the battery; battery off and you are limited to whatever
   the alternator is making at that instant; both off and the ship is quiet.
@@ -130,8 +144,8 @@ Travel between planetary systems requires far more energy than an individual shi
   stage** — reactionless, propellant-free, and electrically expensive — and two
   reaction stages layered on top of it.
 - **Nuclear thermal.** Liquid hydrogen heated by the fusion reactor and expelled.
-  Real thrust, real reaction mass, a ceiling above the field drive's, and almost
-  no load on the bus, because it runs on the reactor's heat rather than its amps.
+  Real thrust, real reaction mass, and almost no load on the bus, because it runs
+  on the reactor's heat rather than its amps.
 - **Combustion.** Liquid oxygen burned with the same liquid hydrogen in a
   conventional bipropellant chamber. The most thrust and the shortest endurance —
   a boost, not a cruise. Oxygen is useless without hydrogen to burn it with.

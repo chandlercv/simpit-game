@@ -672,7 +672,7 @@ func _physics_process(delta: float) -> void:
 	_reprimand_cool = maxf(_reprimand_cool - delta, 0.0)
 	_damages_cool = maxf(_damages_cool - delta, 0.0)
 	_contact_grace = maxf(_contact_grace - delta, 0.0)
-	_update_traffic()
+	_update_traffic(delta)
 	_update_separation()
 	if not is_active():
 		return  # a separation bust may already have sent us around
@@ -717,16 +717,24 @@ func _update_gear_stress(delta: float) -> void:
 
 ## Walk each traffic ship along its route and keep its contact glued to it, then
 ## re-evaluate which of them is fouling the lane ahead.
-func _update_traffic() -> void:
+##
+## The contact's velocity is differenced from the pose rather than read off the
+## route, because the route is a parametric path and its speed is whatever the
+## curve happens to be doing at this instant. It has to be written: a traffic
+## ship is something the navigation datum can be pinned to, and everything
+## measured against a datum subtracts the datum's own motion.
+func _update_traffic(delta: float) -> void:
 	var blocker_ids := _lane_conflict_ids()
 	for entry: Dictionary in GameState.traffic:
 		var route: Dictionary = entry["route"]
 		var pose := _route_pose(route, _pattern_time + float(entry["phase"]))
+		var previous: Vector3 = (entry["transform"] as Transform3D).origin
 		entry["transform"] = pose
 		entry["conflict"] = blocker_ids.has(int(entry["id"]))
 		var contact := GameState.get_contact(int(entry["contact_id"]))
 		if not contact.is_empty():
 			contact["position"] = pose.origin
+			contact["velocity"] = (pose.origin - previous) / maxf(delta, 0.0001)
 
 
 ## Traffic separation: an advisory call as one closes, and a go-around if it gets

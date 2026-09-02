@@ -7,10 +7,24 @@ extends Node
 ## post-integration proximity pass — after the ship has moved for the tick and
 ## after ThreatSystem has moved its contacts, we test the ship against every
 ## solid body (the wreck frame, the cosmetic debris chunks, and moving ships like
-## the rival/patrol). On overlap the ship is pushed out of penetration (no
-## tunnelling), the inward velocity is reflected/bled, and the hull section that
-## faced the hit loses integrity proportional to closing speed. Runs last in the
-## autoload order (after ThreatSystem) so it reads the tick's final positions.
+## the rival/patrol). On overlap the ship is pushed out of penetration, the
+## inward velocity is reflected/bled, and the hull section that faced the hit
+## loses integrity proportional to closing speed. Runs last in the autoload order
+## (after ThreatSystem) so it reads the tick's final positions.
+##
+## TUNNELLING is the standing weakness of testing after the fact, and it is not
+## hypothetical: at 60 m/s the ship crosses a metre per 60 Hz tick against a hull
+## 0.7 m across, and DIRECT law removes the speed governor entirely. So
+## resolve_ship() is exposed for ShipMotion to drive per SUB-STEP whenever the
+## ship is moving fast enough to cross a body inside one tick — min_body_radius()
+## is what it gates on — while _physics_process still runs the authoritative pass
+## at the end of the tick against everything's final position.
+##
+## Every mass here is in KILOGRAMS, on the same scale as the ship's own
+## (GameState.ship_mass): bodies are massed from their radius at BODY_DENSITY,
+## and mass 0 still means immovable. That is what lets a ship-vs-body impulse
+## split by mass like any other pair, so ramming a boulder throws the ship and
+## ramming a light chunk throws the chunk.
 ##
 ## The ship is a CAPSULE (two local endpoints + radius, from ShipDefinition), so
 ## it fits the elongated hull and — because the endpoints are ship-local and
@@ -59,11 +73,6 @@ const WRECK_RADIUS := 4.0
 const IMPACT_SPEED_FLOOR := 1.5
 ## Fraction of the inward velocity returned as a bounce.
 const RESTITUTION := 0.3
-## Nominal ship mass for the ship-vs-movable-body impulse below — heavy enough
-## that a light salvage piece/debris chunk takes a believable kick without the
-## ship itself needing a real mass in its own bounce (that formula, above,
-## deliberately stays as before: infinite-mass-target shorthand).
-const SHIP_MASS := 500.0
 ## Hull integrity lost per m/s of closing speed above the floor.
 const DAMAGE_PER_SPEED := 0.03
 const MAX_IMPACT_DAMAGE := 0.6
@@ -84,12 +93,36 @@ const MAX_SEPARATION_SPEED := 6.0
 ## surface stays a shove and not a spin cycle. A healthy FBW nulls an imparted
 ## spin in a couple of tenths of a second; a degraded one leaves it with the
 ## pilot, which is the intended cost.
+##
+## It is a backstop now rather than the usual outcome: _impact_spin divides by
+## the ship's real moments, so a hard knock lands near this figure and a graze
+## far below it, where before every contact saturated it identically.
 const MAX_IMPART_SPIN := 1.5
+
+## Density (kg/m^3) every movable body in the scene is massed at — debris chunks
+## and severed salvage pieces alike, from their bounding radius. One figure so
+## the two kinds trade momentum proportionately, and a real one so their masses
+## are on the same scale as the ship's (GameState.ship_mass) rather than in units
+## of their own.
+##
+## It is deliberately well under rock. These are hollow slag and shredded
+## structure, not solid stone, and at true rock density a three-metre chunk
+## outweighs the ship four times over and reads as a wall. Raise it to make the
+## field heavier; the ship is 60 t and that is the figure to weigh it against.
+const BODY_DENSITY := 500.0
 
 ## Body key -> seconds of impact cooldown remaining.
 var _cooldowns: Dictionary = {}
-## This tick's length, for the rate-limited separation below.
+## This step's length, for the rate-limited separation below.
 var _delta := 0.0
+## Cached min_body_radius() for the tick, or -1 when it needs recomputing.
+var _min_radius := -1.0
+
+
+## Mass in kilograms of a movable body of this bounding radius. The one place
+## radius becomes mass, so debris and salvage cannot drift onto different scales.
+static func body_mass(radius: float) -> float:
+	return BODY_DENSITY * (4.0 / 3.0) * PI * radius * radius * radius
 
 
 func _physics_process(delta: float) -> void:
@@ -98,12 +131,35 @@ func _physics_process(delta: float) -> void:
 	# whole reason the lane is tight.
 	if not GameState.flight_active():
 		_cooldowns.clear()
+		_min_radius = -1.0
 		return
-	_delta = delta
+	# Cooldown decay is per TICK, not per sub-step. ShipMotion may call
+	# resolve_ship several times inside one tick at speed (see MAX_SUBSTEPS), and
+	# ageing the cooldowns once per sub-step would let a single grind register as
+	# several separate impacts.
 	for key: String in _cooldowns.keys():
 		_cooldowns[key] -= delta
 		if _cooldowns[key] <= 0.0:
 			_cooldowns.erase(key)
+	_min_radius = -1.0
+	resolve_ship(delta)
+	_resolve_movable_bodies(_collidables())
+
+
+## The ship against every solid body, once. Called at the end of the tick by
+## _physics_process — where it reads ThreatSystem's and DriftSystem's final
+## positions, which is why this system is ordered last — and additionally by
+## ShipMotion once per sub-step whenever the ship is moving fast enough to cross
+## a body inside a single tick.
+##
+## Idempotent by construction: it acts on penetration, and a pass that finds none
+## does nothing. So the tick-end call is free after a sub-stepped tick has
+## already separated the ship, and the cooldowns above keep one contact from
+## being charged as damage twice.
+func resolve_ship(delta: float) -> void:
+	if not GameState.flight_active():
+		return
+	_delta = delta
 
 	var ship: Dictionary = GameState.local_ship()
 	var xform: Transform3D = ship["transform"]
@@ -132,8 +188,9 @@ func _physics_process(delta: float) -> void:
 		GameState.ship_contact.emit(String(body["name"]), closing)
 		origin += normal * float(contact["depth"])  # push out of penetration
 		if closing > 0.0:
-			velocity += normal * closing * (1.0 + RESTITUTION)  # reflect inward part
-			omega += _impact_spin(ship_a, ship_b, origin, body, normal, closing)
+			var dv := normal * closing * (1.0 + RESTITUTION) * _ship_share(body)
+			velocity += dv
+			omega += _impact_spin(ship_a, ship_b, origin, body, normal, dv)
 			_impart_body_velocity(body, normal, closing)
 		moved = true
 		_apply_impact(body, xform, normal, closing)
@@ -145,7 +202,48 @@ func _physics_process(delta: float) -> void:
 		# straight back in and grind, so hand control back to the pilot.
 		if GameState.approach_state != "HOLDING":
 			SalvageSystem.abort_approach_on_collision()
-	_resolve_movable_bodies(bodies)
+
+
+## The fraction of the exchange the SHIP takes, by mass.
+##
+## Fixed structure — the wreck frame, the station, the deck, anything registered
+## with mass 0 — is infinite-mass and the ship takes all of it: 1.0, which is the
+## reflection this function used to be a constant for. Against something that can
+## move, the two split the way _resolve_pair splits any other pair, so ramming a
+## boulder that outweighs the ship hurts the ship and ramming a light chunk
+## mostly just moves the chunk.
+func _ship_share(body: Dictionary) -> float:
+	var mass: float = body.get("mass", 0.0)
+	if mass <= 0.0:
+		return 1.0
+	return mass / (GameState.ship_mass() + mass)
+
+
+## Radius of the tightest solid body in the scene, metres — what ShipMotion gates
+## its sub-stepping on, because the tightest body is the one the ship can cross
+## inside a tick without ever being tested against it.
+##
+## Reads the two registries directly rather than going through _collidables().
+## That function allocates a dict per body for the narrowphase to work on, which
+## measured 53 us against 30 bodies — 0.3% of a 60 Hz tick, paid on every tick
+## including the overwhelming majority that sub-step once. All this needs is the
+## radii, so it walks them and allocates nothing.
+##
+## Computed at most once per tick and cached anyway; the registry cannot change
+## under a sub-step loop, and this is called from inside one.
+func min_body_radius() -> float:
+	if _min_radius >= 0.0:
+		return _min_radius
+	_min_radius = DEFAULT_SHIP_RADIUS
+	for obstacle: Dictionary in GameState.obstacles:
+		_min_radius = minf(_min_radius, float(obstacle["radius"]))
+	for contact: Dictionary in GameState.contacts:
+		# Contacts with no radius are sensor blips, not bodies — they are not in
+		# _collidables() either and must not drag the gate down to zero.
+		var r: float = contact.get("radius", 0.0)
+		if r > 0.0:
+			_min_radius = minf(_min_radius, r)
+	return _min_radius
 
 
 ## Union of solid bodies this frame. Everything solid — the wreck's per-member
@@ -233,34 +331,49 @@ func _apply_impact(body: Dictionary, xform: Transform3D, normal: Vector3,
 		body["name"], section, roundi(dmg * 100.0)])
 
 
-## Spin imparted to the ship by a contact: the linear bounce's delta-v taken
-## as applied at the contact point, as a moment about the ship's origin over
-## the ship's radius of gyration (ShipDefinition.collision_spin_radius). The
-## contact point is approximated as the capsule spine's closest approach to
-## the body, pushed out to the capsule surface — not a true GJK witness point;
-## this is a believable kick, not a solver. A dead-centre hit has its moment
-## arm along the normal and imparts nothing, which is what a pilot expects.
+## Spin imparted to the ship by a contact: the bounce's delta-v taken as applied
+## at the contact point, resolved through the ship's real moments of inertia —
+## delta-omega = I^-1 (r x m dv), per body axis. The contact point is
+## approximated as the capsule spine's closest approach to the body, pushed out
+## to the capsule surface — not a true GJK witness point; this is a believable
+## kick, not a solver. A dead-centre hit has its moment arm along the normal and
+## imparts nothing, which is what a pilot expects.
+##
+## This used to divide by a scalar radius of gyration of 1.0, which made the
+## divisor 1 and saturated MAX_IMPART_SPIN on essentially every contact — every
+## impact spun the ship exactly as hard as every other. Against the real tensor a
+## hard knock lands just under the cap and a graze well below it, so how badly
+## the ship is thrown finally reports how badly it was hit.
 func _impact_spin(ship_a: Vector3, ship_b: Vector3, origin: Vector3,
-		body: Dictionary, normal: Vector3, closing: float) -> Vector3:
-	var rg: float = maxf(GameState.ship_def.collision_spin_radius, 0.1)
+		body: Dictionary, normal: Vector3, dv: Vector3) -> Vector3:
 	var spine: Vector3 = _closest_points_between_segments(
 			ship_a, ship_b, body["a"], body["b"])[0]
 	var contact := spine - normal * _ship_radius()
-	var dv: Vector3 = normal * closing * (1.0 + RESTITUTION)
-	return ((contact - origin).cross(dv) / (rg * rg)).limit_length(MAX_IMPART_SPIN)
+	# The angular impulse is a world-frame moment, but the moments of inertia are
+	# per BODY axis and differ from one another — roll is much the smallest — so
+	# resolve into the hull's frame to divide, then put it back.
+	var basis: Basis = (GameState.local_ship()["transform"] as Transform3D).basis
+	var moment: Vector3 = basis.inverse() \
+			* (contact - origin).cross(dv * GameState.ship_mass())
+	var inertia := GameState.ship_inertia()
+	var local := Vector3(
+			moment.x / maxf(inertia.x, 1.0),
+			moment.y / maxf(inertia.y, 1.0),
+			moment.z / maxf(inertia.z, 1.0))
+	return (basis * local).limit_length(MAX_IMPART_SPIN)
 
 
-## Kick a movable body (a drifting salvage piece, a knocked debris chunk) on
-## ship contact. The ship's own bounce above deliberately keeps its old
-## infinite-target-mass shorthand regardless of what it hit; this is the
-## separate, additive reaction on the body's side, scaled down as its mass
-## approaches the ship's nominal SHIP_MASS so a heavy body barely moves.
+## Kick a movable body (a drifting salvage piece, a knocked debris chunk) on ship
+## contact. This is the body's half of the exchange; _ship_share above is the
+## ship's, and the two are the same split seen from either end. A body far
+## heavier than the ship barely moves and throws the ship instead.
 func _impart_body_velocity(body: Dictionary, normal: Vector3, closing: float) -> void:
 	var mass: float = body.get("mass", 0.0)
 	if mass <= 0.0:
 		return
 	var src: Dictionary = body["src"]
-	var frac := SHIP_MASS / (SHIP_MASS + mass)
+	var ship_mass := GameState.ship_mass()
+	var frac := ship_mass / (ship_mass + mass)
 	src["vel"] = (src.get("vel", Vector3.ZERO) as Vector3) \
 			- normal * closing * (1.0 + RESTITUTION) * frac
 

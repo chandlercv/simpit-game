@@ -23,6 +23,11 @@ signal nav_reference_changed(id: String)
 signal tactical_band_changed(shown: bool)
 ## Rotation-rate ribbon full scale changed, one of RATE_SCALES.
 signal rate_scale_changed(scale: String)
+## Fly-by-wire control law changed, one of FBW_LAWS. ShipMotion implements it;
+## the annunciator, the speed tape and the SETTINGS page all report it.
+signal fbw_law_changed(law: String)
+## Speed governor setting changed, m/s.
+signal governor_speed_changed(speed: float)
 signal power_changed
 ## Battery charge changed, as a 0..1 fraction of capacity.
 signal battery_changed(fraction: float)
@@ -134,6 +139,24 @@ const NAV_REFERENCES: Array[String] = ["AUTO", "PAD", "WRECK", "TARGET", "INERTI
 const RATE_SCALES: Array[String] = ["RATED", "FINE"]
 const RATE_SCALE_FINE_DEG := 15.0
 
+## Fly-by-wire control laws (ShipMotion implements them).
+##
+## NORMAL — the augmentation holds commanded attitude rates, bleeds uncommanded
+## translation, and the SPEED GOVERNOR holds the ship to its setting.
+## DIRECT — none of it. The controls command force and torque, nothing is nulled,
+## and nothing limits speed but propellant and the pilot.
+##
+## Named rather than a bool because the annunciator, the handbook and the
+## settings page all have to say WHICH law is running, and "not engaged" is not a
+## name. It is not persisted: a control law boots NORMAL every flight.
+const FBW_LAWS: Array[String] = ["NORMAL", "DIRECT"]
+
+## Governor settings offered on the MFD SETTINGS page, m/s. Presets rather than a
+## continuous slider: the Tactical band takes no clicks and a pit may have no
+## keyboard in reach, so what has to be reachable is a round number a finger can
+## hit. See governor_speed.
+const GOVERNOR_STEPS: Array[float] = [20.0, 40.0, 60.0, 90.0, 120.0]
+
 ## Power allocation channels, each 0..1. The reactor can't run everything at
 ## full: the UI warns when the summed allocation exceeds power_budget().
 const POWER_CHANNELS: Array[String] = ["THRUST", "CUTTER", "SENSORS", "LIFE"]
@@ -152,15 +175,9 @@ const CHANNEL_SWITCHES: Dictionary = {
 ## its switch is on (life support isn't something you run at part power).
 const CHANNEL_HIGH_OVERRIDE: Dictionary = {"LIFE": 1.0}
 
-## Battery capacity, in unit-seconds of the same abstract units power_total()
-## sums — so a steady 1.0-unit deficit runs a full battery flat in this many
-## seconds. The battery is a BUFFER between what the alternator makes and what
-## the channels ask for; it is not a second reactor.
-const BATTERY_CAPACITY := 120.0
-
 ## Ceiling on how fast surplus alternator output is returned to the battery, in
 ## the same units. Recharging from flat therefore takes at least
-## BATTERY_CAPACITY / BATTERY_CHARGE_RATE seconds of running under-loaded.
+## battery_capacity() / BATTERY_CHARGE_RATE seconds of running under-loaded.
 const BATTERY_CHARGE_RATE := 1.0
 
 ## Charge fraction below which the low-battery call is made — once per crossing,
@@ -208,6 +225,15 @@ const HULL_SECTIONS: Array[String] = ["BOW", "PORT", "STBD", "CORE", "AFT", "DRI
 ## location is printed at boot; on Windows it lands under
 ## %APPDATA%\Godot\app_userdata\<project>\.
 const COMMS_LOG_PATH := "user://comms_log.txt"
+
+## Flight preferences that outlive a launch, beside the display, input and audio
+## configs. Only the governor setting is here: it is a NUMBER THE PILOT PREFERS,
+## like a mixer level, and having to re-pick it every flight would be a chore.
+##
+## The control law is deliberately NOT saved. A law is the state of the aircraft,
+## not a preference about it, and a ship that came up in DIRECT because of how the
+## last flight ended would be a genuinely dangerous surprise.
+const FLIGHT_CONFIG_PATH := "user://flight.cfg"
 
 ## Run phases: ON_SITE (at the salvage claim), TRANSIT (abstract burn to/from
 ## a station), APPROACH (hand-flying the station's docking pattern — the
@@ -302,7 +328,7 @@ var ships: Dictionary = {}
 
 ## Sensor contacts. Replication-friendly Dictionaries:
 ## { "id": int, "name": String, "position": Vector3, "threat": bool,
-##   "radius": float, "kind": String, "heading": Vector3 }.
+##   "radius": float, "kind": String, "heading": Vector3, "velocity": Vector3 }.
 ## World nodes register the static ones at scene setup; ThreatSystem spawns,
 ## moves, and removes the gameplay-driven ones. "radius" > 0 marks a contact as
 ## a solid body CollisionSystem tests the ship against (moving ships like the
@@ -310,8 +336,16 @@ var ships: Dictionary = {}
 ## bodies live in `obstacles` / the wreck graph instead — see register_contact).
 ## "kind" is the model key a 3D view keys its mesh off ("RIVAL", "PATROL"), empty
 ## for a contact with no body of its own; "heading" is the unit vector its nose
-## points along, ZERO where nothing has a facing. Both are written by whoever owns
-## the contact's motion — see ThreatShips.gd for the only reader.
+## points along, ZERO where nothing has a facing; "velocity" is how fast it is
+## actually going, world frame, ZERO for anything that holds station. All three
+## are written by whoever owns the contact's motion — see ThreatShips.gd for the
+## readers of the first two.
+##
+## "velocity" exists because a contact is something the ship can be MEASURED
+## AGAINST: pin the navigation datum to a moving rival and every relative reading
+## — the governor's limit among them — has to subtract what the rival is doing.
+## Anything that advances a contact's position must write it, or the ship will be
+## held to a speed relative to a body it thinks is stationary and is not.
 var contacts: Array[Dictionary] = []
 
 ## Static solid bodies the ship can run into that are NOT sensor contacts: the
@@ -344,6 +378,19 @@ var tactical_band: bool = true
 
 ## Rotation-rate ribbon full scale, one of RATE_SCALES.
 var rate_scale: String = "RATED"
+
+## Active fly-by-wire control law, one of FBW_LAWS. Boots NORMAL, always.
+var fbw_law: String = "NORMAL"
+
+## Speed the governor holds the ship to, m/s, RELATIVE TO THE SELECTED NAVIGATION
+## DATUM — see NavReference and ShipMotion's clamp. That reference is the whole
+## substance of the setting: a limit on speed through space would mean nothing
+## near anything that moves, while a limit on how fast you are closing on the
+## thing you are flying at means the same thing everywhere.
+##
+## It is a flight-computer limit, not a physical one, so DIRECT law removes it
+## outright. Persisted (FlightConfig) because it is a preference; the law is not.
+var governor_speed: float = 60.0
 
 ## 0..1, owned by SalvageSystem: eases toward a baseline that ratchets up with
 ## each structural cut, and spikes when a load-bearing member is severed.
@@ -491,8 +538,8 @@ var power_low := 0.2
 var master_bat := true
 var master_alt := true
 
-## Battery charge, 0..BATTERY_CAPACITY. Boots full.
-var battery_charge := BATTERY_CAPACITY
+## Battery charge, 0..battery_capacity(). Boots full.
+var battery_charge := battery_capacity()
 
 ## Latch for the low-battery call, so it is made on the crossing rather than
 ## every frame below the threshold.
@@ -530,6 +577,7 @@ var lox_fuel := 0.0
 
 func _ready() -> void:
 	_open_comms_log()
+	_load_flight_config()
 	ships[LOCAL_PEER_ID] = {
 		"transform": Transform3D.IDENTITY,
 		"velocity": Vector3.ZERO,
@@ -608,6 +656,7 @@ func register_contact(contact_name: String, position: Vector3, threat := false,
 		"radius": radius,
 		"kind": kind,
 		"heading": Vector3.ZERO,
+		"velocity": Vector3.ZERO,
 	})
 	contacts_changed.emit()
 	return id
@@ -905,6 +954,63 @@ func rate_scale_deg() -> float:
 	return RATE_SCALE_FINE_DEG if rate_scale == "FINE" else ship_def.rotation_rate_deg
 
 
+## Fly-by-wire control-law intent, one of FBW_LAWS.
+func set_fbw_law(law: String) -> void:
+	if law == fbw_law or not FBW_LAWS.has(law):
+		return
+	fbw_law = law
+	fbw_law_changed.emit(law)
+	post_comms("OPS", "FLIGHT CONTROL — %s LAW" % law)
+
+
+## Bindable (fbw_mode_cycle): step the control law.
+func cycle_fbw_law() -> void:
+	var idx := FBW_LAWS.find(fbw_law)
+	set_fbw_law(FBW_LAWS[(idx + 1) % FBW_LAWS.size()])
+
+
+## True while the augmentation and the governor are fitted to the controls at
+## all. Everything that asks "is the assist running" asks this, so the two can
+## never answer differently.
+func fbw_engaged() -> bool:
+	return fbw_law != "DIRECT"
+
+
+## Governor intent, m/s. Clamped to the offered range rather than to the exact
+## presets, so a future bound axis or nudge control can land between them.
+func set_governor_speed(speed: float) -> void:
+	var wanted := clampf(speed, GOVERNOR_STEPS[0], GOVERNOR_STEPS[-1])
+	if is_equal_approx(wanted, governor_speed):
+		return
+	governor_speed = wanted
+	governor_speed_changed.emit(wanted)
+	_save_flight_config()
+
+
+## Seed the default first, then let the file overwrite it — so a missing or
+## unreadable config leaves a flyable ship rather than a governor of zero, and a
+## figure written by an older build is clamped into range rather than trusted.
+func _load_flight_config() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(FLIGHT_CONFIG_PATH) != OK:
+		return
+	governor_speed = clampf(float(cfg.get_value("flight", "governor_speed", governor_speed)),
+			GOVERNOR_STEPS[0], GOVERNOR_STEPS[-1])
+
+
+func _save_flight_config() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("flight", "governor_speed", governor_speed)
+	cfg.save(FLIGHT_CONFIG_PATH)
+
+
+## The speed the governor is actually holding right now: the setting under
+## NORMAL, and nothing at all under DIRECT. INF rather than a large number so the
+## clamp that reads it needs no special case — limit_length(INF) is a no-op.
+func governor_limit() -> float:
+	return governor_speed if fbw_engaged() else INF
+
+
 ## Touch-slider intent: set a channel's desired allocation. Always accepted — a
 ## setting is what the pilot asked for, and no electrical condition rewrites it.
 ## A starved bus changes what is delivered against this, not this.
@@ -1044,7 +1150,7 @@ func _advance_electrical(delta: float) -> void:
 	var before := battery_charge
 	if supply > demand:
 		if master_bat:
-			battery_charge = minf(BATTERY_CAPACITY,
+			battery_charge = minf(battery_capacity(),
 					battery_charge + minf(supply - demand, BATTERY_CHARGE_RATE) * delta)
 	elif supply < demand and master_bat:
 		battery_charge = maxf(0.0, battery_charge - (demand - supply) * delta)
@@ -1073,7 +1179,7 @@ func _announce_battery(before: float) -> void:
 
 ## Battery charge as a fraction of capacity, for instruments and checklist rows.
 func battery_fraction() -> float:
-	return clampf(battery_charge / BATTERY_CAPACITY, 0.0, 1.0)
+	return clampf(battery_charge / maxf(battery_capacity(), 0.001), 0.0, 1.0)
 
 
 ## Net battery current, in the units power_total() sums: positive charging,
@@ -1083,7 +1189,7 @@ func battery_flow() -> float:
 		return 0.0
 	var supply := electrical_supply()
 	var demand := electrical_demand()
-	if supply > demand and battery_charge < BATTERY_CAPACITY:
+	if supply > demand and battery_charge < battery_capacity():
 		return minf(supply - demand, BATTERY_CHARGE_RATE)
 	if supply < demand and battery_charge > 0.0:
 		return -(demand - supply)
@@ -1129,8 +1235,66 @@ func power_total() -> float:
 	return total
 
 
+## What the alternator makes, in the abstract units the four channel allocations
+## are summed in. The ship's electrical figures are authored in watts and divided
+## down here, so `power_unit_w` is the single bridge between the two: the
+## handbook publishes the alternator in kilowatts and the sliders keep counting
+## in units, and neither is a second copy of the other.
 func power_budget() -> float:
-	return ship_def.power_budget
+	return ship_def.alternator_output_w / maxf(ship_def.power_unit_w, 1.0)
+
+
+## Battery capacity in unit-seconds — so a steady 1.0-unit deficit runs a full
+## battery flat in this many seconds. The battery is a BUFFER between what the
+## alternator makes and what the channels ask for; it is not a second reactor.
+func battery_capacity() -> float:
+	return ship_def.battery_capacity_j / maxf(ship_def.power_unit_w, 1.0)
+
+
+## Reactor output the alternator does NOT convert, in watts. This is not a spare
+## electrical supply — it is heat, and the nuclear-thermal drive stage is what
+## expands hydrogen with it. It is the reason that stage is nearly free on the
+## bus while the field stage is expensive: the two are drawing on different
+## products of the same reactor.
+func reactor_thermal_margin_w() -> float:
+	return maxf(ship_def.reactor_output_w - ship_def.alternator_output_w, 0.0)
+
+
+# --- Mass ---------------------------------------------------------------------
+
+## Everything the drive has to accelerate: dry hull, what is in the tanks, and
+## what is in the hold. Live, so a ship burns lighter and loads heavier, and both
+## are felt on every axis — thrust_accel and the attitude authority below read
+## this, not a nominal figure.
+func ship_mass() -> float:
+	return ship_def.dry_mass_kg \
+			+ lh2_fuel * ship_def.lh2_kg_per_unit \
+			+ lox_fuel * ship_def.lox_kg_per_unit \
+			+ CargoSystem.cargo_mass() * 1000.0
+
+
+## Principal moments about the body axes, (pitch, yaw, roll), for the ship as she
+## is loaded right now.
+##
+## The dry tensor is scaled by the mass ratio rather than summed from where the
+## load actually sits, because nothing tracks WHERE in the hold a crate is — the
+## manifest is a list, not a stowage plan. Scaling by mass is the honest
+## approximation available: it gets the direction and rough magnitude right (a
+## loaded ship is harder to turn) without pretending to a precision the cargo
+## model cannot supply.
+func ship_inertia() -> Vector3:
+	return ship_def.inertia_kgm2 * (ship_mass() / maxf(ship_def.dry_mass_kg, 1.0))
+
+
+## Angular acceleration available at full control deflection, (pitch, yaw, roll)
+## in rad/s^2 — torque over the live moments. Roll is the quickest axis because
+## it is the moment about the long axis; a loaded ship is slower on all three.
+func angular_authority() -> Vector3:
+	var inertia := ship_inertia()
+	return Vector3(
+			ship_def.attitude_torque_nm.x / maxf(inertia.x, 1.0),
+			ship_def.attitude_torque_nm.y / maxf(inertia.y, 1.0),
+			ship_def.attitude_torque_nm.z / maxf(inertia.z, 1.0))
 
 
 # --- Drive selector and propellant -------------------------------------------
@@ -1228,8 +1392,11 @@ func boosting() -> bool:
 
 ## Thrust as a fraction of the ship's rated figure, from the stages actually
 ## turning. Both is the rated case; either alone is a degraded one; neither —
-## selector at OFF or START, or L with a dry tank — is no thrust at all.
+## selector at OFF or START, or L with a dry tank — is no thrust at all. The
+## combustion booster layers on top and is the only case above 1.0.
 func thrust_fraction() -> float:
+	if boosting():
+		return ship_def.thrust_fraction_boost
 	var field := field_stage_running()
 	var thermal := thermal_stage_running()
 	if field and thermal:
@@ -1239,17 +1406,6 @@ func thrust_fraction() -> float:
 	if field:
 		return ship_def.thrust_fraction_field
 	return 0.0
-
-
-## The speed the Higgs drag holds the ship to, given what the drive is doing. The
-## field stage alone is the drag-limited maximum; reaction mass buys past it.
-func speed_ceiling() -> float:
-	var ceiling: float = ship_def.max_speed
-	if thermal_stage_running():
-		ceiling += ship_def.thermal_speed_bonus
-		if boosting():
-			ceiling += ship_def.boost_speed_bonus
-	return ceiling
 
 
 ## Fill a tank from a berth. Returns the units actually taken, which is what the

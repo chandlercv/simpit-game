@@ -105,6 +105,43 @@ func _run() -> void:
 				ship["transform"].origin.z, wreck_pos.z])
 	GameState.remove_obstacle(core_id)
 
+	# --- Sub-stepping: a body thinner than one tick's travel still stops the ---
+	# --- ship rather than being flown straight through.                      ---
+	#
+	# This is the case DIRECT law makes reachable and the discrete overlap test
+	# cannot see on its own: at 400 m/s a 60 Hz tick carries the ship 6.7 m, so a
+	# 1 m body sits entirely between two consecutive tested positions. Without
+	# ShipMotion sub-stepping the collision pass with it, the ship arrives on the
+	# far side having never touched anything.
+	_set_capsule(Vector3(0, 0, -0.95), Vector3(0, 0, 0.95), 0.35)
+	_reset_ship()
+	ship = GameState.local_ship()
+	GameState.set_fbw_law("DIRECT")
+	var wall_z := -300.0
+	var thin_id := GameState.register_obstacle(
+			"THIN PLATE", Vector3(0, 0, wall_z), 1.0,
+			_box_hull(Vector3(0, 0, wall_z), Vector3(6, 6, 0.5)), true)
+	comms_before = GameState.comms.size()
+	ship["velocity"] = Vector3(0, 0, -400.0)
+	var caught := await _wait_until(
+			func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 4.0)
+	_check(caught, "a plate thinner than one tick's travel is still hit at 400 m/s")
+	_check(ship["transform"].origin.z > wall_z,
+			"...and the ship is stopped in front of it, not tunnelled through (z %.1f, plate z %.1f)"
+					% [ship["transform"].origin.z, wall_z])
+	GameState.remove_obstacle(thin_id)
+	GameState.set_fbw_law("NORMAL")
+
+	# --- The bounce splits by mass, so WHAT you hit matters ---------------------
+	# The ship used to reflect identically off everything, which is why ramming a
+	# pebble and ramming a boulder felt the same. Same closing speed into a light
+	# body and a heavy one must now leave the ship going at different speeds.
+	var light := await _ram_body(CollisionSystem.body_mass(0.8))
+	var heavy := await _ram_body(GameState.ship_mass() * 20.0)
+	_check(heavy > light + 0.5,
+			"a heavy body throws the ship back harder than a light one (%.2f vs %.2f m/s)"
+					% [heavy, light])
+
 	# --- GJK distance unit checks (segment vs convex hull) --------------------
 	# A unit cube hull centred at the origin; distances are known analytically.
 	var cube := _box_hull(Vector3.ZERO, Vector3(1, 1, 1))
@@ -230,6 +267,33 @@ func _reset_ship() -> void:
 	var ship: Dictionary = GameState.local_ship()
 	ship["transform"] = Transform3D.IDENTITY
 	ship["velocity"] = Vector3.ZERO
+
+
+## Drive the ship into a movable sphere of `mass` kg at a fixed closing speed and
+## report its velocity ON THE TICK THE CONTACT LANDS. The only variable is the
+## body's mass, so what comes back is the mass split and nothing else.
+##
+## Read on the contact tick, not after the ship settles: under NORMAL law the
+## translation null bleeds whatever the bounce left within a second or so, and
+## both cases converge on nearly stopped. DIRECT law is selected for the same
+## reason — nothing must tidy the number away before it is read.
+func _ram_body(mass: float) -> float:
+	_reset_ship()
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	GameState.set_fbw_law("DIRECT")
+	var ship: Dictionary = GameState.local_ship()
+	var id := GameState.register_obstacle(
+			"RAM TARGET", Vector3(0, 0, -12.0), 2.0, PackedVector3Array(), false, mass)
+	ship["velocity"] = Vector3(0, 0, -8.0)
+	await _wait_until(
+			func() -> bool:
+				return absf((GameState.local_ship()["velocity"] as Vector3).z + 8.0) > 0.01,
+			4.0)
+	var rebound: float = (ship["velocity"] as Vector3).z
+	GameState.remove_obstacle(id)
+	GameState.set_fbw_law("NORMAL")
+	_reset_ship()
+	return rebound
 
 
 func _hull_total() -> float:

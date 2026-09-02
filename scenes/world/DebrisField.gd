@@ -42,10 +42,12 @@ func _ready() -> void:
 		var body := _mesh_body(chunk3d)
 		if body["radius"] > 0.0:
 			# Movable (mass > 0): a ship ram or a drifting salvage piece can knock
-			# a chunk now (CollisionSystem), same density assumption (mass ∝ r³)
-			# DriftSystem uses for salvage pieces so the two kinds trade momentum
-			# proportionately.
-			var mass: float = body["radius"] * body["radius"] * body["radius"]
+			# a chunk now (CollisionSystem). Massed in KILOGRAMS from its radius at
+			# the one density CollisionSystem also masses salvage pieces at, so the
+			# two kinds trade momentum proportionately with each other AND are on
+			# the same scale as the ship — which is what decides whether ramming a
+			# chunk moves the chunk or the ship.
+			var mass := CollisionSystem.body_mass(float(body["radius"]))
 			var id: int = GameState.register_obstacle(
 					chunk3d.name, body["center"], body["radius"], body["hull_world"],
 					false, mass)

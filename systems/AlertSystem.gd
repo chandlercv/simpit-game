@@ -96,8 +96,10 @@ func _declare() -> void:
 			func() -> bool: return GameState.gear_stowed() or _speed() < GameState.GEAR_LIMIT_SPEED - GEAR_REARM)
 
 	# --- Fly-by-wire ---------------------------------------------------------
-	# Assist switched off is a decision, not a fault, so it is a NOTE. Assist
-	# switched ON and unable to deliver is a fault, and that is the caution.
+	# DIRECT law is a decision, not a fault, so it is a NOTE — even though it also
+	# removes the speed governor, because choosing to fly without a limit is still
+	# choosing. Assist SELECTED and unable to deliver is a fault, and that is the
+	# caution.
 	_add("ASSIST_OFF", NOTE,
 			func() -> bool: return not ShipMotion.fbw_engaged(),
 			func() -> bool: return ShipMotion.fbw_engaged())

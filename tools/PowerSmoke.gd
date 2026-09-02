@@ -44,6 +44,22 @@ func _run() -> void:
 
 	# 2. Supply and demand. The alternator makes the budget; demand is what the
 	# channels are set to, with THRUST scaled by what the drive is doing.
+	#
+	# The bus counts in abstract units and the ship is specified in watts, and
+	# power_unit_w is the single bridge between them. These two check the bridge
+	# arithmetic rather than the electrical model: everything below is tuned
+	# against a 2.5-unit alternator and a 120-unit-second battery, and a change to
+	# any of the SI figures that moved those would quietly retune the whole ship.
+	var def := GameState.ship_def
+	_check(is_equal_approx(GameState.power_budget(), 2.5),
+			"the alternator's %.0f kW comes to 2.5 units on the bus"
+			% (def.alternator_output_w / 1000.0))
+	_check(is_equal_approx(GameState.battery_capacity(), 120.0),
+			"the battery's %.0f MJ comes to 120 unit-seconds"
+			% (def.battery_capacity_j / 1.0e6))
+	_check(GameState.reactor_thermal_margin_w() > 0.0,
+			"the reactor makes more than the alternator converts — the rest is the heat the thermal stage runs on")
+
 	GameState.set_drive_mode("BOTH")
 	_check(is_equal_approx(GameState.electrical_supply(), GameState.power_budget()),
 			"the alternator supplies the reactor's budget while ALT is on")
@@ -54,10 +70,10 @@ func _run() -> void:
 	GameState.set_drive_mode("BOTH")
 
 	# 3. The battery charges on a surplus and discharges on a deficit.
-	GameState.battery_charge = GameState.BATTERY_CAPACITY * 0.5
+	GameState.battery_charge = GameState.battery_capacity() * 0.5
 	_set_all_channels(0.0)
 	await _wait(0.4)
-	_check(GameState.battery_charge > GameState.BATTERY_CAPACITY * 0.5,
+	_check(GameState.battery_charge > GameState.battery_capacity() * 0.5,
 			"a surplus charges the battery")
 	_check(GameState.battery_flow() > 0.0, "...and the flow reads as charging")
 

@@ -27,6 +27,7 @@ func _ready() -> void:
 	_check_curve()
 	_check_shipped_margin()
 	_check_gate()
+	_check_law_follows_device()
 	_check_pause_clear()
 
 	if _failures.is_empty():
@@ -145,6 +146,59 @@ func _check_gate() -> void:
 	# disconnect emptied. This also restores the real binding for this rig.
 	InputRouter._bind_hotas()
 	_check(not InputRouter._throttle_seen, "_bind_hotas re-arms the gate")
+
+
+## The throttle command law follows the SHAPE of the fitted throttle, because the
+## two shapes want opposite laws and neither is safe under the other's.
+##
+## The hazard this pins is the gamepad one. A centring axis reads exactly 0 at
+## rest, and under the COMBINED law a command of 0 is "hold zero speed" — a
+## full-authority braking order. A pad pilot who let go of the stick would have
+## the ship stand on the brakes every time, and would have to hold the stick
+## forward for as long as they wanted to be moving anywhere. So a centring
+## throttle gets the THRUST law, where releasing coasts.
+##
+## Headless with no stick attached, so the specs are installed by hand — which is
+## the point: this tests the DECISION, not the hardware.
+func _check_law_follows_device() -> void:
+	var pinned := ShipMotion._throttle_law_pinned
+	ShipMotion._throttle_law_pinned = false
+
+	InputRouter._throttle_spec = {"axis": 1, "mode": "gamepad"}
+	_check(InputRouter.throttle_is_centering(), "a gamepad spec reports as self-centring")
+	ShipMotion.sync_throttle_law()
+	_check(ShipMotion.throttle_law() == ShipMotion.ThrottleCmdMode.THRUST,
+			"...so a centring stick gets the THRUST law, and releasing it coasts rather than brakes")
+
+	InputRouter._throttle_spec = X52_SPEC
+	_check(not InputRouter.throttle_is_centering(), "a lever spec does not")
+	ShipMotion.sync_throttle_law()
+	_check(ShipMotion.throttle_law() == ShipMotion.ThrottleCmdMode.COMBINED,
+			"...so an absolute lever gets the COMBINED law, and its position is a speed")
+
+	# The pilot's own choice outranks the device, and survives a profile reload —
+	# otherwise replugging a stick would silently undo it.
+	ShipMotion.toggle_throttle_cmd_mode()
+	_check(ShipMotion.throttle_law() == ShipMotion.ThrottleCmdMode.THRUST,
+			"the toggle overrides the device default")
+	ShipMotion.sync_throttle_law()
+	_check(ShipMotion.throttle_law() == ShipMotion.ThrottleCmdMode.THRUST,
+			"...and a profile reload does not take that choice back")
+
+	# DIRECT law forces THRUST whatever is selected: a speed-holding loop is
+	# fly-by-wire by definition and cannot outlive the law that removes it.
+	ShipMotion._throttle_law_pinned = false
+	InputRouter._throttle_spec = X52_SPEC
+	ShipMotion.sync_throttle_law()
+	GameState.set_fbw_law("DIRECT")
+	_check(ShipMotion.throttle_law() == ShipMotion.ThrottleCmdMode.THRUST,
+			"DIRECT law forces the THRUST law even on a lever that selected COMBINED")
+	GameState.set_fbw_law("NORMAL")
+	_check(ShipMotion.throttle_law() == ShipMotion.ThrottleCmdMode.COMBINED,
+			"...and NORMAL hands the lever its own law back")
+
+	ShipMotion._throttle_law_pinned = pinned
+	InputRouter._bind_hotas()
 
 
 ## A command latched on the boot frame must not outlive the title card. The boot

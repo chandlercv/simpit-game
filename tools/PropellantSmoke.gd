@@ -49,28 +49,25 @@ func _run() -> void:
 
 # --- The selector -----------------------------------------------------------
 
-## Every position's thrust and ceiling, with both tanks aboard. BOTH is the rated
-## case; each single stage is a degraded one; OFF and START are neither.
+## Every position's thrust, with both tanks aboard. BOTH is the rated case; each
+## single stage is a degraded one; OFF and START are neither.
+##
+## The selector used to set a SPEED CEILING per position as well. It no longer
+## does — speed is held by the fly-by-wire governor, which is a pilot setting and
+## not a property of the drive — so what each position buys is thrust, and these
+## check that the whole difference between the positions now lands there.
 func _test_selector(def: ShipDefinition) -> void:
 	_fill()
 	GameState.set_drive_mode("BOTH")
 	_check(is_equal_approx(GameState.thrust_fraction(), 1.0), "BOTH -> rated thrust")
-	_check(is_equal_approx(GameState.speed_ceiling(),
-			def.max_speed + def.thermal_speed_bonus),
-			"BOTH -> the thermal stage's ceiling")
 
 	GameState.set_drive_mode("R")
 	_check(is_equal_approx(GameState.thrust_fraction(), def.thrust_fraction_field),
 			"R -> the field stage's thrust alone")
-	_check(is_equal_approx(GameState.speed_ceiling(), def.max_speed),
-			"R -> the drag-limited ceiling, since nothing is being thrown out the back")
 
 	GameState.set_drive_mode("L")
 	_check(is_equal_approx(GameState.thrust_fraction(), def.thrust_fraction_thermal),
 			"L -> the thermal stage's thrust alone")
-	_check(is_equal_approx(GameState.speed_ceiling(),
-			def.max_speed + def.thermal_speed_bonus),
-			"L -> the thermal stage's ceiling")
 
 	GameState.set_drive_mode("OFF")
 	_check(GameState.thrust_fraction() == 0.0, "OFF -> no thrust at all")
@@ -86,14 +83,10 @@ func _test_dry_tanks(def: ShipDefinition) -> void:
 	GameState.set_drive_mode("L")
 	_check(GameState.thrust_fraction() == 0.0,
 			"L with a dry LH2 tank makes NO thrust — nothing falls back for you")
-	_check(is_equal_approx(GameState.speed_ceiling(), def.max_speed),
-			"...and the ceiling is back to the drag-limited figure")
 
 	GameState.set_drive_mode("BOTH")
 	_check(is_equal_approx(GameState.thrust_fraction(), def.thrust_fraction_field),
 			"BOTH with a dry LH2 tank keeps flying on the field stage")
-	_check(is_equal_approx(GameState.speed_ceiling(), def.max_speed),
-			"...at the drag-limited ceiling")
 	_check(GameState.thrust_fraction() > 0.0,
 			"a dry ship still accelerates — running out never strands you")
 
@@ -117,9 +110,14 @@ func _test_boost(def: ShipDefinition) -> void:
 	GameState.set_drive_mode("BOTH")
 	GameState.set_drive_boost(true)
 	_check(GameState.boosting(), "boost engages on a running thermal stage with both tanks")
-	_check(is_equal_approx(GameState.speed_ceiling(),
-			def.max_speed + def.thermal_speed_bonus + def.boost_speed_bonus),
-			"boosting adds its ceiling on top of the thermal stage's")
+	# The booster buys THRUST, and it is the only setting above the rated figure.
+	# It used to buy a higher speed ceiling instead, which no longer exists to
+	# raise — so if this ever came back as 1.0 the booster would cost two
+	# propellants and do nothing whatever.
+	_check(is_equal_approx(GameState.thrust_fraction(), def.thrust_fraction_boost),
+			"boosting adds thrust on top of the rated figure")
+	_check(def.thrust_fraction_boost > 1.0,
+			"...and that figure is genuinely above rated, so the boost is worth burning LOX for")
 
 	GameState.set_drive_mode("R")
 	_check(not GameState.boosting(),
