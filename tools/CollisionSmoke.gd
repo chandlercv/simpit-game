@@ -118,9 +118,14 @@ func _run() -> void:
 	ship = GameState.local_ship()
 	GameState.set_fbw_law("DIRECT")
 	var wall_z := -300.0
+	var plate_he := Vector3(6, 6, 0.5)
+	# Registered with the hull's TRUE bounding radius, which is what Station.gd
+	# and Wreck.gd both do. It matters: the bounding radius of a broad thin plate
+	# is nothing like its thickness, and a test that quietly passed a small radius
+	# would never exercise the gap between the two.
 	var thin_id := GameState.register_obstacle(
-			"THIN PLATE", Vector3(0, 0, wall_z), 1.0,
-			_box_hull(Vector3(0, 0, wall_z), Vector3(6, 6, 0.5)), true)
+			"THIN PLATE", Vector3(0, 0, wall_z), plate_he.length(),
+			_box_hull(Vector3(0, 0, wall_z), plate_he), true)
 	comms_before = GameState.comms.size()
 	ship["velocity"] = Vector3(0, 0, -400.0)
 	var caught := await _wait_until(
@@ -165,6 +170,30 @@ func _run() -> void:
 		GameState.remove_obstacle(pebble)
 	_check(tunnelled == 0,
 			"a 0.35 m body is still struck BROADSIDE at 1.3 km/s, at any alignment (%d/8 missed)"
+					% tunnelled)
+
+	# --- A BROAD, THIN hull is sized by its thickness, not its bounding sphere ---
+	#
+	# A station bay wall is 18 m by 16 m and 1.6 m thick: a 12 m bounding radius
+	# around 1.6 m of substance. Gate the sub-stepping on the radius and the ship
+	# is told it has 24 m of window where it really has 2.3 m, and steps clean over
+	# the wall — which is not an exotic-speed problem, it starts in the hundreds.
+	# The window has to be the hull's shadow on the direction of travel.
+	var wall_he := Vector3(9.0, 8.0, 0.8)
+	tunnelled = 0
+	for i in 8:
+		var wz := -600.0 - float(i) * 0.8
+		var wall := GameState.register_obstacle("BAY WALL", Vector3(0, 0, wz),
+				wall_he.length(), _box_hull(Vector3(0, 0, wz), wall_he), true)
+		ShipMotion.seize(Transform3D.IDENTITY, Vector3(0, 0, -900.0))
+		comms_before = GameState.comms.size()
+		var struck := await _wait_until(
+				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 3.0)
+		if not struck:
+			tunnelled += 1
+		GameState.remove_obstacle(wall)
+	_check(tunnelled == 0,
+			"a 1.6 m wall inside a 12 m bounding sphere is struck at 900 m/s (%d/8 missed)"
 					% tunnelled)
 
 	InputRouter.set_process(true)

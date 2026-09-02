@@ -219,55 +219,82 @@ func _ship_share(body: Dictionary) -> float:
 ## passes nothing at all. This is what ShipMotion gates its sub-stepping on.
 ##
 ## The window is the distance the ship can travel while still overlapping a given
-## body — 2 * (ship radius + body radius) — and it is the figure that matters,
-## because a sub-step longer than it can straddle the body and register nothing.
-## It uses the ship's RADIUS and not its reach: the capsule is 2.6 m long and
-## 0.7 m across, so a body passed broadside is only detectable over 0.7 m of
+## body, and it is the figure that matters: a sub-step longer than it can straddle
+## the body and register nothing.
+##
+## It is measured ALONG THE PATH and not from the body's bounding sphere, because
+## for anything carrying a baked hull the two are wildly different. A station bay
+## wall is 18 m by 16 m by 1.6 m thick: its bounding radius is 12 m, but flown at
+## square-on it is detectable over 1.6 m of travel. Sizing the window from the
+## radius says 24 m and lets the ship step clean over the wall — which is not a
+## high-speed problem at all, but one that starts at a few hundred metres a
+## second. The same hull hit edge-on is genuinely 18 m thick and genuinely wants
+## the wide window, so the thickness is projected onto the direction of travel
+## rather than reduced to one number per body.
+##
+## The ship contributes its RADIUS and not its reach: the capsule is 2.6 m long
+## and 0.7 m across, so a body passed broadside is only detectable over 0.7 m of
 ## travel even though the same body nose-on is detectable over 2.6 m. Gating on
 ## the generous orientation is how a ship tunnels while flying sideways.
 ##
 ## PATH-AWARE, which is what keeps this affordable. Only bodies the swept path
 ## actually comes near can be tunnelled, so open space returns INF and costs one
-## sub-step however fast the ship is going — and a ship IS in open space at the
-## speeds that need the most sub-steps. Near a wreck, where the bodies are, the
-## ship is slow and the windows are wide.
-##
-## Reads the two registries directly rather than through _collidables(), which
-## allocates a dict per body and measured 53 us against 30 — 0.3% of a 60 Hz tick
-## paid on every tick, for radii it already has.
+## sweep of the registries however fast the ship is going — and a ship IS in open
+## space at the speeds that need the most sub-steps. Near a wreck, where the
+## bodies are, the ship is slow.
 func path_window(from: Vector3, to: Vector3) -> float:
+	var span := to - from
+	var distance := span.length()
+	if distance <= 0.0:
+		return INF
+	var along := span / distance
 	var reach := ship_reach()
 	var radius := _ship_radius()
 	var window := INF
 	for obstacle: Dictionary in GameState.obstacles:
-		window = minf(window, _window_for(from, to, obstacle["position"],
-				float(obstacle["radius"]), reach, radius))
+		window = minf(window, _window_for(from, span, along, obstacle["position"],
+				float(obstacle["radius"]), obstacle.get("hull", PackedVector3Array()),
+				reach, radius))
 	for contact: Dictionary in GameState.contacts:
 		# Contacts with no radius are sensor blips, not bodies — they are not in
 		# _collidables() either and cannot be collided with, let alone tunnelled.
 		var r: float = contact.get("radius", 0.0)
 		if r > 0.0:
-			window = minf(window, _window_for(from, to, contact["position"], r, reach, radius))
+			window = minf(window, _window_for(from, span, along, contact["position"],
+					r, PackedVector3Array(), reach, radius))
 	return window
 
 
 ## One body's contribution to the window above: INF when the swept path does not
-## come within reach of it, and its detection window when it does.
+## come within reach of it, and its detection window along `along` when it does.
 ##
-## Rejects on the path's own bounding sphere first. The exact segment test
-## allocates (it returns both witness points) and almost every body in the scene
-## is nowhere near the path, so paying for it per body per tick is most of what
-## this function would otherwise cost.
-func _window_for(from: Vector3, to: Vector3, at: Vector3, body_radius: float,
-		reach: float, radius: float) -> float:
-	var span := to - from
+## Rejects on the path's bounding sphere first, using the body's BOUNDING radius —
+## which is the right measure for "could we be anywhere near this", even though it
+## is the wrong one for the window itself. The exact tests below allocate, and
+## almost every body in the scene is nowhere near the path.
+func _window_for(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
+		body_radius: float, hull: PackedVector3Array, reach: float,
+		radius: float) -> float:
 	var envelope := span.length() * 0.5 + body_radius + reach
 	if (from + span * 0.5).distance_squared_to(at) > envelope * envelope:
 		return INF
-	var near: Array = _closest_points_between_segments(from, to, at, at)
+	var near: Array = _closest_points_between_segments(from, from + span, at, at)
 	if (near[0] as Vector3).distance_to(at) > body_radius + reach:
 		return INF
-	return 2.0 * (radius + body_radius)
+	# A sphere is as thick as it is wide whichever way it is crossed; a hull is
+	# only as thick as its own shadow on the direction of travel.
+	var thickness := body_radius * 2.0
+	if not hull.is_empty():
+		var low := INF
+		var high := -INF
+		for point: Vector3 in hull:
+			var d := point.dot(along)
+			low = minf(low, d)
+			high = maxf(high, d)
+		thickness = high - low
+	# The ship's own width always counts, so a vanishingly thin hull still leaves
+	# a window rather than demanding an infinite number of sub-steps.
+	return thickness + 2.0 * radius
 
 
 func _collidables() -> Array[Dictionary]:
