@@ -159,8 +159,8 @@ func _run() -> void:
 		var pebble := GameState.register_obstacle(
 				"PEBBLE", at, 0.35, PackedVector3Array(), true)
 		var probe := at + Vector3(0, 0, 167.0)
-		var hazard := CollisionSystem.path_hazard(probe, probe + Vector3(0, 0, -333.3))
-		if not hazard.is_empty():
+		for hazard: Dictionary in CollisionSystem.path_hazard(
+				probe, probe + Vector3(0, 0, -333.3)):
 			worst_steps = maxi(worst_steps, ceili(
 					(float(hazard["hi"]) - float(hazard["lo"])) * 333.3
 					/ maxf(0.5 * float(hazard["window"]), 0.01)))
@@ -204,6 +204,60 @@ func _run() -> void:
 	_check(tunnelled == 0,
 			"a 1.6 m wall inside a 12 m bounding sphere is struck at 900 m/s (%d/8 missed)"
 					% tunnelled)
+
+	# --- SEPARATE bodies must stay SEPARATE sampling stretches -----------------
+	#
+	# Folding every hazard on the path into one [min lo, max hi] span sampled at
+	# the tightest window reintroduces the speed ceiling by the back door: two of
+	# these walls 150 m apart on one 200 m tick merged into a ~170 m interval
+	# divided at one wall's 2.3 m window — a demand of 150-odd sub-steps against
+	# a budget of 32, most of it spent finely sampling the EMPTY GAP between the
+	# walls while both went under-sampled. Flown live before the split, the ship
+	# crossed both walls clean at 12 km/s with the sampler reporting the path
+	# covered. Disjoint stretches cost their own handful of steps each and the
+	# gap between them costs one coarse step, whatever its length.
+	_set_capsule(Vector3(0, -0.7, -0.95), Vector3(0, -0.7, 0.95), 0.35)
+	var pair_probe := Vector3(0, 0, -560.0)
+	var wall_a := GameState.register_obstacle("WALL A", Vector3(0, 0, -600.0),
+			wall_he.length(), _box_hull(Vector3(0, 0, -600.0), wall_he), true)
+	var wall_b := GameState.register_obstacle("WALL B", Vector3(0, 0, -750.0),
+			wall_he.length(), _box_hull(Vector3(0, 0, -750.0), wall_he), true)
+	var stretches := CollisionSystem.path_hazard(
+			pair_probe, pair_probe + Vector3(0, 0, -200.0))
+	_check(stretches.size() == 2,
+			"two walls 150 m apart are two disjoint stretches, not one merged span (%d)"
+					% stretches.size())
+	var stretch_demand := 0
+	for stretch: Dictionary in stretches:
+		stretch_demand = maxi(stretch_demand, ceili(
+				(float(stretch["hi"]) - float(stretch["lo"])) * 200.0
+				/ maxf(0.5 * float(stretch["window"]), 0.01)))
+	_check(stretch_demand > 0 and stretch_demand <= 8,
+			"...each wanting its own handful of steps (worst %d), none spent on the gap"
+					% stretch_demand)
+	GameState.remove_obstacle(wall_a)
+	GameState.remove_obstacle(wall_b)
+
+	tunnelled = 0
+	for i in 8:
+		var oz := -float(i) * 25.0
+		var wa := GameState.register_obstacle("WALL A", Vector3(0, 0, -600.0 + oz),
+				wall_he.length(), _box_hull(Vector3(0, 0, -600.0 + oz), wall_he), true)
+		var wb := GameState.register_obstacle("WALL B", Vector3(0, 0, -750.0 + oz),
+				wall_he.length(), _box_hull(Vector3(0, 0, -750.0 + oz), wall_he), true)
+		ShipMotion.seize(Transform3D.IDENTITY, Vector3(0, 0, -12000.0))
+		comms_before = GameState.comms.size()
+		var pair_struck := await _wait_until(
+				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 2.0)
+		if not pair_struck:
+			tunnelled += 1
+		GameState.remove_obstacle(wa)
+		GameState.remove_obstacle(wb)
+		_reset_ship()
+	_check(tunnelled == 0,
+			"one of two separated walls registers on every 12 km/s pass (%d/8 crossed clean)"
+					% tunnelled)
+	_set_capsule(Vector3(0, 0, -3), Vector3(0, 0, 3), 1.5)
 
 	InputRouter.set_process(true)
 	_reset_ship()

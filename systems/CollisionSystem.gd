@@ -17,8 +17,8 @@ extends Node
 ## 0.7 m across, and DIRECT law removes the speed governor entirely. So
 ## resolve_ship() is exposed for ShipMotion to drive per SUB-STEP whenever the
 ## ship is passing something it could cross inside one tick — path_hazard() is
-## what it gates on, and it reports the stretch of the path to sample as well as
-## how finely — while _physics_process still runs the authoritative pass at the
+## what it gates on, and it reports the stretches of the path to sample and how
+## finely each — while _physics_process still runs the authoritative pass at the
 ## end of the tick against everything's final position.
 ##
 ## Every mass here is in KILOGRAMS, on the same scale as the ship's own
@@ -217,19 +217,32 @@ func _ship_share(body: Dictionary) -> float:
 
 
 ## What the tick's path can run into, and WHERE ALONG IT. Empty when the path is
-## clear. This is what ShipMotion gates its sub-stepping on.
+## clear; otherwise DISJOINT stretches of the path in order of approach, each
+## {window, lo, hi}. This is what ShipMotion gates its sub-stepping on.
 ##
 ##   window — the distance the ship may travel while still overlapping the
-##            tightest body on the path. A sub-step longer than this can straddle
-##            the body and register nothing.
-##   lo/hi  — the fraction of the path over which ANY overlap is possible.
+##            tightest body in that stretch. A sub-step longer than this can
+##            straddle the body and register nothing.
+##   lo/hi  — the fraction of the path over which overlap with it is possible.
 ##
-## The interval is the important half, and it is what makes sub-stepping bounded
-## in speed. Sampling the whole tick finely costs more the faster the ship goes,
-## so a fixed budget always buys a speed ceiling. But contact is only possible
-## while the ship is actually alongside something, and that span is set by how big
-## the body is — not by how fast the ship crossed it. Sampling only [lo, hi] costs
-## the same handful of passes whether the ship is doing 100 m/s or 10 km/s.
+## The intervals are the important half, and they are what make sub-stepping
+## bounded in speed. Sampling the whole tick finely costs more the faster the
+## ship goes, so a fixed budget always buys a speed ceiling. But contact is only
+## possible while the ship is actually alongside something, and that span is set
+## by how big the body is — not by how fast the ship crossed it. Sampling only
+## the hazard stretches costs the same handful of passes whether the ship is
+## doing 100 m/s or 10 km/s.
+##
+## SEPARATE bodies stay SEPARATE stretches; only overlapping ones merge (taking
+## the tighter window, since one sampling grid must catch both). Folding
+## everything into a single [min lo, max hi] span sampled at the global minimum
+## window reintroduces the speed ceiling by the back door: two thin walls 150 m
+## apart on a fast path became one 170 m interval divided at one wall's 2.3 m
+## window — a demand of 150-odd steps against a budget of 32, with the shortfall
+## spent finely sampling the EMPTY GAP between them while both walls went
+## under-sampled. Measured before the split: 4 of 8 alignments crossed both
+## walls clean at 12 km/s. As disjoint stretches each wall costs its own
+## handful of steps and the gap between them costs one.
 ##
 ## The window is measured ALONG THE PATH, not from the body's bounding sphere.
 ## For anything carrying a baked hull the two are wildly different: a station bay
@@ -238,53 +251,65 @@ func _ship_share(body: Dictionary) -> float:
 ## radius says 24 m and lets the ship step clean over the wall. The same hull hit
 ## edge-on is genuinely 18 m thick and genuinely wants the wide window, so the
 ## thickness is projected onto the direction of travel rather than reduced to one
-## number per body.
+## number per body — and the interval is cut down by the same projection, so the
+## two agree (see _hazard_of).
 ##
 ## The ship contributes its RADIUS and not its reach: the capsule is 2.6 m long
 ## and 0.7 m across, so a body passed broadside is only detectable over 0.7 m of
 ## travel even though the same body nose-on is detectable over 2.6 m. Gating on
 ## the generous orientation is how a ship tunnels while flying sideways.
-func path_hazard(from: Vector3, to: Vector3) -> Dictionary:
+func path_hazard(from: Vector3, to: Vector3) -> Array[Dictionary]:
 	var span := to - from
 	var distance := span.length()
 	if distance <= 0.0:
-		return {}
+		return []
 	var along := span / distance
 	var reach := ship_reach()
 	var radius := _ship_radius()
-	var window := INF
-	var lo := INF
-	var hi := -INF
+	var found: Array[Dictionary] = []
 	for obstacle: Dictionary in GameState.obstacles:
-		var found := _hazard_of(from, span, along, obstacle["position"],
+		var hazard := _hazard_of(from, span, along, obstacle["position"],
 				float(obstacle["radius"]), obstacle.get("hull", PackedVector3Array()),
 				reach, radius)
-		if not found.is_empty():
-			window = minf(window, found["window"])
-			lo = minf(lo, found["lo"])
-			hi = maxf(hi, found["hi"])
+		if not hazard.is_empty():
+			found.append(hazard)
 	for contact: Dictionary in GameState.contacts:
 		# Contacts with no radius are sensor blips, not bodies — they are not in
 		# _collidables() either and cannot be collided with, let alone tunnelled.
 		var r: float = contact.get("radius", 0.0)
 		if r <= 0.0:
 			continue
-		var found := _hazard_of(from, span, along, contact["position"], r,
+		var hazard := _hazard_of(from, span, along, contact["position"], r,
 				PackedVector3Array(), reach, radius)
-		if not found.is_empty():
-			window = minf(window, found["window"])
-			lo = minf(lo, found["lo"])
-			hi = maxf(hi, found["hi"])
-	if not is_finite(window):
-		return {}
-	return {"window": window, "lo": lo, "hi": hi}
+		if not hazard.is_empty():
+			found.append(hazard)
+	if found.size() <= 1:
+		return found
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a["lo"]) < float(b["lo"]))
+	var merged: Array[Dictionary] = [found[0]]
+	for hazard: Dictionary in found.slice(1):
+		var last: Dictionary = merged[merged.size() - 1]
+		if float(hazard["lo"]) <= float(last["hi"]):
+			last["hi"] = maxf(float(last["hi"]), float(hazard["hi"]))
+			last["window"] = minf(float(last["window"]), float(hazard["window"]))
+		else:
+			merged.append(hazard)
+	return merged
 
 
 ## One body's hazard, or {} when the path never comes within reach of it.
 ##
-## The interval is a ray-sphere intersection against the body's BOUNDING radius
-## grown by the ship's reach — the right measure for "could we be anywhere near
-## this", even though it is the wrong one for the window itself.
+## The interval starts as a ray-sphere intersection against the body's BOUNDING
+## radius grown by the ship's reach, and for a hulled body it is then CUT DOWN by
+## the same projection that sizes the window: the stretch of path over which the
+## ship's own extent can overlap the hull's shadow on the direction of travel.
+## The two measures have to agree. Sizing the window from the thickness while
+## sizing the interval from the sphere makes the sample count scale with the
+## hull's ASPECT RATIO — a broad thin wall wants its whole 27 m chord divided at
+## its 2.3 m window — and any fixed step budget then buys a wall size that
+## exhausts it. Cut to the slab, the interval is never longer than roughly one
+## window, and the demand per body is a size-independent handful.
 func _hazard_of(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
 		body_radius: float, hull: PackedVector3Array, reach: float,
 		radius: float) -> Dictionary:
@@ -303,6 +328,8 @@ func _hazard_of(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
 	var t1 := (-b + root) / (2.0 * a)
 	if t1 < 0.0 or t0 > 1.0:
 		return {}
+	var lo := maxf(t0, 0.0)
+	var hi := minf(t1, 1.0)
 	# A sphere is as thick as it is wide whichever way it is crossed; a hull is
 	# only as thick as its own shadow on the direction of travel.
 	var thickness := body_radius * 2.0
@@ -314,12 +341,23 @@ func _hazard_of(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
 			low = minf(low, d)
 			high = maxf(high, d)
 		thickness = high - low
+		# The slab cut: overlap is only possible while the ship's projection onto
+		# the travel direction (its origin ± reach, the conservative bound in any
+		# orientation) intersects the hull's [low, high]. Outside that stretch the
+		# ship is cleanly fore or aft of the wall however far inside the bounding
+		# sphere it is, which for a broad thin hull is most of the sphere.
+		var start := from.dot(along)
+		var distance := sqrt(a)
+		lo = maxf(lo, (low - reach - start) / distance)
+		hi = minf(hi, (high + reach - start) / distance)
+		if hi < lo:
+			return {}
 	# The ship's own width always counts, so a vanishingly thin hull still leaves
 	# a window rather than demanding an infinite number of sub-steps.
 	return {
 		"window": thickness + 2.0 * radius,
-		"lo": maxf(t0, 0.0),
-		"hi": minf(t1, 1.0),
+		"lo": lo,
+		"hi": hi,
 	}
 
 

@@ -205,17 +205,16 @@ func ship_omega() -> Vector3:
 ## --- The pipeline -----------------------------------------------------------
 
 
-## Sub-steps the HAZARDOUS part of a tick may be divided into.
+## Total fine sub-steps a tick's hazards may spend between them.
 ##
 ## This is a frame-time guard and nothing else — it is not what makes sub-stepping
-## correct, and it does not buy a speed ceiling. The fine sampling covers only the
-## span of the path where contact is actually possible, and that span is set by how
-## big the body is rather than how fast the ship crossed it, so an isolated body
-## costs the same handful of passes at 10 km/s as at 100 m/s.
-##
-## Where it can still bind is a path threading MANY bodies at once — the whole
-## station at several km/s — which is a genuinely hard case rather than a hole in
-## the sampler, and there it correctly trades sampling for frame time.
+## correct, and it does not buy a speed ceiling. Each hazard stretch on the path
+## costs a handful of steps set by its body's size and shape (the interval and the
+## window come from the same projection, so their ratio is bounded — see
+## CollisionSystem._hazard_of), independent of speed. The budget covers several
+## distinct bodies per tick and is spent in order of approach, so when a path
+## threads more hazards than it can pay for, the ones the ship reaches FIRST get
+## their full sampling — and a ship that hits one never needed the rest.
 const MAX_SUBSTEPS := 32
 
 ## Fraction of the detection window the ship may cross in one sub-step. A half
@@ -234,16 +233,18 @@ const SUBSTEP_SAFETY := 0.5
 ##
 ## So the integration and the collision pass sub-step together — sub-stepping the
 ## motion alone would buy nothing, because the test would still run once at the
-## end. The division is driven by CollisionSystem.path_hazard, which reports both
-## how finely the tightest body on the path has to be sampled AND the stretch of
-## the path over which anything can be hit at all.
+## end. The division is driven by CollisionSystem.path_hazard, which reports the
+## disjoint stretches of the path over which anything can be hit at all, in order
+## of approach, each with how finely its tightest body has to be sampled.
 ##
-## SAMPLING ONLY THAT STRETCH is what keeps this bounded in speed. Dividing the
-## whole tick uniformly costs more the faster the ship goes, so any fixed budget
-## buys a speed ceiling — and DIRECT law has no governor to keep the ship under
-## one. But a body can only be hit while the ship is beside it, and how long that
-## takes is set by the body's size, not the ship's speed. Doubling the speed
-## halves the time spent alongside and leaves the sample count where it was.
+## SAMPLING ONLY THOSE STRETCHES is what keeps this bounded in speed. Dividing
+## the whole tick uniformly costs more the faster the ship goes, so any fixed
+## budget buys a speed ceiling — and DIRECT law has no governor to keep the ship
+## under one. But a body can only be hit while the ship is beside it, and how
+## long that takes is set by the body's size, not the ship's speed. Doubling the
+## speed halves the time spent alongside and leaves the sample count where it
+## was. Between the stretches the path is empty by construction and costs one
+## coarse step however long it is.
 ##
 ## The ship only. ThreatSystem's contacts and DriftSystem's pieces move slowly
 ## enough that their own once-a-tick pass is sound, and CollisionSystem still
@@ -257,40 +258,43 @@ func step(delta: float) -> void:
 	# function of where the ship is.
 	var reference := NavReference.datum_velocity()
 
-	# What the tick's path can hit, and over which stretch of it.
-	var hazard := CollisionSystem.path_hazard(origin, origin + travel)
-	if hazard.is_empty():
+	# What the tick's path can hit, and over which stretches of it.
+	var hazards := CollisionSystem.path_hazard(origin, origin + travel)
+	if hazards.is_empty():
 		# Nothing on the path. One step, however fast the ship is going — there is
 		# nothing to sample finely FOR.
 		_integrate(delta, reference)
 		return
 
-	var window: float = hazard["window"]
-	var lo: float = hazard["lo"]
-	var hi: float = hazard["hi"]
 	var length := travel.length()
-	var steps := clampi(
-			ceili((hi - lo) * length / maxf(SUBSTEP_SAFETY * window, 0.01)),
-			1, MAX_SUBSTEPS)
-
-	# Coarse to the start of the hazard, finely across it, coarse out the far side.
-	# The approach and the departure cannot touch anything by construction, so they
-	# cost one step each no matter how long they are.
-	if lo > 0.0:
-		_integrate(delta * lo, reference)
-	var fine := delta * (hi - lo) / float(steps)
-	for _i in steps:
-		_integrate(fine, reference)
-		# Only when the hazard is actually being DIVIDED. A single step across it
-		# means the ship cannot cross the body between two samples, so the
-		# authoritative pass at the end of the tick is enough — and running an
-		# extra one here would resolve contact twice a tick in close quarters,
-		# pushing a ship off a piece it was station-keeping on before the scoop
-		# ever got to look at it.
-		if steps > 1:
-			CollisionSystem.resolve_ship(fine)
-	if hi < 1.0:
-		_integrate(delta * (1.0 - hi), reference)
+	var budget := MAX_SUBSTEPS
+	var cursor := 0.0
+	for hazard: Dictionary in hazards:
+		var window: float = hazard["window"]
+		var lo: float = hazard["lo"]
+		var hi: float = hazard["hi"]
+		# Coarse to the start of this stretch: the gap behind the cursor cannot
+		# touch anything by construction, whatever its length.
+		if lo > cursor:
+			_integrate(delta * (lo - cursor), reference)
+		var steps := clampi(
+				ceili((hi - lo) * length / maxf(SUBSTEP_SAFETY * window, 0.01)),
+				1, maxi(budget, 1))
+		budget -= steps
+		var fine := delta * (hi - lo) / float(steps)
+		for _i in steps:
+			_integrate(fine, reference)
+			# Only when the stretch is actually being DIVIDED. A single step across
+			# it means the ship cannot cross the body between two samples, so the
+			# authoritative pass at the end of the tick is enough — and running an
+			# extra one here would resolve contact twice a tick in close quarters,
+			# pushing a ship off a piece it was station-keeping on before the scoop
+			# ever got to look at it.
+			if steps > 1:
+				CollisionSystem.resolve_ship(fine)
+		cursor = hi
+	if cursor < 1.0:
+		_integrate(delta * (1.0 - cursor), reference)
 
 
 ## One integration sub-step: rate-commanded attitude through the FBW slew,
