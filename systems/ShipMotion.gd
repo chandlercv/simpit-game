@@ -205,22 +205,17 @@ func ship_omega() -> Vector3:
 ## --- The pipeline -----------------------------------------------------------
 
 
-## Sub-steps a tick may be divided into. This is a frame-time guard, and it is
-## also the point past which sub-stepping stops being a guarantee.
+## Sub-steps the HAZARDOUS part of a tick may be divided into.
 ##
-## Against the smallest body in the game (0.35 m, a gate ring's tube) passed
-## BROADSIDE, thirty-two sub-steps at 60 Hz hold the full safety margin below
-## 1.34 km/s. Between there and about 2.7 km/s the margin is gone but the
-## samples still usually land on the body; past 2.7 km/s the ship can cross it
-## between two tested positions and misses become common. The failure is gradual
-## rather than a cliff, and 1.34 km/s is seventeen minutes of unbroken
-## full-throttle burn away under DIRECT law with nothing in front of you.
+## This is a frame-time guard and nothing else — it is not what makes sub-stepping
+## correct, and it does not buy a speed ceiling. The fine sampling covers only the
+## span of the path where contact is actually possible, and that span is set by how
+## big the body is rather than how fast the ship crossed it, so an isolated body
+## costs the same handful of passes at 10 km/s as at 100 m/s.
 ##
-## It can be raised — each sub-step is one collision pass, and the gate below is
-## path-aware, so the cap is only ever approached while actually alongside
-## something. Thirty-two passes is roughly 6 ms in the worst tick, which is the
-## budget this number is really spending; sixty-four would double both the
-## ceiling and that cost.
+## Where it can still bind is a path threading MANY bodies at once — the whole
+## station at several km/s — which is a genuinely hard case rather than a hole in
+## the sampler, and there it correctly trades sampling for frame time.
 const MAX_SUBSTEPS := 32
 
 ## Fraction of the detection window the ship may cross in one sub-step. A half
@@ -229,7 +224,7 @@ const MAX_SUBSTEPS := 32
 const SUBSTEP_SAFETY := 0.5
 
 
-## One tick of manual flight, sub-stepped as fast as the ship is actually going.
+## One tick of manual flight, sub-stepped across whatever the path runs into.
 ##
 ## Collision is a DISCRETE overlap test run after the position update
 ## (CollisionSystem), so a ship that crosses a body in less than a tick is never
@@ -239,10 +234,16 @@ const SUBSTEP_SAFETY := 0.5
 ##
 ## So the integration and the collision pass sub-step together — sub-stepping the
 ## motion alone would buy nothing, because the test would still run once at the
-## end. The division is GATED on what the tick's path actually passes near
-## (CollisionSystem.path_window), so open space costs one sweep of the registries
-## however fast the ship is going, and the sub-steps are spent where the bodies
-## are rather than everywhere.
+## end. The division is driven by CollisionSystem.path_hazard, which reports both
+## how finely the tightest body on the path has to be sampled AND the stretch of
+## the path over which anything can be hit at all.
+##
+## SAMPLING ONLY THAT STRETCH is what keeps this bounded in speed. Dividing the
+## whole tick uniformly costs more the faster the ship goes, so any fixed budget
+## buys a speed ceiling — and DIRECT law has no governor to keep the ship under
+## one. But a body can only be hit while the ship is beside it, and how long that
+## takes is set by the body's size, not the ship's speed. Doubling the speed
+## halves the time spent alongside and leaves the sample count where it was.
 ##
 ## The ship only. ThreatSystem's contacts and DriftSystem's pieces move slowly
 ## enough that their own once-a-tick pass is sound, and CollisionSystem still
@@ -251,25 +252,45 @@ func step(delta: float) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var origin: Vector3 = (ship["transform"] as Transform3D).origin
 	var travel: Vector3 = (ship["velocity"] as Vector3) * delta
-	# What the ship can pass THROUGH on this tick's path, and over how much travel
-	# it would be detectable while doing so. INF when the path passes nothing, and
-	# then one sub-step is right however fast the ship is going.
-	var window := CollisionSystem.path_window(origin, origin + travel)
-	var steps := 1
-	if is_finite(window):
-		steps = clampi(ceili(travel.length() / maxf(SUBSTEP_SAFETY * window, 0.01)),
-				1, MAX_SUBSTEPS)
 	# The datum is resolved ONCE for the tick and carried into every sub-step. It
 	# cannot change under the loop — what the ship is referenced to is not a
-	# function of where the ship is — and resolving it per sub-step measured
-	# 5.7 us a time, which across a saturated tick is real money for an answer
-	# that would be identical every time.
+	# function of where the ship is.
 	var reference := NavReference.datum_velocity()
-	var sub := delta / float(steps)
+
+	# What the tick's path can hit, and over which stretch of it.
+	var hazard := CollisionSystem.path_hazard(origin, origin + travel)
+	if hazard.is_empty():
+		# Nothing on the path. One step, however fast the ship is going — there is
+		# nothing to sample finely FOR.
+		_integrate(delta, reference)
+		return
+
+	var window: float = hazard["window"]
+	var lo: float = hazard["lo"]
+	var hi: float = hazard["hi"]
+	var length := travel.length()
+	var steps := clampi(
+			ceili((hi - lo) * length / maxf(SUBSTEP_SAFETY * window, 0.01)),
+			1, MAX_SUBSTEPS)
+
+	# Coarse to the start of the hazard, finely across it, coarse out the far side.
+	# The approach and the departure cannot touch anything by construction, so they
+	# cost one step each no matter how long they are.
+	if lo > 0.0:
+		_integrate(delta * lo, reference)
+	var fine := delta * (hi - lo) / float(steps)
 	for _i in steps:
-		_integrate(sub, reference)
+		_integrate(fine, reference)
+		# Only when the hazard is actually being DIVIDED. A single step across it
+		# means the ship cannot cross the body between two samples, so the
+		# authoritative pass at the end of the tick is enough — and running an
+		# extra one here would resolve contact twice a tick in close quarters,
+		# pushing a ship off a piece it was station-keeping on before the scoop
+		# ever got to look at it.
 		if steps > 1:
-			CollisionSystem.resolve_ship(sub)
+			CollisionSystem.resolve_ship(fine)
+	if hi < 1.0:
+		_integrate(delta * (1.0 - hi), reference)
 
 
 ## One integration sub-step: rate-commanded attitude through the FBW slew,

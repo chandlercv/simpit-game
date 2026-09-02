@@ -16,9 +16,10 @@ extends Node
 ## hypothetical: at 60 m/s the ship crosses a metre per 60 Hz tick against a hull
 ## 0.7 m across, and DIRECT law removes the speed governor entirely. So
 ## resolve_ship() is exposed for ShipMotion to drive per SUB-STEP whenever the
-## ship is moving fast enough to cross a body inside one tick — path_window() is
-## what it gates on — while _physics_process still runs the authoritative pass at
-## the end of the tick against everything's final position.
+## ship is passing something it could cross inside one tick — path_hazard() is
+## what it gates on, and it reports the stretch of the path to sample as well as
+## how finely — while _physics_process still runs the authoritative pass at the
+## end of the tick against everything's final position.
 ##
 ## Every mass here is in KILOGRAMS, on the same scale as the ship's own
 ## (GameState.ship_mass): bodies are massed from their radius at BODY_DENSITY,
@@ -215,72 +216,93 @@ func _ship_share(body: Dictionary) -> float:
 	return mass / (GameState.ship_mass() + mass)
 
 
-## The tightest DETECTION WINDOW along a swept path, metres, or INF when the path
-## passes nothing at all. This is what ShipMotion gates its sub-stepping on.
+## What the tick's path can run into, and WHERE ALONG IT. Empty when the path is
+## clear. This is what ShipMotion gates its sub-stepping on.
 ##
-## The window is the distance the ship can travel while still overlapping a given
-## body, and it is the figure that matters: a sub-step longer than it can straddle
-## the body and register nothing.
+##   window — the distance the ship may travel while still overlapping the
+##            tightest body on the path. A sub-step longer than this can straddle
+##            the body and register nothing.
+##   lo/hi  — the fraction of the path over which ANY overlap is possible.
 ##
-## It is measured ALONG THE PATH and not from the body's bounding sphere, because
-## for anything carrying a baked hull the two are wildly different. A station bay
-## wall is 18 m by 16 m by 1.6 m thick: its bounding radius is 12 m, but flown at
+## The interval is the important half, and it is what makes sub-stepping bounded
+## in speed. Sampling the whole tick finely costs more the faster the ship goes,
+## so a fixed budget always buys a speed ceiling. But contact is only possible
+## while the ship is actually alongside something, and that span is set by how big
+## the body is — not by how fast the ship crossed it. Sampling only [lo, hi] costs
+## the same handful of passes whether the ship is doing 100 m/s or 10 km/s.
+##
+## The window is measured ALONG THE PATH, not from the body's bounding sphere.
+## For anything carrying a baked hull the two are wildly different: a station bay
+## wall is 18 m by 16 m by 1.6 m thick, so its bounding radius is 12 m but flown at
 ## square-on it is detectable over 1.6 m of travel. Sizing the window from the
-## radius says 24 m and lets the ship step clean over the wall — which is not a
-## high-speed problem at all, but one that starts at a few hundred metres a
-## second. The same hull hit edge-on is genuinely 18 m thick and genuinely wants
-## the wide window, so the thickness is projected onto the direction of travel
-## rather than reduced to one number per body.
+## radius says 24 m and lets the ship step clean over the wall. The same hull hit
+## edge-on is genuinely 18 m thick and genuinely wants the wide window, so the
+## thickness is projected onto the direction of travel rather than reduced to one
+## number per body.
 ##
 ## The ship contributes its RADIUS and not its reach: the capsule is 2.6 m long
 ## and 0.7 m across, so a body passed broadside is only detectable over 0.7 m of
 ## travel even though the same body nose-on is detectable over 2.6 m. Gating on
 ## the generous orientation is how a ship tunnels while flying sideways.
-##
-## PATH-AWARE, which is what keeps this affordable. Only bodies the swept path
-## actually comes near can be tunnelled, so open space returns INF and costs one
-## sweep of the registries however fast the ship is going — and a ship IS in open
-## space at the speeds that need the most sub-steps. Near a wreck, where the
-## bodies are, the ship is slow.
-func path_window(from: Vector3, to: Vector3) -> float:
+func path_hazard(from: Vector3, to: Vector3) -> Dictionary:
 	var span := to - from
 	var distance := span.length()
 	if distance <= 0.0:
-		return INF
+		return {}
 	var along := span / distance
 	var reach := ship_reach()
 	var radius := _ship_radius()
 	var window := INF
+	var lo := INF
+	var hi := -INF
 	for obstacle: Dictionary in GameState.obstacles:
-		window = minf(window, _window_for(from, span, along, obstacle["position"],
+		var found := _hazard_of(from, span, along, obstacle["position"],
 				float(obstacle["radius"]), obstacle.get("hull", PackedVector3Array()),
-				reach, radius))
+				reach, radius)
+		if not found.is_empty():
+			window = minf(window, found["window"])
+			lo = minf(lo, found["lo"])
+			hi = maxf(hi, found["hi"])
 	for contact: Dictionary in GameState.contacts:
 		# Contacts with no radius are sensor blips, not bodies — they are not in
 		# _collidables() either and cannot be collided with, let alone tunnelled.
 		var r: float = contact.get("radius", 0.0)
-		if r > 0.0:
-			window = minf(window, _window_for(from, span, along, contact["position"],
-					r, PackedVector3Array(), reach, radius))
-	return window
+		if r <= 0.0:
+			continue
+		var found := _hazard_of(from, span, along, contact["position"], r,
+				PackedVector3Array(), reach, radius)
+		if not found.is_empty():
+			window = minf(window, found["window"])
+			lo = minf(lo, found["lo"])
+			hi = maxf(hi, found["hi"])
+	if not is_finite(window):
+		return {}
+	return {"window": window, "lo": lo, "hi": hi}
 
 
-## One body's contribution to the window above: INF when the swept path does not
-## come within reach of it, and its detection window along `along` when it does.
+## One body's hazard, or {} when the path never comes within reach of it.
 ##
-## Rejects on the path's bounding sphere first, using the body's BOUNDING radius —
-## which is the right measure for "could we be anywhere near this", even though it
-## is the wrong one for the window itself. The exact tests below allocate, and
-## almost every body in the scene is nowhere near the path.
-func _window_for(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
+## The interval is a ray-sphere intersection against the body's BOUNDING radius
+## grown by the ship's reach — the right measure for "could we be anywhere near
+## this", even though it is the wrong one for the window itself.
+func _hazard_of(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
 		body_radius: float, hull: PackedVector3Array, reach: float,
-		radius: float) -> float:
-	var envelope := span.length() * 0.5 + body_radius + reach
-	if (from + span * 0.5).distance_squared_to(at) > envelope * envelope:
-		return INF
-	var near: Array = _closest_points_between_segments(from, from + span, at, at)
-	if (near[0] as Vector3).distance_to(at) > body_radius + reach:
-		return INF
+		radius: float) -> Dictionary:
+	var offset := from - at
+	var envelope := body_radius + reach
+	var a := span.length_squared()
+	if a <= 0.0:
+		return {}
+	var b := 2.0 * offset.dot(span)
+	var c := offset.length_squared() - envelope * envelope
+	var discriminant := b * b - 4.0 * a * c
+	if discriminant < 0.0:
+		return {}
+	var root := sqrt(discriminant)
+	var t0 := (-b - root) / (2.0 * a)
+	var t1 := (-b + root) / (2.0 * a)
+	if t1 < 0.0 or t0 > 1.0:
+		return {}
 	# A sphere is as thick as it is wide whichever way it is crossed; a hull is
 	# only as thick as its own shadow on the direction of travel.
 	var thickness := body_radius * 2.0
@@ -294,7 +316,11 @@ func _window_for(from: Vector3, span: Vector3, along: Vector3, at: Vector3,
 		thickness = high - low
 	# The ship's own width always counts, so a vanishingly thin hull still leaves
 	# a window rather than demanding an infinite number of sub-steps.
-	return thickness + 2.0 * radius
+	return {
+		"window": thickness + 2.0 * radius,
+		"lo": maxf(t0, 0.0),
+		"hi": minf(t1, 1.0),
+	}
 
 
 func _collidables() -> Array[Dictionary]:

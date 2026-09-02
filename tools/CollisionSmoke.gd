@@ -136,32 +136,35 @@ func _run() -> void:
 					% [ship["transform"].origin.z, wall_z])
 	GameState.remove_obstacle(thin_id)
 
-	# The same case in the orientation that actually bounds it. Flown NOSE-ON the
-	# capsule's own 2.6 m length is swept through the body and the window is
-	# generous; flown BROADSIDE only its 0.7 m diameter is, and that is the figure
-	# the sub-step gate has to be calibrated against. Gating on the generous
-	# orientation is how a ship tunnels while flying sideways, and it is what this
-	# pins the speed the gate holds WITH ITS SAFETY MARGIN INTACT — 1.3 km/s past
-	# the smallest body in the game — checked across every alignment between the
-	# sampling grid and the body. Above it the margin erodes and misses become
-	# gradually more likely; see ShipMotion.MAX_SUBSTEPS.
-	# The orientation IS the variable here, so nothing may be allowed to change it
-	# mid-run. This suite leaves InputRouter live (the ram test above drives a real
-	# action through it), and under DIRECT law a live stick on a dev box commands
-	# raw torque — which quietly rolls the ship off broadside and back into the
-	# generous orientation this check exists to avoid testing.
-	InputRouter.set_process(false)
-	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	# The same case in the orientation that actually bounds it, and at a speed
+	# nothing in the game can produce — because the point is that SPEED IS NOT
+	# WHAT BOUNDS IT.
+	#
+	# Flown NOSE-ON the capsule's own 2.6 m length is swept through the body and
+	# the window is generous; flown BROADSIDE only its 0.7 m diameter is, and that
+	# is the figure the sampler has to be calibrated against. Gating on the
+	# generous orientation is how a ship tunnels while flying sideways.
+	#
+	# 20 km/s is 333 m in a tick, five hundred times the body's own diameter. It
+	# is struck anyway, because the sampler spends its sub-steps on the stretch of
+	# path where contact is possible rather than spreading them over the whole
+	# tick — and how long the ship is alongside a 0.35 m body does not depend on
+	# how fast it got there. Every alignment between the sampling grid and the
+	# body is tried.
 	var side := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO)
 	var tunnelled := 0
+	var worst_steps := 0
 	for i in 8:
-		# On the capsule's own axis — _set_capsule above centres it on y = 0, so a
-		# body at any other height is a tangent graze rather than the dead-centre
-		# hit this is meant to be measuring.
-		var at := Vector3(0, 0, -600.0 - float(i) * 0.35)
+		var at := Vector3(0, 0, -6000.0 - float(i) * 41.7)
 		var pebble := GameState.register_obstacle(
 				"PEBBLE", at, 0.35, PackedVector3Array(), true)
-		ShipMotion.seize(side, Vector3(0, 0, -1300.0))
+		var probe := at + Vector3(0, 0, 167.0)
+		var hazard := CollisionSystem.path_hazard(probe, probe + Vector3(0, 0, -333.3))
+		if not hazard.is_empty():
+			worst_steps = maxi(worst_steps, ceili(
+					(float(hazard["hi"]) - float(hazard["lo"])) * 333.3
+					/ maxf(0.5 * float(hazard["window"]), 0.01)))
+		ShipMotion.seize(side, Vector3(0, 0, -20000.0))
 		comms_before = GameState.comms.size()
 		var struck := await _wait_until(
 				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 3.0)
@@ -169,8 +172,14 @@ func _run() -> void:
 			tunnelled += 1
 		GameState.remove_obstacle(pebble)
 	_check(tunnelled == 0,
-			"a 0.35 m body is still struck BROADSIDE at 1.3 km/s, at any alignment (%d/8 missed)"
+			"a 0.35 m body is struck BROADSIDE at 20 km/s, at any alignment (%d/8 missed)"
 					% tunnelled)
+	# ...and it is not brute force doing it. If this ever climbs to the cap, the
+	# sampler has gone back to dividing the whole tick and the speed ceiling is
+	# back with it, whatever the check above happens to say.
+	_check(worst_steps > 0 and worst_steps < ShipMotion.MAX_SUBSTEPS / 2,
+			"...on %d sub-steps, not the %d-step cap — the cost is set by the body, not the speed"
+					% [worst_steps, ShipMotion.MAX_SUBSTEPS])
 
 	# --- A BROAD, THIN hull is sized by its thickness, not its bounding sphere ---
 	#
