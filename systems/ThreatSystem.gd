@@ -123,13 +123,26 @@ func _update_rival(delta: float) -> void:
 			_update_rival_depart(contact, wreck_pos, delta)
 
 
+## Advance a contact and record what it is DOING, not just where it ended up.
+##
+## The velocity matters as much as the position because a contact is something
+## the ship can be measured against: pin the navigation datum to this rival and
+## every relative reading — altitude, closing rate, the speed governor's limit —
+## subtracts what is written here. A mover that only wrote positions would leave
+## the ship governed against a body the instruments believed was parked.
+func _advance(contact: Dictionary, velocity: Vector3, delta: float) -> void:
+	contact["velocity"] = velocity
+	contact["position"] += velocity * delta
+
+
 ## Close on the wreck; once in reach, start the cutting cadence.
 func _update_rival_approach(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
 	var to_wreck: Vector3 = wreck_pos - contact["position"]
 	contact["heading"] = to_wreck.normalized()
 	if to_wreck.length() > RIVAL_WORK_RANGE:
-		contact["position"] += to_wreck.normalized() * RIVAL_SPEED * delta
+		_advance(contact, to_wreck.normalized() * RIVAL_SPEED, delta)
 		return
+	contact["velocity"] = Vector3.ZERO
 	_strip_timer = RIVAL_STRIP_INTERVAL
 	_rival_state = RivalState.CUT
 
@@ -183,9 +196,10 @@ func _update_rival_collect(contact: Dictionary, delta: float) -> void:
 	var dist := to_piece.length()
 	contact["heading"] = to_piece.normalized()
 	if dist > RIVAL_COLLECT_RANGE:
-		contact["position"] += to_piece.normalized() * RIVAL_SPEED * delta
+		_advance(contact, to_piece.normalized() * RIVAL_SPEED, delta)
 		_rival_collect_timer = 0.0
 		return
+	contact["velocity"] = Vector3.ZERO
 	_rival_collect_timer += delta
 	if _rival_collect_timer < RIVAL_COLLECT_TIME:
 		return
@@ -201,7 +215,7 @@ func _update_rival_collect(contact: Dictionary, delta: float) -> void:
 func _update_rival_depart(contact: Dictionary, wreck_pos: Vector3, delta: float) -> void:
 	var away: Vector3 = (contact["position"] - wreck_pos).normalized()
 	contact["heading"] = away
-	contact["position"] += away * RIVAL_SPEED * 2.0 * delta
+	_advance(contact, away * RIVAL_SPEED * 2.0, delta)
 	if contact["position"].distance_to(wreck_pos) > PATROL_SPAWN_RANGE:
 		GameState.remove_contact(_rival_contact_id)
 		_rival_contact_id = -1
@@ -241,8 +255,13 @@ func _update_patrol(delta: float) -> void:
 	# patrol can pick the ship out and enforce the claim.
 	var enforce_range := PATROL_ENFORCE_RANGE * GameState.passive_signature()
 	if to_ship.length() > enforce_range:
-		contact["position"] += to_ship.normalized() * PATROL_SPEED * delta
-	elif not _patrol_enforced:
+		_advance(contact, to_ship.normalized() * PATROL_SPEED, delta)
+		return
+	# Inside enforcement range the patrol is holding, so it is stopped every tick
+	# it is here — not only on the tick it arrived. The enforcement below fires
+	# once; the velocity has to be right for as long as it sits there.
+	contact["velocity"] = Vector3.ZERO
+	if not _patrol_enforced:
 		# Caught working the claim: fine + reputation hit with the holder.
 		_patrol_enforced = true
 		var faction := MarketSystem.claim_faction()

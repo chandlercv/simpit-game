@@ -240,6 +240,7 @@ func _test_lines_are_sayable() -> void:
 	probes.append_array(_comms_since(before, "OPS"))
 	await _set_hatch(false)
 
+
 	_check(probes.size() >= 4, "the probes produced comms to say (%d)" % probes.size())
 	var mute: Array[String] = []
 	for entry: Dictionary in probes:
@@ -302,8 +303,16 @@ func _test_hush_while_cutting() -> void:
 
 	# Boot banners and settings echoes are dropped at build time, so they are not
 	# in the bank at all — the strongest form of "never spoken".
+	#
+	# The two flight-control lines are settings echoes and belong here, not in the
+	# sayable probes above: they read back a control the pilot has their hand on,
+	# which is exactly the noise never_speak exists to prevent. That a law change
+	# MATTERS is said by the annunciator and the alert, not by reading the switch
+	# out loud. Renaming either line without carrying its never_speak pattern
+	# across would start the ship announcing them, so both are pinned here.
 	for line: String in ["DISPLAY NETWORK ONLINE — SV KESTREL",
-			"SWEEP MODE PASSIVE", "THROTTLE — SPEED COMMAND"]:
+			"SWEEP MODE PASSIVE", "THROTTLE — COMBINED COMMAND",
+			"FLIGHT CONTROL — DIRECT LAW"]:
 		_check(_speech.clips_for(line, "ship").is_empty(),
 				"never spoken: \"%s\"" % line)
 

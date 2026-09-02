@@ -105,6 +105,204 @@ func _run() -> void:
 				ship["transform"].origin.z, wreck_pos.z])
 	GameState.remove_obstacle(core_id)
 
+	# --- Sub-stepping: a body thinner than one tick's travel still stops the ---
+	# --- ship rather than being flown straight through.                      ---
+	#
+	# This is the case DIRECT law makes reachable and the discrete overlap test
+	# cannot see on its own: at 400 m/s a 60 Hz tick carries the ship 6.7 m, so a
+	# 1 m body sits entirely between two consecutive tested positions. Without
+	# ShipMotion sub-stepping the collision pass with it, the ship arrives on the
+	# far side having never touched anything.
+	_set_capsule(Vector3(0, 0, -0.95), Vector3(0, 0, 0.95), 0.35)
+	_reset_ship()
+	ship = GameState.local_ship()
+	GameState.set_fbw_law("DIRECT")
+	var wall_z := -300.0
+	var plate_he := Vector3(6, 6, 0.5)
+	# Registered with the hull's TRUE bounding radius, which is what Station.gd
+	# and Wreck.gd both do. It matters: the bounding radius of a broad thin plate
+	# is nothing like its thickness, and a test that quietly passed a small radius
+	# would never exercise the gap between the two.
+	var thin_id := GameState.register_obstacle(
+			"THIN PLATE", Vector3(0, 0, wall_z), plate_he.length(),
+			_box_hull(Vector3(0, 0, wall_z), plate_he), true)
+	comms_before = GameState.comms.size()
+	ship["velocity"] = Vector3(0, 0, -400.0)
+	var caught := await _wait_until(
+			func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 4.0)
+	_check(caught, "a plate thinner than one tick's travel is still hit at 400 m/s")
+	_check(ship["transform"].origin.z > wall_z,
+			"...and the ship is stopped in front of it, not tunnelled through (z %.1f, plate z %.1f)"
+					% [ship["transform"].origin.z, wall_z])
+	GameState.remove_obstacle(thin_id)
+
+	# The same case in the orientation that actually bounds it, and at a speed
+	# nothing in the game can produce — because the point is that SPEED IS NOT
+	# WHAT BOUNDS IT.
+	#
+	# Flown NOSE-ON the capsule's own 2.6 m length is swept through the body and
+	# the window is generous; flown BROADSIDE only its 0.7 m diameter is, and that
+	# is the figure the sampler has to be calibrated against. Gating on the
+	# generous orientation is how a ship tunnels while flying sideways.
+	#
+	# 20 km/s is 333 m in a tick, five hundred times the body's own diameter. It
+	# is struck anyway, because the sampler spends its sub-steps on the stretch of
+	# path where contact is possible rather than spreading them over the whole
+	# tick — and how long the ship is alongside a 0.35 m body does not depend on
+	# how fast it got there. Every alignment between the sampling grid and the
+	# body is tried.
+	var side := Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO)
+	var tunnelled := 0
+	var worst_steps := 0
+	for i in 8:
+		var at := Vector3(0, 0, -6000.0 - float(i) * 41.7)
+		var pebble := GameState.register_obstacle(
+				"PEBBLE", at, 0.35, PackedVector3Array(), true)
+		var probe := at + Vector3(0, 0, 167.0)
+		for hazard: Dictionary in CollisionSystem.path_hazard(
+				probe, probe + Vector3(0, 0, -333.3)):
+			worst_steps = maxi(worst_steps, ceili(
+					(float(hazard["hi"]) - float(hazard["lo"])) * 333.3
+					/ maxf(0.5 * float(hazard["window"]), 0.01)))
+		ShipMotion.seize(side, Vector3(0, 0, -20000.0))
+		comms_before = GameState.comms.size()
+		var struck := await _wait_until(
+				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 3.0)
+		if not struck:
+			tunnelled += 1
+		GameState.remove_obstacle(pebble)
+	_check(tunnelled == 0,
+			"a 0.35 m body is struck BROADSIDE at 20 km/s, at any alignment (%d/8 missed)"
+					% tunnelled)
+	# ...and it is not brute force doing it. A stretch's interval and window come
+	# from the same geometry, so an isolated body's demand is a bounded handful
+	# whatever the speed. If this ever climbs past that, the sampler has gone
+	# back to dividing distance instead of hazard and the speed ceiling is back
+	# with it, whatever the check above happens to say.
+	_check(worst_steps > 0 and worst_steps <= 8,
+			"...on %d sub-steps — the cost is set by the body, not the speed"
+					% worst_steps)
+
+	# --- A BROAD, THIN hull is sized by its thickness, not its bounding sphere ---
+	#
+	# A station bay wall is 18 m by 16 m and 1.6 m thick: a 12 m bounding radius
+	# around 1.6 m of substance. Gate the sub-stepping on the radius and the ship
+	# is told it has 24 m of window where it really has 2.3 m, and steps clean over
+	# the wall — which is not an exotic-speed problem, it starts in the hundreds.
+	# The window has to be the hull's shadow on the direction of travel.
+	var wall_he := Vector3(9.0, 8.0, 0.8)
+	tunnelled = 0
+	for i in 8:
+		var wz := -600.0 - float(i) * 0.8
+		var wall := GameState.register_obstacle("BAY WALL", Vector3(0, 0, wz),
+				wall_he.length(), _box_hull(Vector3(0, 0, wz), wall_he), true)
+		ShipMotion.seize(Transform3D.IDENTITY, Vector3(0, 0, -900.0))
+		comms_before = GameState.comms.size()
+		var struck := await _wait_until(
+				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 3.0)
+		if not struck:
+			tunnelled += 1
+		GameState.remove_obstacle(wall)
+	_check(tunnelled == 0,
+			"a 1.6 m wall inside a 12 m bounding sphere is struck at 900 m/s (%d/8 missed)"
+					% tunnelled)
+
+	# --- SEPARATE bodies must stay SEPARATE sampling stretches -----------------
+	#
+	# Folding every hazard on the path into one [min lo, max hi] span sampled at
+	# the tightest window reintroduces the speed ceiling by the back door: two of
+	# these walls 150 m apart on one 200 m tick merged into a ~170 m interval
+	# divided at one wall's 2.3 m window — a demand of 150-odd sub-steps against
+	# a budget of 32, most of it spent finely sampling the EMPTY GAP between the
+	# walls while both went under-sampled. Flown live before the split, the ship
+	# crossed both walls clean at 12 km/s with the sampler reporting the path
+	# covered. Disjoint stretches cost their own handful of steps each and the
+	# gap between them costs one coarse step, whatever its length.
+	_set_capsule(Vector3(0, -0.7, -0.95), Vector3(0, -0.7, 0.95), 0.35)
+	var pair_probe := Vector3(0, 0, -560.0)
+	var wall_a := GameState.register_obstacle("WALL A", Vector3(0, 0, -600.0),
+			wall_he.length(), _box_hull(Vector3(0, 0, -600.0), wall_he), true)
+	var wall_b := GameState.register_obstacle("WALL B", Vector3(0, 0, -750.0),
+			wall_he.length(), _box_hull(Vector3(0, 0, -750.0), wall_he), true)
+	var stretches := CollisionSystem.path_hazard(
+			pair_probe, pair_probe + Vector3(0, 0, -200.0))
+	_check(stretches.size() == 2,
+			"two walls 150 m apart are two disjoint stretches, not one merged span (%d)"
+					% stretches.size())
+	var stretch_demand := 0
+	for stretch: Dictionary in stretches:
+		stretch_demand = maxi(stretch_demand, ceili(
+				(float(stretch["hi"]) - float(stretch["lo"])) * 200.0
+				/ maxf(0.5 * float(stretch["window"]), 0.01)))
+	_check(stretch_demand > 0 and stretch_demand <= 8,
+			"...each wanting its own handful of steps (worst %d), none spent on the gap"
+					% stretch_demand)
+	GameState.remove_obstacle(wall_a)
+	GameState.remove_obstacle(wall_b)
+
+	tunnelled = 0
+	for i in 8:
+		var oz := -float(i) * 25.0
+		var wa := GameState.register_obstacle("WALL A", Vector3(0, 0, -600.0 + oz),
+				wall_he.length(), _box_hull(Vector3(0, 0, -600.0 + oz), wall_he), true)
+		var wb := GameState.register_obstacle("WALL B", Vector3(0, 0, -750.0 + oz),
+				wall_he.length(), _box_hull(Vector3(0, 0, -750.0 + oz), wall_he), true)
+		ShipMotion.seize(Transform3D.IDENTITY, Vector3(0, 0, -12000.0))
+		comms_before = GameState.comms.size()
+		var pair_struck := await _wait_until(
+				func() -> bool: return _has_comms_since(comms_before, "COLLISION"), 2.0)
+		if not pair_struck:
+			tunnelled += 1
+		GameState.remove_obstacle(wa)
+		GameState.remove_obstacle(wb)
+		_reset_ship()
+	_check(tunnelled == 0,
+			"one of two separated walls registers on every 12 km/s pass (%d/8 crossed clean)"
+					% tunnelled)
+
+	# --- Near-misses must not starve the hit -----------------------------------
+	#
+	# Seven pebbles sit 1.2 m off the flight path: close enough that their
+	# broadphase envelopes intersect it — each earns its own sampling stretch —
+	# and too far to ever touch the ship. Beyond them, ON the path, a wall.
+	# Under a shared sub-step budget the seven bystanders spent five steps each
+	# before the ship ever reached the wall, the wall's own stretch was clamped
+	# to a single unresolved step, and the ship crossed 1.6 m of structure at
+	# 12 km/s without a mark on it. What a stretch costs must be set by ITS
+	# body — never by how many other bodies the path merely passed on the way.
+	var bystanders: Array[int] = []
+	for k in 7:
+		bystanders.append(GameState.register_obstacle(
+				"BYSTANDER", Vector3(1.2, 0, -420.0 - 15.0 * float(k)), 0.35,
+				PackedVector3Array(), true))
+	var far_wall := GameState.register_obstacle("FAR WALL", Vector3(0, 0, -560.0),
+			wall_he.length(), _box_hull(Vector3(0, 0, -560.0), wall_he), true)
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3(0, 0, -12000.0))
+	comms_before = GameState.comms.size()
+	var wall_struck := await _wait_until(
+			func() -> bool: return _has_comms_since(comms_before, "FAR WALL"), 2.0)
+	_check(wall_struck,
+			"a wall past seven near-miss bodies is still struck — bystanders starve nothing")
+	for id: int in bystanders:
+		GameState.remove_obstacle(id)
+	GameState.remove_obstacle(far_wall)
+	_reset_ship()
+	_set_capsule(Vector3(0, 0, -0.95), Vector3(0, 0, 0.95), 0.35)
+
+	InputRouter.set_process(true)
+	_reset_ship()
+	GameState.set_fbw_law("NORMAL")
+
+	# --- The bounce splits by mass, so WHAT you hit matters ---------------------
+	# The ship used to reflect identically off everything, which is why ramming a
+	# pebble and ramming a boulder felt the same. Same closing speed into a light
+	# body and a heavy one must now leave the ship going at different speeds.
+	var light := await _ram_body(CollisionSystem.body_mass(0.8))
+	var heavy := await _ram_body(GameState.ship_mass() * 20.0)
+	_check(heavy > light + 0.5,
+			"a heavy body throws the ship back harder than a light one (%.2f vs %.2f m/s)"
+					% [heavy, light])
+
 	# --- GJK distance unit checks (segment vs convex hull) --------------------
 	# A unit cube hull centred at the origin; distances are known analytically.
 	var cube := _box_hull(Vector3.ZERO, Vector3(1, 1, 1))
@@ -230,6 +428,33 @@ func _reset_ship() -> void:
 	var ship: Dictionary = GameState.local_ship()
 	ship["transform"] = Transform3D.IDENTITY
 	ship["velocity"] = Vector3.ZERO
+
+
+## Drive the ship into a movable sphere of `mass` kg at a fixed closing speed and
+## report its velocity ON THE TICK THE CONTACT LANDS. The only variable is the
+## body's mass, so what comes back is the mass split and nothing else.
+##
+## Read on the contact tick, not after the ship settles: under NORMAL law the
+## translation null bleeds whatever the bounce left within a second or so, and
+## both cases converge on nearly stopped. DIRECT law is selected for the same
+## reason — nothing must tidy the number away before it is read.
+func _ram_body(mass: float) -> float:
+	_reset_ship()
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	GameState.set_fbw_law("DIRECT")
+	var ship: Dictionary = GameState.local_ship()
+	var id := GameState.register_obstacle(
+			"RAM TARGET", Vector3(0, 0, -12.0), 2.0, PackedVector3Array(), false, mass)
+	ship["velocity"] = Vector3(0, 0, -8.0)
+	await _wait_until(
+			func() -> bool:
+				return absf((GameState.local_ship()["velocity"] as Vector3).z + 8.0) > 0.01,
+			4.0)
+	var rebound: float = (ship["velocity"] as Vector3).z
+	GameState.remove_obstacle(id)
+	GameState.set_fbw_law("NORMAL")
+	_reset_ship()
+	return rebound
 
 
 func _hull_total() -> float:

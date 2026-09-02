@@ -110,6 +110,65 @@ func _run() -> void:
 			"a sidestep survives under way but not at rest (%.2f m/s flying vs %.2f parked)"
 					% [kept_flying, kept_parked])
 
+	# --- 3c. The COMBINED throttle law: the lever commands the speed AND the
+	# thrust used reaching it. Both halves matter and only one of them is visible
+	# in the endpoint — the OLD law settled at the same place, it just slammed
+	# there at full thrust — so the acceleration is measured as well. ---
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3.ZERO)
+	GameState.set_fbw_law("NORMAL")
+	GameState.set_governor_speed(60.0)
+	var full_accel := ShipMotion.thrust_accel()
+	# Half lever, one second: half thrust, so about half the drive's acceleration.
+	SalvageSystem.set_manual_flight(Vector3(0.0, 0.0, 0.5), Vector3.ZERO)
+	await _wait(1.0)
+	var gained: float = (ship["velocity"] as Vector3).dot(Vector3.FORWARD)
+	_check(absf(gained - full_accel * 0.5) < full_accel * 0.2,
+			"half a lever accelerates at about half thrust (%.2f m/s in 1 s, half-thrust is %.2f)"
+					% [gained, full_accel * 0.5])
+	# ...and converges on half the governor's setting, not on all of it.
+	await _wait(60.0)
+	var held: float = (ship["velocity"] as Vector3).dot(Vector3.FORWARD)
+	_check(absf(held - 30.0) < 1.0,
+			"...and settles at half the governor's 60 (%.1f m/s)" % held)
+
+	# Closing the lever brakes at FULL authority, not at the lever's fraction.
+	# Scaling authority by the lever both ways would make a shut throttle command
+	# zero speed with zero authority, which does nothing at all and leaves the
+	# ship coasting with the lever closed. This is that regression.
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	await _wait(1.0)
+	var after_close: float = (ship["velocity"] as Vector3).dot(Vector3.FORWARD)
+	_check(held - after_close > full_accel * 0.8,
+			"closing the lever brakes at full thrust, not at the lever's fraction (shed %.2f m/s in 1 s)"
+					% (held - after_close))
+
+	# --- 3d. The governor holds a speed RELATIVE TO THE DATUM, and DIRECT law
+	# removes it entirely. ---
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3.ZERO)
+	GameState.set_governor_speed(20.0)
+	ship["velocity"] = Vector3.FORWARD * 200.0
+	await _wait(0.5)
+	_check((ship["velocity"] as Vector3).length() <= 20.5,
+			"the governor clamps to its setting (%.1f m/s of a commanded 200)"
+					% (ship["velocity"] as Vector3).length())
+
+	GameState.set_fbw_law("DIRECT")
+	ship["velocity"] = Vector3.FORWARD * 200.0
+	await _wait(0.5)
+	_check((ship["velocity"] as Vector3).length() > 199.0,
+			"DIRECT law clamps nothing at all (%.1f m/s kept)"
+					% (ship["velocity"] as Vector3).length())
+	_check(not GameState.fbw_engaged(), "...and reports itself as not engaged")
+	# Releasing everything under DIRECT leaves the ship going. It is the only law
+	# in which that is true, and it is the whole cost of choosing it.
+	SalvageSystem.set_manual_flight(Vector3.ZERO, Vector3.ZERO)
+	await _wait(2.0)
+	_check((ship["velocity"] as Vector3).length() > 199.0,
+			"...and a released control coasts forever rather than stopping the ship")
+	GameState.set_fbw_law("NORMAL")
+	GameState.set_governor_speed(60.0)
+	ShipMotion.seize(Transform3D.IDENTITY, Vector3.ZERO)
+
 	# --- 4. The align interlock reads authority. ---
 	SalvageSystem.reset_site()
 	GameState.wreck["scanned"] = true

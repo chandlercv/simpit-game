@@ -1,6 +1,7 @@
 extends Control
 ## The Tactical display's glass-cockpit instrument band: heading, speed,
-## attitude, altitude, rotation rates, propellant and the ship's plate, framing
+## attitude, altitude, rotation rates, the consumables and the ship's plate,
+## framing
 ## whichever mode (SCOPE / CHART) is up.
 ##
 ## LAYOUT. VEL, the attitude indicator and ALT form ONE FLIGHT BLOCK on the
@@ -11,9 +12,10 @@ extends Control
 ## the mode panels' margins from them and the smoke test audits them — there is
 ## one copy of the geometry, not two that drift.
 ##
-## MEASURED AGAINST WHAT. Every reading on this band except speed and propellant
-## comes from NavReference's datum, so they cannot disagree about which way is
-## up. The datum is named on the legend and again on the attitude indicator's
+## MEASURED AGAINST WHAT. Every reading on this band except the consumables comes
+## from NavReference's datum — speed included, because the governor holds a speed
+## RELATIVE to that datum and the tape has to read what the governor governs. So
+## they cannot disagree about which way is up. The datum is named on the legend and again on the attitude indicator's
 ## ground field, because "level" means level with the SELECTED datum and that
 ## changes under the pilot when AUTO switches.
 ##
@@ -38,7 +40,7 @@ const SPD_W := 96.0
 const ADI_W := 340.0
 ## Altitude tape, right of the attitude indicator.
 const ALT_W := 104.0
-## Plate, rate ribbons and propellant.
+## Plate, rate ribbons and the consumable tapes.
 const BOTTOM_H := 120.0
 ## Everything left of the mode pane: the whole flight block.
 const FLIGHT_W := SPD_W + ADI_W + ALT_W
@@ -68,6 +70,10 @@ const PITCH_PX_PER_DEG := 6.5
 
 ## Below this, a tank tape ambers; at zero it reddens.
 const TANK_LOW := 0.25
+## How far above a consumable tape's box its overrange may spill, px. Only the
+## ALT tape has one — see _draw_consumables — and it is bounded so an overdrawn
+## bus cannot paint up into the mode pane.
+const OVERRANGE_H := 14.0
 ## Spacing of the diagonals in an over-a-limit band.
 const HATCH_STEP := 8.0
 
@@ -168,7 +174,7 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	_draw_legend(font)
 	_draw_rates(font)
-	_draw_propellant(font)
+	_draw_consumables(font)
 
 
 # --- Heading -----------------------------------------------------------------
@@ -254,8 +260,19 @@ func _draw_legend(font: Font) -> void:
 			NavReference.label_for(GameState.nav_reference), d["reason"], d["label"]]
 		color = Instrument.WARN
 	text += "   ·   RNG %d M" % roundi(NavReference.range_to())
+	# The governor rides the legend rather than the speed tape's own caption,
+	# because this is the line that says what the ship is being measured AGAINST
+	# and the governed speed is measured against exactly that. It also has the
+	# width for it — the speed tape is 96 px and cannot hold a datum name.
+	if GameState.fbw_engaged():
+		text += "   ·   GOV %d M/S" % roundi(GameState.governor_speed)
 	draw_string(font, Vector2(Instrument.INSET, y), text, HORIZONTAL_ALIGNMENT_LEFT,
 			-1, Instrument.ANNOT, color)
+	if not GameState.fbw_engaged():
+		# Drawn separately and in its own colour: the datum is still true under
+		# DIRECT law, but the absence of a limit is the thing worth the warning.
+		draw_string(font, Vector2(0, y), "DIRECT LAW — NO GOVERNOR",
+				HORIZONTAL_ALIGNMENT_CENTER, size.x, Instrument.ANNOT, Instrument.WARN)
 	draw_string(font, Vector2(0, y), GameState.tactical_view, HORIZONTAL_ALIGNMENT_RIGHT,
 			size.x - Instrument.INSET, Instrument.ANNOT, Color(accent, 0.55))
 
@@ -264,14 +281,21 @@ func _draw_legend(font: Font) -> void:
 
 func _paint_speed(ci: Control) -> void:
 	var font := ThemeDB.fallback_font
-	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
+	# Speed RELATIVE TO THE DATUM, which is the same quantity the governor holds
+	# and the same one ALT/VS/RNG beside it are measured against. Every datum but
+	# a designated contact is static today, so this usually equals speed through
+	# space — but the tape has to read what the governor governs, or the hatched
+	# band below would sit at a figure the number under it never reaches.
+	var speed: float = NavReference.relative_velocity().length()
 	var cy := ci.size.y / 2.0
 	var y_for := func(v: float) -> float: return cy - tape_offset(v, speed, SPD_PX_PER_MS)
 
-	# Bands first, under the scale. What the drive can hold, and — separately —
-	# what the extended legs will take, which is the lower of the two whenever
-	# the gear is out and is the one that costs you a leg rather than nothing.
-	_draw_limit_band(ci, y_for.call(GameState.speed_ceiling()), Instrument.BAD)
+	# Bands first, under the scale. What the governor is holding — absent under
+	# DIRECT law, because then nothing is — and separately what the extended legs
+	# will take, which is the lower of the two whenever the gear is out and is the
+	# one that costs you a leg rather than nothing.
+	if GameState.fbw_engaged():
+		_draw_limit_band(ci, y_for.call(GameState.governor_speed), Instrument.BAD)
 	if not GameState.gear_stowed():
 		_draw_limit_band(ci, y_for.call(GameState.GEAR_LIMIT_SPEED), Instrument.WARN)
 
@@ -293,7 +317,11 @@ func _paint_speed(ci: Control) -> void:
 		var limit_color: Color = accent if docking["speed_ok"] else Instrument.BAD
 		ci.draw_line(Vector2(0, limit_y), Vector2(ci.size.x, limit_y), limit_color, 2.0)
 
-	_draw_caption(ci, font, "VEL M/S", Instrument.TAG, Color(accent, 0.6))
+	# REL, not VEL: this is speed relative to the datum, and a relative reading
+	# whose reference is not stated is not a reading. WHICH datum is on the
+	# legend across the top of the band, along with the governor's setting — one
+	# copy of that name, on the line wide enough to hold it.
+	_draw_caption(ci, font, "REL M/S", Instrument.TAG, Color(accent, 0.6))
 	_draw_pointer(ci, font, cy, "%.1f" % speed, accent, true)
 
 
@@ -540,33 +568,70 @@ func _draw_rates(font: Font) -> void:
 				Color(accent, 0.8))
 
 
-# --- Propellant --------------------------------------------------------------
+# --- Consumables ---------------------------------------------------------------
 
-## Vertical tapes, because a tank is a vertical thing and a level in one is read
-## the same way as a level in the other. Quantity is the MFD POWER page's job;
-## what belongs beside the flight instruments is how much is left.
-func _draw_propellant(font: Font) -> void:
+## The four things that run out, as vertical tapes: the two propellant tanks and
+## the two electrical ones. Vertical because a tank is a vertical thing and a
+## level in one is read the same way as a level in the next, and together because
+## a pilot deciding whether to take a claim is asking one question about all four.
+##
+## Quantity in units is the MFD POWER page's job. What belongs beside the flight
+## instruments is how much is left.
+##
+## ALT is the odd one and is drawn with an OVERRANGE: it is bus demand against
+## what the alternator makes, so it can exceed full, and past full the difference
+## is coming out of the battery beside it. That relationship is the reason the two
+## are adjacent.
+func _draw_consumables(font: Font) -> void:
+	var supply := GameState.power_budget()
 	var tanks: Array[Dictionary] = [
-		{"label": "LH2", "fraction": GameState.lh2_fraction()},
-		{"label": "LOX", "fraction": GameState.lox_fraction()},
+		{"label": "LH2", "fraction": GameState.lh2_fraction(), "low": TANK_LOW,
+			"readout": "%d%%" % roundi(GameState.lh2_fraction() * 100.0)},
+		{"label": "LOX", "fraction": GameState.lox_fraction(), "low": TANK_LOW,
+			"readout": "%d%%" % roundi(GameState.lox_fraction() * 100.0)},
+		{"label": "ALT", "fraction": GameState.electrical_demand() / maxf(supply, 0.001),
+			"low": -1.0, "overrange": true,
+			"readout": "%dkW" % roundi(
+				GameState.electrical_demand() * GameState.ship_def.power_unit_w / 1000.0)},
+		{"label": "BAT", "fraction": GameState.battery_fraction(),
+			"low": GameState.BATTERY_LOW,
+			"readout": "%d%%" % roundi(GameState.battery_fraction() * 100.0)},
 	]
 	var w := 34.0
 	var gap := 26.0
 	var h := BOTTOM_H - 46.0
 	var top := size.y - BOTTOM_H + 22.0
-	var x := size.x - Instrument.INSET - (w * 2.0 + gap)
-	for i in tanks.size():
+	var count := tanks.size()
+	var x := size.x - Instrument.INSET - (w * float(count) + gap * float(count - 1))
+	for i in count:
 		var tank: Dictionary = tanks[i]
 		var fraction: float = tank["fraction"]
+		var low: float = tank["low"]
+		var overrange: bool = tank.get("overrange", false)
 		var color := accent
-		if fraction <= 0.0:
+		if overrange:
+			# Over full is the caution, not under it: the bus is drawing more than
+			# the alternator makes and the battery is covering the difference.
+			if fraction > 1.0:
+				color = Instrument.WARN
+		elif fraction <= 0.0:
 			color = Instrument.BAD
-		elif fraction < TANK_LOW:
+		elif fraction < low:
 			color = Instrument.WARN
 		var tape := Rect2(x + float(i) * (w + gap), top, w, h)
 		draw_rect(tape, Color(color, 0.10), true)
-		draw_rect(Rect2(tape.position.x, tape.end.y - tape.size.y * fraction,
-				tape.size.x, tape.size.y * fraction), Color(color, 0.7), true)
+		var filled := minf(fraction, 1.0)
+		draw_rect(Rect2(tape.position.x, tape.end.y - tape.size.y * filled,
+				tape.size.x, tape.size.y * filled), Color(color, 0.7), true)
+		# Over full spills a short way ABOVE the tape's own box, so a bus drawing
+		# more than the alternator makes reads as overflowing rather than as a tape
+		# that is simply full and could be much worse. Capped at OVERRANGE_H rather
+		# than scaled without limit — the band's bottom reserve is what it is, and
+		# a 300% draw must not paint into the mode pane above it.
+		if overrange and fraction > 1.0:
+			var over := minf(fraction - 1.0, 1.0) * OVERRANGE_H
+			draw_rect(Rect2(tape.position.x, tape.position.y - over, tape.size.x, over),
+					Color(Instrument.BAD, 0.6), true)
 		draw_rect(tape, Color(color, 0.55), false, 1.0)
 		for quarter in range(1, 4):
 			var tick_y := tape.position.y + tape.size.y * float(quarter) / 4.0
@@ -576,5 +641,5 @@ func _draw_propellant(font: Font) -> void:
 				tank["label"], HORIZONTAL_ALIGNMENT_LEFT, -1, Instrument.TAG,
 				Color(accent, 0.7))
 		draw_string(font, Vector2(tape.position.x - 8.0, tape.end.y + 15.0),
-				"%d%%" % roundi(fraction * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1,
+				tank["readout"], HORIZONTAL_ALIGNMENT_LEFT, -1,
 				Instrument.TAG, color)

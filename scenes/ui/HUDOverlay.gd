@@ -264,6 +264,8 @@ func _draw_gear_indicator() -> void:
 	var text := "GEAR DOWN" if locked else "GEAR IN TRANSIT %d%%" % roundi(
 			GameState.gear_position * 100.0)
 	var color := SALVAGE_LOCKED_COLOR if locked else SALVAGE_COLOR
+	# World (inertial) speed — see GameState.ships on the frame. The legs are
+	# rated against speed through space, so nothing is subtracted here.
 	var speed: float = (GameState.local_ship().get("velocity", Vector3.ZERO) as Vector3).length()
 	if speed > GameState.GEAR_LIMIT_SPEED:
 		text = "GEAR OVERSPEED %d / %d" % [roundi(speed), roundi(GameState.GEAR_LIMIT_SPEED)]
@@ -289,16 +291,21 @@ func _draw_hatch_indicator() -> void:
 
 
 ## Stability-augmentation state, stacked under the hatch/gear annunciators.
-## Silent while nominal: an annunciator that is always lit says nothing. Shown
-## switched OFF (a pilot's choice, steady) or DEGRADED (authority below rated —
+## Silent while nominal: an annunciator that is always lit says nothing. Shown on
+## DIRECT law (a pilot's choice, steady) or DEGRADED (authority below rated —
 ## pulsing red once it is too low to open an alignment, since that is the point
 ## at which it starts costing salvage).
+##
+## DIRECT names the law rather than saying "off", and names what going to it cost
+## — the speed governor goes with the augmentation, and a pilot who switched laws
+## to fly hands-on needs to know the ship will no longer stop them.
 func _draw_assist_indicator() -> void:
 	var engaged: bool = ShipMotion.fbw_engaged()
 	var auth: float = ShipMotion.authority()
 	if engaged and auth >= 0.99:
 		return
-	var text := "ASSIST OFF" if not engaged else "ASSIST DEGRADED %d%%" % roundi(auth * 100.0)
+	var text := "DIRECT LAW — NO GOVERNOR" if not engaged \
+			else "ASSIST DEGRADED %d%%" % roundi(auth * 100.0)
 	var color := SALVAGE_COLOR
 	if engaged and auth < SalvageSystem.MIN_ALIGN_AUTHORITY:
 		color = Color(THREAT_COLOR, 0.55 + 0.45 * sin(_time * TAU * 1.5))

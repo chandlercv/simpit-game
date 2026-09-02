@@ -3,7 +3,9 @@ extends Node
 ##
 ## Every contributor to the ship's motion feeds this pipeline; production code
 ## must not write GameState's ship transform/velocity/omega anywhere else while
-## the ship is being flown. step() runs four named phases, in order:
+## the ship is being flown. step() divides the tick into as many sub-steps as the
+## bodies near the path demand (see step) and runs _integrate() for each; that is
+## where the four named phases live, in order:
 ##
 ##   1. command      — the pilot's stick and throttle become a commanded
 ##                     attitude rate and commanded accelerations,
@@ -16,10 +18,17 @@ extends Node
 ##
 ## The ship carries real angular momentum (ship["omega"], world-frame rad/s).
 ## The stick does not turn the ship directly — it commands a rate, and the
-## fly-by-wire slews omega toward that rate and nulls the residual. At full
-## authority that reproduces the old crisp rate command with a short, tuned
-## settle; with the FBW degraded or off, only the direct thruster torque acts,
+## fly-by-wire slews omega toward that rate and nulls the residual. The slew is
+## bounded by the torque the thrusters can make against the ship's live moments,
+## so a loaded hull comes onto a rate slower than an empty one and roll answers
+## quicker than pitch or yaw. Under DIRECT law only the raw thruster torque acts,
 ## and residual spin is the pilot's to cancel.
+##
+## Two things bound the ship's speed and NEITHER is a property of space. The
+## GOVERNOR is a flight-computer limit, set by the pilot on the MFD SETTINGS page
+## and measured against the selected navigation datum (_apply_governor); DIRECT
+## law removes it. Everything else is propellant, amps and how long you are
+## willing to burn.
 ##
 ## Kinematic overrides — the approach autopilot's park, touchdown and deck
 ## placement, claim placement, the smoke tests' parking — go through seize(),
@@ -32,23 +41,41 @@ extends Node
 ## own, so autoload order cannot reorder the pipeline.
 
 ## FBW gains and authority limits live on ShipDefinition (fbw_linear_rate,
-## fbw_angular_rate, fbw_raw_torque_deg, fbw_power_knee, fbw_drive_dead,
-## fbw_drive_full) — they are the ship's numbers, quoted by her handbook, and a
-## second hull tunes them in its own .tres rather than here.
+## fbw_angular_rate, fbw_power_knee, fbw_drive_dead, fbw_drive_full), as do the
+## mass, moments and torques the flight model derives everything else from — they
+## are the ship's numbers, quoted by her handbook, and a second hull tunes them in
+## its own .tres rather than here.
 
 ## A command axis at or below this deflection counts as released, and the FBW
 ## nulls that axis's residual. Matches the old whole-vector rest threshold
 ## (length_squared 0.001 -> ~0.032 deflection).
 const CMD_DEADBAND := 0.032
 
-## Forward/back throttle command law. SPEED (default) treats the throttle as a
-## target fraction of max_speed and closes on it — cruise-control style, no
-## need to ride the lever to hold a speed. THRUST is the legacy behavior,
-## where the throttle is felt directly as acceleration. Toggled in flight via
-## a bindable button (throttle_cmd_toggle); independent of the per-device
-## lever/gamepad binding curve set in the F7 remapper (ControlsSetup).
-enum ThrottleCmdMode { SPEED, THRUST }
-var _throttle_cmd_mode := ThrottleCmdMode.SPEED
+## Forward/back throttle command law. THIS IS A PROPERTY OF THE HARDWARE, not a
+## second assist switch — a throttle is one of two physical shapes and they want
+## opposite laws.
+##
+## COMBINED — for an absolute LEVER. Position commands both the speed converged
+## on and the thrust used getting there. Park it at half and the ship eases to
+## half the governor's setting on half thrust and holds it, hands off.
+## THRUST — for a self-centring GAMEPAD axis. Position commands force alone.
+##
+## The shapes cannot share a law. A centring axis reads exactly zero at rest
+## (InputRouter._throttle_curve, {mode:"gamepad"}), so under COMBINED a released
+## stick is a full-authority braking command and holding any speed means holding
+## the stick forward for as long as you want to be moving. A lever under THRUST
+## has the mirror problem: parked anywhere but the stop it is a permanent burn,
+## and an absolute lever cannot be let go of.
+##
+## So the DEFAULT follows the device — see sync_throttle_law, which reads the
+## profile the F7 remapper wrote — and throttle_cmd_toggle overrides it for the
+## pilot who disagrees. DIRECT law forces THRUST whatever is selected: a
+## speed-holding loop is fly-by-wire by definition and cannot outlive it.
+enum ThrottleCmdMode { COMBINED, THRUST }
+var _throttle_cmd_mode := ThrottleCmdMode.COMBINED
+## True once the pilot has overridden the device default, so a later profile
+## reload does not quietly undo their choice.
+var _throttle_law_pinned := false
 
 ## Pilot command for this tick, fed by SalvageSystem.set_manual_flight (which
 ## InputRouter calls every render frame — the freshest command when the physics
@@ -97,31 +124,44 @@ func drive_load() -> float:
 	return clampf(absf(_cmd_thrust.z) + lateral.length(), 0.0, 1.0)
 
 
-## Bindable (throttle_cmd_toggle): flip between SPEED and THRUST throttle
-## command law. See ThrottleCmdMode above.
+## Bindable (throttle_cmd_toggle): override the device default and flip between
+## the COMBINED and THRUST throttle laws. See ThrottleCmdMode above.
 func toggle_throttle_cmd_mode() -> void:
-	_throttle_cmd_mode = (ThrottleCmdMode.THRUST if _throttle_cmd_mode == ThrottleCmdMode.SPEED
-			else ThrottleCmdMode.SPEED)
+	_throttle_cmd_mode = (ThrottleCmdMode.THRUST if _throttle_cmd_mode == ThrottleCmdMode.COMBINED
+			else ThrottleCmdMode.COMBINED)
+	_throttle_law_pinned = true
 	GameState.post_comms("OPS", "THROTTLE — %s COMMAND" % ThrottleCmdMode.keys()[_throttle_cmd_mode])
+
+
+## The throttle law in force this tick. DIRECT overrides the selection because a
+## speed-holding loop is fly-by-wire and cannot survive the law that removes it.
+func throttle_law() -> int:
+	return ThrottleCmdMode.THRUST if not GameState.fbw_engaged() else _throttle_cmd_mode
+
+
+## Adopt the law the fitted throttle wants, unless the pilot has already chosen.
+## Called when an input profile loads (InputRouter), which is the only moment the
+## fitted shape can change.
+func sync_throttle_law() -> void:
+	if _throttle_law_pinned:
+		return
+	_throttle_cmd_mode = (ThrottleCmdMode.THRUST if InputRouter.throttle_is_centering()
+			else ThrottleCmdMode.COMBINED)
 
 
 ## --- Authority --------------------------------------------------------------
 
 
-## Master engage for the fly-by-wire (fbw_mode_cycle). Off is a pilot's choice:
-## direct thruster torque only, no rate command, no translation null.
-var _fbw_on := true
-
-
+## The control law is GameState's (FBW_LAWS) because the annunciator, the speed
+## tape, the handbook and the SETTINGS page all have to name it. This node
+## implements it; it does not own it.
 func fbw_engaged() -> bool:
-	return _fbw_on
+	return GameState.fbw_engaged()
 
 
-## Bindable (fbw_mode_cycle): flight assist on/off.
+## Bindable (fbw_mode_cycle): step the control law.
 func toggle_fbw() -> void:
-	_fbw_on = not _fbw_on
-	GameState.post_comms("OPS",
-			"FLIGHT ASSIST %s" % ("ENGAGED" if _fbw_on else "OFF — DIRECT CONTROL"))
+	GameState.cycle_fbw_law()
 
 
 ## How much of its rated corrective effort the fly-by-wire can currently
@@ -132,7 +172,7 @@ func toggle_fbw() -> void:
 ## landings, gear overspeed and collapse events all wear DRIVE, and this is
 ## where that wear finally costs something.
 func authority() -> float:
-	if not _fbw_on:
+	if not GameState.fbw_engaged():
 		return 0.0
 	var def: ShipDefinition = GameState.ship_def
 	var power_term := clampf(GameState.power("THRUST") / def.fbw_power_knee, 0.0, 1.0)
@@ -165,11 +205,100 @@ func ship_omega() -> Vector3:
 ## --- The pipeline -----------------------------------------------------------
 
 
-## One tick of manual flight. Newtonian-lite (plan Phase 5): rate-commanded
-## attitude through the FBW slew, thruster acceleration gated by THRUST power,
-## the fly-by-wire nulls, and a speed ceiling so the pit stays flyable without
-## a full sim.
+## Fraction of the detection window the ship may cross in one sub-step. A half
+## means two samples always land inside the window, so a body cannot fall between
+## consecutive tested positions.
+const SUBSTEP_SAFETY := 0.5
+
+
+## One tick of manual flight, sub-stepped across whatever the path runs into.
+##
+## Collision is a DISCRETE overlap test run after the position update
+## (CollisionSystem), so a ship that crosses a body in less than a tick is never
+## tested against it and passes clean through. That is not hypothetical at the
+## governor's default: 60 m/s is 1.0 m per 60 Hz tick against a hull 0.7 m
+## across, and DIRECT law removes the governor entirely.
+##
+## So the integration and the collision pass sub-step together — sub-stepping the
+## motion alone would buy nothing, because the test would still run once at the
+## end. The division is driven by CollisionSystem.path_hazard, which reports the
+## disjoint stretches of the path over which anything can be hit at all, in order
+## of approach, each with how finely its tightest body has to be sampled.
+##
+## SAMPLING ONLY THOSE STRETCHES is what keeps this bounded in speed. Dividing
+## the whole tick uniformly costs more the faster the ship goes, so any fixed
+## budget buys a speed ceiling — and DIRECT law has no governor to keep the ship
+## under one. But a body can only be hit while the ship is beside it, and how
+## long that takes is set by the body's size, not the ship's speed. Doubling the
+## speed halves the time spent alongside and leaves the sample count where it
+## was. Between the stretches the path is empty by construction and costs one
+## coarse step however long it is.
+##
+## There is deliberately NO cap on the sub-steps a tick may spend. A shared
+## budget was a correctness hole by construction: near-misses spend from the
+## same purse as hits — a stretch means the path passes NEAR a body, not that
+## it touches it — so enough bodies merely close to the path starved the one
+## actually on it down to a single unresolved step, and the ship flew through
+## a wall because of things it never hit. The cost is bounded by geometry
+## instead: an isolated body's stretch is a handful of steps whatever its size
+## or the ship's speed (the interval and the window come from the same
+## projection — CollisionSystem._hazard_of), stretches exist only where bodies
+## are, and a long merged stretch is the genuine price of flying alongside
+## continuous structure. What a tick pays is set by how much STUFF the path
+## passes, never by speed alone.
+##
+## The ship only. ThreatSystem's contacts and DriftSystem's pieces move slowly
+## enough that their own once-a-tick pass is sound, and CollisionSystem still
+## runs its authoritative pass at the end of the tick with their final positions.
 func step(delta: float) -> void:
+	var ship: Dictionary = GameState.local_ship()
+	var origin: Vector3 = (ship["transform"] as Transform3D).origin
+	var travel: Vector3 = (ship["velocity"] as Vector3) * delta
+	# The datum is resolved ONCE for the tick and carried into every sub-step. It
+	# cannot change under the loop — what the ship is referenced to is not a
+	# function of where the ship is.
+	var reference := NavReference.datum_velocity()
+
+	# What the tick's path can hit, and over which stretches of it.
+	var hazards := CollisionSystem.path_hazard(origin, origin + travel)
+	if hazards.is_empty():
+		# Nothing on the path. One step, however fast the ship is going — there is
+		# nothing to sample finely FOR.
+		_integrate(delta, reference)
+		return
+
+	var length := travel.length()
+	var cursor := 0.0
+	for hazard: Dictionary in hazards:
+		var window: float = hazard["window"]
+		var lo: float = hazard["lo"]
+		var hi: float = hazard["hi"]
+		# Coarse to the start of this stretch: the gap behind the cursor cannot
+		# touch anything by construction, whatever its length.
+		if lo > cursor:
+			_integrate(delta * (lo - cursor), reference)
+		var steps := maxi(
+				ceili((hi - lo) * length / maxf(SUBSTEP_SAFETY * window, 0.01)), 1)
+		var fine := delta * (hi - lo) / float(steps)
+		for _i in steps:
+			_integrate(fine, reference)
+			# Only when the stretch is actually being DIVIDED. A single step across
+			# it means the ship cannot cross the body between two samples, so the
+			# authoritative pass at the end of the tick is enough — and running an
+			# extra one here would resolve contact twice a tick in close quarters,
+			# pushing a ship off a piece it was station-keeping on before the scoop
+			# ever got to look at it.
+			if steps > 1:
+				CollisionSystem.resolve_ship(fine)
+		cursor = hi
+	if cursor < 1.0:
+		_integrate(delta * (1.0 - cursor), reference)
+
+
+## One integration sub-step: rate-commanded attitude through the FBW slew,
+## thruster acceleration gated by THRUST power and by the ship's live mass, the
+## fly-by-wire nulls, and the governor.
+func _integrate(delta: float, reference: Vector3) -> void:
 	var ship: Dictionary = GameState.local_ship()
 	var transform: Transform3D = ship["transform"]
 	var velocity: Vector3 = ship["velocity"]
@@ -181,11 +310,13 @@ func step(delta: float) -> void:
 	var rate_cmd: Vector3 = transform.basis \
 			* (_cmd_rot * deg_to_rad(GameState.ship_def.rotation_rate_deg))
 
-	# 2. Contributors — angular: the direct thruster torque. It fades as FBW
-	# authority rises, because a healthy FBW owns the same thrusters it fires
-	# through; at zero authority this is all the attitude control there is.
-	omega += transform.basis * (_cmd_rot * deg_to_rad(GameState.ship_def.fbw_raw_torque_deg)) \
-			* (1.0 - auth) * delta
+	# 2. Contributors — angular: the direct thruster torque, which is now a real
+	# torque over a real moment (GameState.angular_authority) rather than an
+	# authored deg/s^2. It fades as FBW authority rises, because a healthy FBW
+	# owns the same thrusters it fires through; at zero authority this is all the
+	# attitude control there is.
+	var alpha := GameState.angular_authority()
+	omega += transform.basis * (_cmd_rot * alpha) * (1.0 - auth) * delta
 
 	# 2. Contributors — linear: strafe/vertical thrusters, then the throttle's
 	# own control law on the forward axis, both scaled by what the drive can
@@ -201,51 +332,102 @@ func step(delta: float) -> void:
 	# 3. Fly-by-wire — slews omega onto the commanded rate and nulls the
 	# uncommanded translation axes. Runs after every contributor so what it
 	# corrects is the true residual of the tick.
-	omega = rate_cmd + (omega - rate_cmd) * exp(-GameState.ship_def.fbw_angular_rate * auth * delta)
+	omega = _slew_omega(transform, omega, rate_cmd, alpha, auth, delta)
 	velocity = _apply_fbw_linear(transform, velocity, auth, delta)
 
 	# 4. Integrate — angular then linear, both semi-implicit.
 	if omega.length_squared() > 0.00000001:
 		transform.basis = transform.basis.rotated(
 				omega.normalized(), omega.length() * delta).orthonormalized()
-	# The ceiling is whatever the drive can currently hold against the Higgs drag,
-	# so a tank running dry mid-burn drops it and this clamp decelerates the ship
-	# into the new one without a special case.
-	velocity = velocity.limit_length(GameState.speed_ceiling())
+	velocity = _apply_governor(velocity, reference)
 	transform.origin += velocity * delta
 	ship["transform"] = transform
 	ship["velocity"] = velocity
 	ship["omega"] = omega
 
 
-## Advance `velocity`'s forward/back component only, per the active throttle
-## command mode (see ThrottleCmdMode). Reverse is capped at
-## secondary_thrust_fraction of forward — clamping the command rather than the
-## result, so it scales both the THRUST-mode acceleration and the SPEED-mode
-## target uniformly, whatever secondary_thrust_fraction is tuned to.
+## The speed governor: hold the ship to her setting RELATIVE TO THE SELECTED
+## NAVIGATION DATUM, which is the whole substance of the limit.
+##
+## A cap on speed through space would be meaningless anywhere near something that
+## moves — there is no such thing as an absolute speed to be limited to. A cap on
+## how fast the ship is closing on the thing she is being flown at means the same
+## thing everywhere, which is why the datum is subtracted before the limit and
+## added back after it.
+##
+## It is a flight-computer limit, not a property of the drive and not a property
+## of space, so DIRECT law removes it: governor_limit() returns INF and
+## limit_length becomes a no-op without a special case here.
+func _apply_governor(velocity: Vector3, reference: Vector3) -> Vector3:
+	return reference + (velocity - reference).limit_length(GameState.governor_limit())
+
+
+## Slew omega onto the commanded rate, bounded by the torque the attitude
+## thrusters can actually deliver against the ship's live moments.
+##
+## The exponential alone is a gain with no limit — it would put a fully loaded
+## ship onto a commanded rate exactly as fast as an empty one, which is the whole
+## thing mass is supposed to cost. Clamping the correction to alpha * dt is what
+## makes the moments matter: roll answers quicker than pitch and yaw because it
+## is the smaller moment, and every axis slows as the hold fills.
+func _slew_omega(transform: Transform3D, omega: Vector3, rate_cmd: Vector3,
+		alpha: Vector3, auth: float, delta: float) -> Vector3:
+	if auth <= 0.0:
+		return omega
+	var wanted: Vector3 = (rate_cmd - omega) \
+			* (1.0 - exp(-GameState.ship_def.fbw_angular_rate * auth * delta))
+	# The budget is per BODY axis, so resolve the correction there, clamp it, and
+	# put it back — a world-frame clamp would mix the axes' very different limits.
+	var local: Vector3 = transform.basis.inverse() * wanted
+	var budget := alpha * auth * delta
+	local.x = clampf(local.x, -budget.x, budget.x)
+	local.y = clampf(local.y, -budget.y, budget.y)
+	local.z = clampf(local.z, -budget.z, budget.z)
+	return omega + transform.basis * local
+
+
+## Advance `velocity`'s forward/back component only, per the active throttle law
+## (see ThrottleCmdMode). Reverse is capped at secondary_thrust_fraction of
+## forward — clamping the COMMAND rather than the result, so it scales the thrust
+## and the commanded speed together whatever that fraction is tuned to, and
+## stopping from speed rewards turning the ship around over braking on the tap.
 func _apply_throttle_axis(transform: Transform3D, velocity: Vector3, accel: float, delta: float) -> Vector3:
 	var forward_dir: Vector3 = -transform.basis.z
 	var reverse_cap: float = GameState.ship_def.secondary_thrust_fraction
 	var z_cmd: float = clampf(_cmd_thrust.z, -reverse_cap, 1.0)
 	var fwd_speed := velocity.dot(forward_dir)
 	var new_fwd_speed: float
-	if _throttle_cmd_mode == ThrottleCmdMode.THRUST:
+	if throttle_law() == ThrottleCmdMode.THRUST:
 		new_fwd_speed = fwd_speed + z_cmd * accel * delta
 	else:
-		# SPEED mode commands a fraction of the LIVE ceiling, not of the drag-limited
-		# figure — a full lever with propellant aboard is meant to reach the tier the
-		# tanks are paying for.
-		new_fwd_speed = move_toward(fwd_speed, z_cmd * GameState.speed_ceiling(), accel * delta)
+		# COMBINED: the lever's position commands the speed AND the thrust used
+		# reaching it, so half a lever is half thrust easing onto half the
+		# governor's setting rather than a full-thrust slam that stops dead there.
+		# That is what makes fine work possible on an absolute lever — a tenth of
+		# travel is a tenth of the drive, not all of it for a tenth of the time.
+		#
+		# Deceleration is deliberately NOT scaled by the lever. Scaling both ways
+		# makes a closed lever command zero speed with zero authority, which does
+		# nothing at all and leaves the ship coasting with the throttle shut.
+		# Closing the lever means "arrest me with everything you have".
+		var target := z_cmd * GameState.governor_speed
+		var closing := absf(target) < absf(fwd_speed)
+		var authority_now := accel if closing else absf(z_cmd) * accel
+		new_fwd_speed = move_toward(fwd_speed, target, authority_now * delta)
 	return velocity + forward_dir * (new_fwd_speed - fwd_speed)
 
 
-## The acceleration the drive can currently make: the rated figure scaled by BOTH
-## the electrical allocation actually delivered and the stages the selector has
-## turning — so a starved bus and a dead stage cost the same way, and OFF (or L
-## with a dry tank) leaves nothing at all. It is also the yardstick the propellant
-## meter measures a burn against, so both read the same figure.
+## The acceleration the drive can currently make: thrust over the ship's LIVE
+## mass, scaled by BOTH the electrical allocation actually delivered and the
+## stages the selector has turning — so a starved bus and a dead stage cost the
+## same way, and OFF (or L with a dry tank) leaves nothing at all. It is also the
+## yardstick the propellant meter measures a burn against, so both read the same
+## figure.
+##
+## Mass is live, so this falls as the hold fills and rises as the tanks burn
+## down: 4.0 m/s^2 on a dry hull, nearer 2.3 at forty tonnes and full tanks.
 func thrust_accel() -> float:
-	return GameState.ship_def.manual_accel \
+	return GameState.ship_def.main_thrust_n / maxf(GameState.ship_mass(), 1.0) \
 			* maxf(GameState.power("THRUST"), 0.0) * GameState.thrust_fraction()
 
 

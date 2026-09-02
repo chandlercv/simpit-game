@@ -34,8 +34,8 @@ tile of one (see **Simpit / multi-display setup**).
 | Role | Window | What it shows | How you interact |
 | --- | --- | --- | --- |
 | **Main** | `MainViewWindow` | Edge-to-edge hull-camera feed of the 3D world (ship, wreck, debris) with a thin HUD. | Flight + camera glance (HOTAS / keyboard). |
-| **Tactical** | `TacticalWindow` | **A glass-cockpit instrument band** — heading tape, speed tape, attitude indicator, altitude tape, rotation-rate ribbons, LH2/LOX tank tapes and the ship's builder's plate — framing one of two modes: SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) or CHART (system star chart). Altitude, heading, range and attitude are all measured against a selectable **navigation reference** (see below). | **No buttons at all** — it's an instrument you read. Mode and datum are stepped by mapped controls; anything these instruments need setting is on the MFD **SETTINGS** page. Mouse pan/zoom still works on the chart. |
-| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list), **SETTINGS** (navigation reference, Tactical band show/hide, rate-ribbon scale, and the audio mixer — a level per bus plus MUTE). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
+| **Tactical** | `TacticalWindow` | **A glass-cockpit instrument band** — heading tape, speed tape, attitude indicator, altitude tape, rotation-rate ribbons, four consumable tapes (LH2, LOX, alternator load, battery charge) and the ship's builder's plate — framing one of two modes: SCOPE (sensor scope, hull-damage heatmap, structural-risk meter) or CHART (system star chart). Speed, altitude, heading, range and attitude are all measured against a selectable **navigation reference** (see below). | **No buttons at all** — it's an instrument you read. Mode and datum are stepped by mapped controls; anything these instruments need setting is on the MFD **SETTINGS** page. Mouse pan/zoom still works on the chart. |
+| **MFDs** | `MfdWindow` | **Two side-by-side MFDs**, each with a MENU home and pages: **CHECKLIST** (the four operating procedures, ticked off against live ship state), **POWER** (channel sliders), **CARGO**, **SALVAGE** (cut-target list + sensor mode + approach/cut), **ALIGN** (the pre-cut alignment mini-game — crosshair, lock/slip meters, COMMIT/CANCEL), **SCOOP** (the post-cut collection instrument — cone field, drift arrow, gate checklist, OPEN/SECURE HATCH), **MARKET** (prices + comms), **DOCK** (the docking/landing instrument — ATC instruction banner, gate cone field, pad view on final, rule checklist, REQUEST/GEAR/ABORT), **CONTACTS** (lock list), **SETTINGS** (the speed governor, navigation reference, Tactical band show/hide, rate-ribbon scale, and the audio mixer — a level per bus plus MUTE). The primary MFD auto-opens **ALIGN** while alignment is live, **SCOOP** while the cargo hatch is open, and **DOCK** while a station pattern is being flown, handing the screen back after each. | Touch/mouse: tap the bezel **☰ MENU** button (or a mapped MFD-menu button — keyboard **G**/**H**) from any page to reach the home grid, then tap straight to the page you want. The mapped **Page +/−** controls wrap through the pages only — the MENU home is *not* in that cycle, so paging never dumps you onto the menu. Every command is also HOTAS-mappable. Buttons and list rows across every MFD page are sized as touch targets, for working the panel with a finger rather than a mouse. |
 | **Camera** | `CameraWindow` | A **second external camera** of your own ship — **REAR** (rear-view, looking aft), **SIDE**, **CHASE**, **TOP**, and **BELLY** (straight down past the hull — the landing view) — rendering the same 3D world as the Main view. | Selectable by a mapped control (cycle, or one button per view). |
 
 ---
@@ -150,11 +150,13 @@ display. Nothing on it is clickable.
   hull heading boxed on the lubber line. A **bug** on the tape marks the bearing
   to the navigation reference. This is the **hull's** heading; the Main HUD's
   `HDG` is the **camera's**, and they differ whenever you're glancing.
-- **Speed tape** — m/s, with the live figure boxed. The drive's current ceiling
-  draws a hatched band across the top of the tape; with the gear out, a second
-  amber band marks the 18 m/s the legs are rated for; and inside a station
-  pattern ATC's speed limit rides the tape as a bug that reddens the moment
-  you're over it.
+- **Speed tape** — m/s, with the live figure boxed, **measured against the
+  selected navigation reference and captioned with it** (`VEL M/S REL PLATFORM`).
+  The governor's setting draws a hatched band across the top of the tape; under
+  DIRECT law there is no band at all and the caption reads `DIRECT — NO
+  GOVERNOR`. With the gear out, a second amber band marks the 18 m/s the legs are
+  rated for; and inside a station pattern ATC's speed limit rides the tape as a
+  bug that reddens the moment you're over it.
 - **Attitude indicator** — the horizon, split into a dark sky field and a
   stippled ground field. The **waterline symbol at the centre never moves**;
   everything else moves behind it. Pitch up and the horizon drops below the
@@ -174,8 +176,12 @@ display. Nothing on it is clickable.
 - **Rotation-rate ribbons** — pitch, yaw and roll body rates as centre-zero
   tapes. Nulling a tumble is driving three pointers onto one centre line. Full
   scale is the ship's rated 45°/s, or ±15°/s on the **FINE** setting.
-- **Propellant** — LH2 and LOX as vertical tank tapes, amber under a quarter and
-  red when dry.
+- **Consumables** — four vertical tapes together: LH2 and LOX as tank tapes,
+  amber under a quarter and red when dry; **ALT**, the bus load against what the
+  alternator makes, reading in kW; and **BAT**, the battery's state of charge.
+  ALT is the only one that can read past full, and it spills over the top of its
+  box when it does — that overflow is coming out of the battery beside it, which
+  is why the two sit together.
 - **Builder's plate** — the ship's name, registry, hull serial, yard and year,
   etched on a plate at the bottom left. It is the one thing on the display that
   never changes.
@@ -483,9 +489,13 @@ frame collapse on you, then fly a station's docking pattern and sell. On site
 0..1. THRUST gates approach/manual acceleration, CUTTER gates cutting, SENSORS
 gates scan speed.
 
-The reactor is always lit; the **alternator** turns its output into electricity
-(2.5 units' worth) and the **battery** buffers the difference between that and
-what the channels are drawing. Draw more than the alternator makes and the
+The reactor is always lit, and it feeds two different things. The **alternator**
+converts part of its 1.2 MW into electricity for the bus (500 kW — 2.5 units'
+worth); the rest leaves as **heat**, and that heat is what the nuclear-thermal
+drive stage expands hydrogen with. That split is *why* the thermal stage is
+nearly free on the bus and the field stage isn't — they're drawing on different
+products of the same reactor. The **battery** (24 MJ) buffers the difference
+between what the alternator makes and what the channels are drawing. Draw more than the alternator makes and the
 battery covers it and runs down — 120 seconds at a one-unit deficit — so overdraw
 is now a real cost rather than a red header. Draw less and the surplus recharges
 it. **THRUST's draw depends on what the drive is doing:** the electrodynamic
@@ -500,18 +510,19 @@ when the lights come back.
 
 **Propulsion:** the drive is a hybrid, and which parts of it are running is a
 decision you make on the switch panel's five-position magneto (or two mapped
-keys). Speed is capped by the ship's **Higgs coupling** — a drag that only bites
-because of the compact fusion reactor she carries — and the only way past that
-cap is to throw real reaction mass out the back.
+keys). The selector decides how much **thrust** you have and what it costs — it
+does not decide your speed, and nothing about the drive does. Speed is held by
+the fly-by-wire **governor**, which is a setting rather than a property of the
+ship (see *Flight control laws* below).
 
-| Selector | Stages | Burns | Thrust | Max speed | Bus load |
-| --- | --- | --- | --- | --- | --- |
-| **OFF** | none | — | none | — | none |
-| **R** | electrodynamic field | nothing | 40% | 25 m/s | high |
-| **L** | nuclear thermal | LH2 | 60% | 35 m/s | low |
-| **BOTH** | both | LH2 | 100% | 35 m/s | high |
-| **+ boost** (held) | + combustion | LH2 **and** LOX | 100% | 50 m/s | as beneath |
-| **START** | the starter — 10 s, then turn back to a running position | | | | |
+| Selector | Stages | Burns | Thrust | Bus load |
+| --- | --- | --- | --- | --- |
+| **OFF** | none | — | none | none |
+| **R** | electrodynamic field | nothing | 40% | high |
+| **L** | nuclear thermal | LH2 | 60% | low |
+| **BOTH** | both | LH2 | 100% | high |
+| **+ boost** (held) | + combustion | LH2 **and** LOX | **150%** | as beneath |
+| **START** | the starter — 10 s, then turn back to a running position | | | |
 
 **There's no automatic reversion.** A stage runs when it's *selected* and
 *supplied*, and nothing steps in for one that isn't — so at **L** with a dry
@@ -522,11 +533,33 @@ recovery costs amps you may not have. Liquid oxygen is useless without hydrogen;
 both are bought at a berth (8 CR and 30 CR per unit) and neither is replenished
 in flight.
 
-**Manual flight throttle:** by default the throttle (forward/back) commands a
-target speed, not raw thrust — ease it to 50% and the ship accelerates to, then
-holds, 50% of *whatever maximum the drive can currently hold*; let go and it
-holds station on that axis. A mapped **Throttle Cmd Mode** button swaps this for
-the legacy direct-thrust feel (throttle = acceleration, no cruise control).
+**Flight control laws:** two, stepped with a mapped **fbw_mode_cycle** button.
+**NORMAL** runs the stability augmentation *and* the speed governor. **DIRECT**
+runs neither — the controls command torque and force, nothing is nulled, and
+nothing at all limits your speed. Going to DIRECT is how you go fast, and it's
+also how you find out that reverse is only 50% of forward, so stopping means
+turning the ship around and burning.
+
+**The governor** is the ship's speed limit, set on the MFD **SETTINGS** page —
+20 / 40 / 60 / 90 / 120 m/s, defaulting to **60**, and remembered between
+flights. It is a flight-computer limit rather than a law of physics, and it holds
+you to that speed **relative to the selected navigation reference**, not relative
+to space. Against a berth or a derelict on station those are the same number.
+Pin the datum to a rival under way and they aren't — you can be well over 60 m/s
+through space while sitting exactly on the governor. The Tactical speed tape
+reads the governed figure and captions which datum it's measured against.
+
+**Manual flight throttle:** the throttle has two laws, and *which one you get is
+decided by the shape of the throttle you plugged in* rather than by preference —
+the F7 remapper already knows whether your throttle is a **LEVER** or a
+**GAMEPAD** axis. On a lever you get **COMBINED**: the lever's position commands
+both the target speed and the thrust used getting there, so half travel is half
+thrust easing onto half the governor's setting, and you can park it and fly.
+Closing it commands zero and brakes on *full* thrust. On a self-centring stick
+you get **THRUST**: force only, and releasing it coasts — because under COMBINED
+a centred stick reads zero, which is a full braking order every time you let go.
+A mapped **Throttle Cmd Mode** button overrides the choice either way; DIRECT law
+forces THRUST regardless, since a held speed is fly-by-wire by definition.
 Strafe, vertical, and reverse are all secondary thrusters off the same drive —
 each rated at 50% of the main thruster's forward performance
 (`ShipDefinition.secondary_thrust_fraction`, one knob for the whole maneuvering
@@ -816,7 +849,8 @@ The camera keeps two keys rather than six: `]` steps every view and `[` jumps
 straight to **BELLY**, the one the landing procedure requires. REAR / SIDE /
 CHASE / TOP are reachable by stepping and ship **unbound**, rather than eating the
 number row the ship's systems now need. MFD paging, cargo, market, the throttle
-command-law toggle (`throttle_cmd_toggle`), the flight-assist switch
+command-law override (`throttle_cmd_toggle` — the law itself already follows
+your hardware), the flight-control-law switch
 (`fbw_mode_cycle`), the two direct navigation-reference selects (`nav_ref_pad`,
 `nav_ref_target`) and the Tactical band's show/hide (`tactical_band_toggle`)
 also ship unbound — bind any of them in the remapper. Every
@@ -842,7 +876,7 @@ remapper at all:
 | Display | Controls |
 | --- | --- |
 | **Tactical** | Read-only, and there is nothing to click. Mouse pan/zoom on the chart is the only mouse input it takes; mode, datum and the instrument band are driven by mapped controls or the MFD **SETTINGS** page. |
-| **MFDs** | Tap **MENU** to open a page. **CHECKLIST** tap a procedure, then BACK / ▲ / ▼ / RESET (and tap a hand-marked item to tick it); **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock; **SETTINGS** tap a navigation reference, show/hide the Tactical band, pick the rate-ribbon scale. |
+| **MFDs** | Tap **MENU** to open a page. **CHECKLIST** tap a procedure, then BACK / ▲ / ▼ / RESET (and tap a hand-marked item to tick it); **POWER** sliders; **CARGO** tap-to-select + jettison; **SALVAGE** sensor mode + approach/cut + tap a cut target; **MARKET** per-faction dock / sell / depart; **CONTACTS** tap to lock; **SETTINGS** tap a governor speed or a navigation reference, show/hide the Tactical band, pick the rate-ribbon scale. |
 | **Camera** | View is picked by a mapped control (no on-screen buttons). |
 
 Any input surface can drive the same intent — e.g. the four power channels are

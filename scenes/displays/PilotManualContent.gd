@@ -91,18 +91,33 @@ Built .................................................... [b]TESSERA YARDS, L4 
 
 The same particulars are stamped on the plate in the cockpit and reproduced at the foot of the Tactical display. Name and registry together are the vessel's identity on the air; how a given harbour uses them is that harbour's business and is published in its terminal procedures.
 
+[color=#66ccff]WEIGHTS[/color]
+Empty ................................................... [b]60.0 t[/b]
+Propellant, both tanks full ............................. [b]3.6 t[/b]
+Hold, maximum ........................................... [b]40.0 t[/b]
+Maximum all-up .......................................... [b]103.6 t[/b]
+
+Moments of inertia, pitch and yaw ....................... [b]900 000 kg·m²[/b]
+ — roll ................................................. [b]200 000 kg·m²[/b]
+
 [color=#66ccff]PERFORMANCE[/color]
-Main thruster acceleration, both drive stages ........... [b]4.0 m/s²[/b]
- — thermal stage alone .................................. [b]2.4 m/s²[/b]
- — field stage alone .................................... [b]1.6 m/s²[/b]
+Main thruster force, both drive stages .................. [b]240 kN[/b]
+ — thermal stage alone .................................. [b]144 kN[/b]
+ — field stage alone .................................... [b]96 kN[/b]
+ — boosting ............................................. [b]360 kN[/b]
+Attitude control torque, pitch and yaw .................. [b]1 414 kN·m[/b]
+ — roll ................................................. [b]471 kN·m[/b]
 Attitude rate, full control deflection, all axes ......... [b]45°/s[/b]
-Maximum speed, field stage alone ........................ [b]25 m/s[/b]
- — with the thermal stage running ....................... [b]35 m/s[/b]
- — boosting ............................................. [b]50 m/s[/b]
 Secondary thrusters, rated as a fraction of main ........ [b]50%[/b]
 Approach autopilot closing speed, maximum ............... [b]8 m/s[/b]
 
+[color=#f2bf59]CAUTION — The figures above are FORCES, and the ship's response to them depends on what she weighs at the time.[/color] Acceleration is thrust divided by all-up weight, so an empty ship at full allocation makes [b]4.0 m/s²[/b] and the same ship loaded to her limits makes about [b]2.3 m/s²[/b]. The attitude axes are affected in the same proportion: a loaded hull takes longer to reach a commanded rate and longer to stop at one.
+
+Roll answers more quickly than pitch and yaw at any weight, because it is the smaller moment. Full deflection commands 45°/s on every axis regardless; what differs is how long each takes to get there.
+
 Acceleration falls in proportion to the THRUST allocation and to which drive stages are running. The secondary thrusters — lateral, vertical and reverse — are supplied by the same drive and are governed by both. See [b]Drive & propellant[/b].
+
+[color=#8c9eb8]NOTE — No maximum speed is published because the airframe has none. Speed is limited by the fly-by-wire governor, which is a setting rather than a limit of the ship — see [b]Flight controls[/b] — and beyond that by propellant and by the electrical supply.[/color]
 
 [color=#66ccff]CARGO[/color]
 Hold capacity ........................................... [b]40.0 t / 30.0 m³[/b]
@@ -127,11 +142,35 @@ This is not a new ship. Integrity at the start of a tour is BOW 0.96, PORT 0.88,
 		"body": """[color=#66ccff]ATTITUDE[/color]
 The ship carries rotational momentum. The attitude controls do not turn the hull directly: they command a rate, and the stability augmentation holds the hull to it.
 
-Full deflection commands 45°/s. Returning the controls to centre commands zero, and the augmentation removes the remaining rate — in about a fifth of a second at full authority. Rotation imparted by a collision is removed the same way.
+Full deflection commands 45°/s. Returning the controls to centre commands zero, and the augmentation removes the remaining rate. Rotation imparted by a collision is removed the same way.
+
+[color=#8c9eb8]NOTE — The augmentation fires the same attitude thrusters the pilot does and is limited to the same torque.[/color] It cannot stop a rate faster than the ship can be stopped. How long that takes depends on the axis and on what the ship weighs — see [b]Description — PERFORMANCE[/b].
 
 Pitch .......... {{axis:pitch_down,pitch_up}}
 Yaw ............ {{axis:yaw_left,yaw_right}}
 Roll ........... {{axis:roll_left,roll_right}}
+
+[color=#66ccff]CONTROL LAWS[/color]
+The flight controls run under one of two laws, stepped with {{act:fbw_mode_cycle}}. [b]NORMAL[/b] is selected at power-up.
+
+[b]NORMAL[/b] ... The stability augmentation and the speed governor are both in force, and the throttle commands a speed. This is the law the ship is flown under.
+[b]DIRECT[/b] ... Neither is. The controls command torque and force, nothing is nulled, and nothing limits the ship's speed.
+
+[color=#f2705c]WARNING — DIRECT law removes the speed governor as well as the augmentation.[/color] There is then nothing at all between the throttle and the ship's speed, and no rate the pilot starts will stop by itself. Reverse thrust is 50% of forward, so arresting a high speed on the reverse tap takes twice as long as turning the ship and burning on the main thruster.
+
+The Main display annunciates [b]DIRECT LAW[/b], or [b]ASSIST DEGRADED[/b] whenever NORMAL is selected and cannot deliver full authority. Nothing is annunciated under NORMAL at full authority.
+
+[color=#66ccff]SPEED GOVERNOR[/color]
+Under NORMAL law the ship is held to a set speed. It is a limit imposed by the flight computer and not a limit of the airframe, which has none.
+
+Governor setting, at power-up .............................. [b]60 m/s[/b]
+Settings available ......................... [b]20 / 40 / 60 / 90 / 120 m/s[/b]
+
+The setting is made on the MFD [b]SETTINGS[/b] page and is retained between flights.
+
+[color=#f2bf59]CAUTION — The governed speed is measured against the SELECTED NAVIGATION REFERENCE, not against space.[/color] It is the rate at which the ship is closing on whatever the instruments are referenced to. Against a fixed datum — a berth, a derelict on station — that is the same as her speed through space. Against a datum pinned to a vessel under way it is not, and the ship may then be travelling considerably faster than the governor's figure while remaining within it. Changing the navigation reference changes what the governor is holding you to. See [b]Scope & contacts[/b].
+
+The governed speed is what the Tactical display's speed tape reads, and the tape names the reference it is measured against.
 
 [color=#66ccff]STABILITY AUGMENTATION[/color]
 The augmentation is fitted to both axes of motion. On the attitude axes it holds the commanded rate and removes residual rotation. On the translation axes it bleeds off any axis the pilot is [b]not[/b] commanding, at one of two rates:
@@ -141,13 +180,11 @@ The augmentation is fitted to both axes of motion. On the attitude axes it holds
 
 [color=#8c9eb8]NOTE — Displacing the ship sideways and holding the offset is flown, not trimmed. Under way the augmentation will slowly return the ship to its heading; re-apply lateral thrust to hold a standoff off the lane.[/color]
 
-It is engaged at power-up. {{act:fbw_mode_cycle}} switches it off and on. The Main display annunciates [b]ASSIST OFF[/b] or [b]ASSIST DEGRADED[/b] whenever it is not delivering full authority; nothing is annunciated when it is.
-
 Authority is the product of two figures. THRUST allocation carries it unimpaired at 0.40 and above and in proportion below. DRIVE integrity carries it unimpaired at 0.80 and above, in proportion below, and not at all at 0.30. See [b]Description — HULL[/b].
 
 [color=#f2bf59]CAUTION — The augmentation shares the THRUST channel with the manoeuvring thrusters.[/color] Allocation drawn down to feed the torch is taken out of stability authority at the same time.
 
-[color=#f2705c]WARNING — With the augmentation off or unpowered, the controls command torque and nothing else.[/color] Every rate started must be stopped by the pilot on the opposite control. The ship remains flyable in this condition and will not right itself.
+[color=#f2705c]WARNING — Under DIRECT law, or with the augmentation unpowered, the controls command torque and nothing else.[/color] Every rate started must be stopped by the pilot on the opposite control. The ship remains flyable in this condition and will not right itself.
 
 [color=#66ccff]TRANSLATION[/color]
 Translation is not rate-commanded. Thrust accelerates the ship and the resulting velocity persists.
@@ -158,12 +195,20 @@ Fore and aft ... {{axis:thrust_back,thrust_forward}}
 Throttle ....... {{throttle}}
 
 [color=#66ccff]THROTTLE[/color]
-The throttle has two command laws, selected with {{act:throttle_cmd_toggle}}.
+The throttle has two command laws. [b]Which one is fitted is decided by the shape of the throttle installed[/b], not by preference, because the two shapes cannot be flown under one another's law.
 
-[b]SPEED[/b] (normal). The lever commands a proportion of the maximum currently available, which depends on the drive stages running — see [b]Drive & propellant[/b]. Set to 50% on the field stage alone, the ship accelerates to 12.5 m/s and holds it; the same lever position with the thermal stage running commands 17.5 m/s.
-[b]THRUST[/b] (alternate). The lever commands acceleration directly. No speed is held.
+[b]COMBINED[/b] — for a throttle that stays where it is set. The lever commands both the speed and the thrust used reaching it. At half travel the ship accelerates on half thrust and settles at half the governor's setting: with the governor at 60 m/s, half the lever is 30 m/s. Set the lever and leave it there.
+[b]THRUST[/b] — for a control that returns to centre when released. It commands force alone; released, the ship coasts.
+
+Closing the throttle under COMBINED commands zero and the drive arrests the ship on [b]full[/b] thrust, not on the fraction the lever was at.
 
 Reverse is limited to 50% of the lever's forward authority under either law.
+
+{{act:throttle_cmd_toggle}} selects the other law, for a pilot who wants it. The choice is retained until the ship is next powered up.
+
+[color=#f2705c]WARNING — Do not select COMBINED on a control that returns to centre.[/color] Under COMBINED a centred control commands zero speed, which is a full braking order, and the ship will stand on the drive every time the control is released.
+
+[color=#8c9eb8]NOTE — DIRECT law commands force whatever is selected here.[/color] A held speed is a function of the flight computer, and DIRECT law is the law that removes it.
 
 [color=#66ccff]APPROACH AUTOPILOT[/color]
 The approach autopilot is the only autopilot fitted; the stability augmentation above is not one, and holds no course. The autopilot closes on the selected structural member and holds station on it while the derelict rotates, then indicates MATCHED.
@@ -200,7 +245,9 @@ Losing the THRUST supply while it is flying — the alternator off with the batt
 		"id": "power",
 		"group": "SECTION 2 — SYSTEMS",
 		"title": "Electrical & power",
-		"body": """The reactor is always lit. The [b]alternator[/b] turns its output into electricity for the bus; the [b]battery[/b] buffers the difference between what the alternator makes and what the ship is drawing. Electricity is divided between four channels, each allocated between [b]0.00[/b] and [b]1.00[/b] on an MFD [b]POWER[/b] page.
+		"body": """The reactor is always lit, and it feeds two quite different things. The [b]alternator[/b] converts part of its output into electricity for the bus; the remainder leaves the reactor as [b]heat[/b], and the heat is what the nuclear-thermal drive stage expands hydrogen with. That division is why the thermal stage costs the bus almost nothing while the field stage is expensive — the two are drawing on different products of the same reactor. See [b]Drive & propellant[/b].
+
+The [b]battery[/b] buffers the difference between what the alternator makes and what the ship is drawing. Electricity is divided between four channels, each allocated between [b]0.00[/b] and [b]1.00[/b] on an MFD [b]POWER[/b] page.
 
 [color=#66ccff]CHANNELS[/color]
 [b]THRUST[/b] — supplies the drive and the approach autopilot. At zero allocation the ship will not manoeuvre by hand, and the approach autopilot is refused — and gives up a standoff it is already holding.
@@ -210,10 +257,18 @@ Losing the THRUST supply while it is flying — the alternator off with the batt
 
 [color=#f2bf59]CAUTION — The CUTTER channel is at zero on power-up.[/color] Allocation at power-up is THRUST 0.80, CUTTER 0.00, SENSORS 0.60, LIFE 1.00. The torch will not fire until the channel is raised, and raising it is a required step on every tour.
 
+[color=#66ccff]THE PLANT[/color]
+Reactor output, gross ................................... [b]1 200 kW[/b]
+ — converted to electricity by the alternator ........... [b]500 kW[/b]
+ — remaining as heat, to the thermal drive stage ........ [b]700 kW[/b]
+Battery capacity ........................................ [b]24 MJ[/b]
+
 [color=#66ccff]SUPPLY AND DEMAND[/color]
-Alternator output ....................................... [b]2.5[/b]
+The bus is allocated in [b]units[/b]. One unit is [b]200 kW[/b].
+
+Alternator output ....................................... [b]2.5[/b] units
 Battery capacity, at one unit of deficit ................ [b]120 seconds[/b]
-Battery recharge rate, maximum .......................... [b]1.0[/b]
+Battery recharge rate, maximum .......................... [b]1.0[/b] unit
 
 Demand is the sum of the four allocations, with [b]THRUST counted at what the drive is actually doing[/b] — the field stage of the drive is electrically expensive and the thermal stage is not, so the same allocation costs very different amounts depending on the selector and on whether there is hydrogen left to burn. See [b]Drive & propellant[/b].
 
@@ -247,15 +302,17 @@ The exterior lights are the third term, and a much smaller one: each group extin
 		"body": """The drive is a hybrid of three stages. Which of them are running is chosen on the five-position selector — {{sw:ENGINE_OFF}}, {{sw:ENGINE_R}}, {{sw:ENGINE_L}}, {{sw:ENGINE_BOTH}}, {{sw:ENGINE_START}} — or stepped with {{act:drive_mode_prev}} and {{act:drive_mode_next}}.
 
 [b]FIELD[/b] — electrodynamic. Carries no propellant and needs none. Electrically expensive.
-[b]THERMAL[/b] — liquid hydrogen heated by the reactor and expelled. Electrically cheap.
+[b]THERMAL[/b] — liquid hydrogen heated by the reactor and expelled. It runs on the reactor's HEAT rather than on its electrical output, which is why it is cheap on the bus. See [b]Electrical & power[/b].
 [b]COMBUSTION[/b] — liquid oxygen burned with liquid hydrogen. The most thrust, the shortest endurance.
 
 [color=#66ccff]SELECTOR POSITIONS[/color]
 [b]OFF[/b] ..... No stage running. No thrust of any kind, however healthy the bus.
-[b]R[/b] ....... Field stage. [b]40%[/b] thrust, [b]25 m/s[/b], heavy on the bus, no propellant.
-[b]L[/b] ....... Thermal stage. [b]60%[/b] thrust, [b]35 m/s[/b], light on the bus, burns hydrogen.
-[b]BOTH[/b] .... Both stages. [b]100%[/b] thrust, [b]35 m/s[/b], heavy on the bus, burns hydrogen.
+[b]R[/b] ....... Field stage. [b]40%[/b] thrust, heavy on the bus, no propellant.
+[b]L[/b] ....... Thermal stage. [b]60%[/b] thrust, light on the bus, burns hydrogen.
+[b]BOTH[/b] .... Both stages. [b]100%[/b] thrust, heavy on the bus, burns hydrogen.
 [b]START[/b] ... The starter. No thrust — see STARTING below.
+
+[color=#8c9eb8]NOTE — The selector decides how much THRUST is available and what it costs. It does not decide the ship's speed; nothing about the drive does. Speed is held by the governor, which is a setting — see [b]Flight controls[/b].[/color]
 
 R burns no propellant but is slow and draws heavily on the bus. L is economical on both counts and is the position to select when the bus is already loaded. BOTH is the normal position for work.
 
@@ -280,7 +337,7 @@ The approach autopilot is metered on the same rule. It flies on the drive, so cl
 The drive is fed from the THRUST channel, and consumption follows what that channel delivers as well as what the lever commands. With nothing delivered against it the drive is not turning propellant into thrust and none is drawn: an open lever on an unpowered bus costs neither speed nor hydrogen. See [b]Drive failures[/b].
 
 [color=#66ccff]BOOST[/color]
-{{act:drive_boost}}, held. It requires the thermal stage running and both tanks charged, and raises the maximum to [b]50 m/s[/b]. It is not a latch and releases when the control does.
+{{act:drive_boost}}, held. It requires the thermal stage running and both tanks charged, and raises thrust to [b]150%[/b] of the rated figure — the only setting above it. It is not a latch and releases when the control does.
 
 [color=#f2bf59]CAUTION — Liquid oxygen cannot be burned without liquid hydrogen.[/color] A charged oxygen tank is of no use with the hydrogen tank empty.
 
@@ -303,7 +360,8 @@ Annunciated [i]LH2 DEPLETED[/i], and in the log:
 The thermal stage was the only stage selected and it has nothing left to heat. The field stage is not selected and will not take over.
 
 [b]1  SELECTOR[/b] — [color=#59f28c]R OR BOTH[/color]
-[b]2  PERFORMANCE[/b] — [color=#59f28c]EXPECT 40% THRUST AND 25 m/s[/color]
+[b]2  PERFORMANCE[/b] — [color=#59f28c]EXPECT 40% THRUST[/color]
+     [color=#8c9eb8]Acceleration only. The governor's setting is unaffected — the ship will still reach it, given the room and the time.[/color]
 [b]3  ALLOCATION[/b] — [color=#59f28c]REDUCE CUTTER AND SENSORS[/color]
      [color=#8c9eb8]The field stage draws heavily. Shedding the channels you are not using lengthens the ship's endurance on the battery.[/color]
 [b]4  BERTH[/b] — [color=#59f28c]MAKE FOR ONE[/color]
@@ -526,7 +584,11 @@ Damage above that figure ... [b]0.03 integrity per m/s[/b] of excess.
 Maximum, single impact ..... [b]0.6 integrity[/b]
 Rebound .................... [b]30% of closing speed[/b]
 
+The rebound figure is what fixed structure returns — the derelict's frame, the station, a deck. Against something that can be moved, the two share the exchange by weight: a chunk lighter than the ship is thrown clear and barely slows her, and a mass heavier than the ship throws her instead.
+
 The section damaged is determined by the direction of the impact.
+
+[color=#f2bf59]CAUTION — A loaded ship carries more momentum into everything she touches.[/color] The same closing speed with a full hold is the same damage but a longer stop, and rather less is given up by whatever is struck.
 
 [color=#8c9eb8]NOTE — An impact from astern is recorded against DRIVE. The AFT section is damaged only by collapse and by debris.[/color]
 
@@ -632,7 +694,7 @@ Speed, attitude and altitude are grouped as one block down the left of the Tacti
 
 [b]Heading[/b] — the tape across the top, marked at 5° and figured at 10°, with the heading boxed at the index. A bug on the tape marks the bearing to the reference datum. This is the bearing of the HULL. The bearing at VEL / HDG on the flight HUD is the CAMERA's, and the two differ whenever the camera is trained off the nose.
 
-[b]Speed[/b] — the tape reads metres per second against a boxed figure. The ceiling the drive can currently hold is hatched across the top of the tape. With the gear extended a second band marks [b]18 m/s[/b], above which the legs are taking the load and wearing.
+[b]Speed[/b] — the tape reads metres per second against a boxed figure, measured against the SELECTED NAVIGATION REFERENCE and captioned with it. The governor's setting is hatched across the top of the tape; under DIRECT law there is no such band and the caption says so. With the gear extended a second band marks [b]18 m/s[/b], above which the legs are taking the load and wearing.
 
 [b]Attitude[/b] — the horizon, presented as a sky field over a stippled datum field. The waterline symbol at the centre is fixed; the horizon moves behind it. With the nose up the horizon falls below the waterline and the sky field fills the instrument; with the nose down the datum field fills it. The pitch ladder is barred at 5° and figured at 10°, solid above the horizon and broken below it. Roll is read from the pointer against the fixed scale above, graduated to 60°: the wings are level with the pointer on the index, and again with the horizon flat. Beyond the range of the instrument a chevron at the edge indicates the shorter direction back to level.
 
@@ -640,7 +702,7 @@ Speed, attitude and altitude are grouped as one block down the left of the Tacti
 
 [b]Rotation[/b] — pitch, yaw and roll rates on centre-zero ribbons. Full scale is the rated [b]45°/s[/b], or [b]15°/s[/b] on the fine setting, selected on the MFD SETTINGS page.
 
-[b]Propellant[/b] — hydrogen and oxygen as tank tapes, marked at a quarter and reading empty at zero.
+[b]Consumables[/b] — four tapes together: hydrogen and oxygen as tank tapes, marked at a quarter and reading empty at zero; then [b]ALT[/b], the bus load against what the alternator makes, reading in kilowatts; then [b]BAT[/b], the battery's state of charge. ALT is the one tape that can read past full, and it spills over its top when it does — the difference above the line is coming out of the battery beside it, which is why the two are adjacent.
 
 [b]Plate[/b] — the vessel's plate, reproduced at the foot of the display.
 
